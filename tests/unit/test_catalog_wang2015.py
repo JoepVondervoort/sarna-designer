@@ -83,6 +83,30 @@ class TestDefaultsMatchTable1:
         # The original script tolerated zero, which is stricter than the paper.
         assert CATALOGUE["cpg-count"].parameter("maximum-cpg-count").default == 1
 
+    def test_cpg_islands_are_defined_by_the_takai_jones_thresholds(self):
+        # Wang et al. say to avoid CpG islands but name no detection algorithm, so the
+        # definition is this project's choice and is pinned here. Takai & Jones 2002 rather than
+        # Gardiner-Garden & Frommer 1987, because this rule excludes candidates and the 1987
+        # criteria call more than half their islands on Alu repeats.
+        island = CATALOGUE["not-in-cpg-island"]
+        assert island.parameter("island-minimum-length").default == 500
+        assert island.parameter("island-minimum-gc-fraction").default == 0.55
+        assert island.parameter("island-minimum-observed-expected-cpg").default == 0.65
+
+    def test_both_cpg_island_definitions_are_offered_with_their_own_sources(self):
+        island = CATALOGUE["not-in-cpg-island"]
+        assert {option.id for option in island.options} == {
+            "takai-jones-2002",
+            "gardiner-garden-frommer-1987",
+        }
+        default = island.default_option
+        assert default is not None
+        assert default.id == "takai-jones-2002"
+        # The looser definition must not be presented as unsourced: it is the original paper.
+        looser = island.option("gardiner-garden-frommer-1987")
+        assert looser.provenance.is_warning is False
+        assert "1987" in str(looser.provenance)
+
     def test_homopolymer_runs_of_five_or_more_are_rejected(self):
         assert CATALOGUE["no-homopolymer-run"].parameter("maximum-run-length").default == 4
 

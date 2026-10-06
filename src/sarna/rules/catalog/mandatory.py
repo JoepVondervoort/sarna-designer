@@ -220,17 +220,21 @@ NOT_IN_CPG_ISLAND = _gate(
     rationale=(
         "CpG islands are densely methylatable and typically the most tightly regulated part "
         "of a promoter. Targets inside one are harder to access and vary more between cell "
-        "types. Island boundaries follow the Takai & Jones definition."
+        "types. Wang et al. say to avoid them but name no detection algorithm, so the island "
+        "definition is this project's choice and is stated explicitly below."
     ),
     consequence=(
         "Switching this off admits candidates in the CpG-rich promoter core, which is exactly "
         "where many strong-looking candidates sit. In the original script this rule was "
-        "written but commented out, so it never ran."
+        "written but commented out, so it never ran, and the legacy preset leaves it off for "
+        "that reason. Because the rule excludes candidates, a loosely-defined island costs you "
+        "usable candidates: the looser 1987 criteria call more than half their islands on Alu "
+        "repeats, which are not islands at all."
     ),
     parameters=(
         RuleParameter(
             name="island-minimum-length",
-            default=200,
+            default=500,
             minimum=100,
             maximum=2000,
             unit="bp",
@@ -238,7 +242,7 @@ NOT_IN_CPG_ISLAND = _gate(
         ),
         RuleParameter(
             name="island-minimum-gc-fraction",
-            default=0.50,
+            default=0.55,
             minimum=0.0,
             maximum=1.0,
             unit="fraction",
@@ -246,12 +250,53 @@ NOT_IN_CPG_ISLAND = _gate(
         ),
         RuleParameter(
             name="island-minimum-observed-expected-cpg",
-            default=0.60,
+            default=0.65,
             minimum=0.0,
             maximum=2.0,
             unit="ratio",
             description=(
                 "Lowest observed-to-expected CpG ratio for a window to qualify as an island."
+            ),
+        ),
+    ),
+    options=(
+        RuleOption(
+            id="takai-jones-2002",
+            label="At least 500 bp, GC >= 55 %, obs/exp >= 0.65 (Takai & Jones 2002)",
+            provenance=Provenance.citation(
+                "Takai & Jones 2002", "PNAS 99(6):3740-3745"
+            ),
+            values={
+                "island-minimum-length": 500,
+                "island-minimum-gc-fraction": 0.55,
+                "island-minimum-observed-expected-cpg": 0.65,
+            },
+            note=(
+                "Recommended. Takai & Jones tightened the original thresholds precisely because "
+                "those over-call: on human chromosomes 21 and 22 the 1987 criteria gave 14 062 "
+                "islands, over half of them Alu repeats, where these gave 1 101. Since this "
+                "rule excludes candidates, the stricter definition means fewer candidates lost "
+                "to islands that are not really there. The trade-off is that a genuine island "
+                "shorter than 500 bp is missed."
+            ),
+            is_default=True,
+        ),
+        RuleOption(
+            id="gardiner-garden-frommer-1987",
+            label="At least 200 bp, GC > 50 %, obs/exp > 0.60 (Gardiner-Garden & Frommer 1987)",
+            provenance=Provenance.citation(
+                "Gardiner-Garden & Frommer 1987", "J Mol Biol 196(2):261-282"
+            ),
+            values={
+                "island-minimum-length": 200,
+                "island-minimum-gc-fraction": 0.50,
+                "island-minimum-observed-expected-cpg": 0.60,
+            },
+            note=(
+                "The original and most widely cited definition, and the thresholds the legacy "
+                "script's own detector used. Catches short islands the stricter criteria miss, "
+                "at the cost of calling many Alu repeats as islands and so excluding candidates "
+                "for sitting in something that is not an island."
             ),
         ),
     ),
