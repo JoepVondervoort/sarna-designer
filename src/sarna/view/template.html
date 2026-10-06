@@ -1,0 +1,760 @@
+<title>__VIEW_TITLE__</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@500;600&display=swap">
+<style>
+/* Layout: a full-width track browser over a two-column list/detail split, stacking on phones. */
+:root {
+  --paper: #f3f4f1;
+  --panel: #ffffff;
+  --ink: #16191c;
+  --ink-soft: #5b6268;
+  --rule: #d3d7d1;
+  --accent: #0f6e76;
+  --accent-soft: #d6e9ea;
+  --pass: #2a7a4b;
+  --warn: #9a6512;
+  --fail: #a33a30;
+  --na: #76808a;
+  --band: #e6e9e3;
+  --band-strong: #dbe2d7;
+  --font-ui: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-display: "IBM Plex Serif", Georgia, serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #15181b;
+    --panel: #1d2125;
+    --ink: #e8eaec;
+    --ink-soft: #9aa3ab;
+    --rule: #333a40;
+    --accent: #4fc3cd;
+    --accent-soft: #1b3a3e;
+    --pass: #5ec684;
+    --warn: #d9a441;
+    --fail: #e8766a;
+    --na: #7b858e;
+    --band: #21262a;
+    --band-strong: #272d32;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #15181b;
+  --panel: #1d2125;
+  --ink: #e8eaec;
+  --ink-soft: #9aa3ab;
+  --rule: #333a40;
+  --accent: #4fc3cd;
+  --accent-soft: #1b3a3e;
+  --pass: #5ec684;
+  --warn: #d9a441;
+  --fail: #e8766a;
+  --na: #7b858e;
+  --band: #21262a;
+  --band-strong: #272d32;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+}
+.wrap { max-width: 1400px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 56px; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; text-wrap: balance; margin: 0; }
+h1 { font-size: 1.5rem; letter-spacing: -0.01em; }
+h2 { font-size: 1.05rem; }
+h3 { font-size: 0.95rem; }
+a { color: var(--accent); }
+.mono { font-family: var(--font-mono); font-variant-ligatures: none; }
+.num { font-variant-numeric: tabular-nums; }
+.eyebrow {
+  font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.09em;
+  color: var(--ink-soft); font-weight: 600;
+}
+
+/* ---- header ---- */
+header.top { display: flex; flex-wrap: wrap; gap: 16px 28px; align-items: flex-end; margin-bottom: 4px; }
+.locus { display: flex; flex-wrap: wrap; gap: 4px 20px; align-items: baseline; }
+.gene { font-family: var(--font-display); font-size: 1.9rem; font-weight: 600; line-height: 1; }
+.facts { display: flex; flex-wrap: wrap; gap: 2px 18px; font-size: 0.8rem; color: var(--ink-soft); }
+.facts b { color: var(--ink); font-weight: 500; }
+.notice {
+  margin: 14px 0 0; padding: 10px 12px; border-left: 3px solid var(--warn);
+  background: var(--panel); font-size: 0.82rem; color: var(--ink-soft);
+}
+.notice b { color: var(--ink); }
+.notice ul { margin: 6px 0 0; padding-left: 18px; }
+
+/* ---- controls ---- */
+.controls {
+  display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center;
+  margin: 18px 0 10px; padding: 10px 0; border-block: 1px solid var(--rule);
+}
+.control { display: flex; align-items: center; gap: 7px; font-size: 0.8rem; color: var(--ink-soft); }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 3px; overflow: hidden; }
+.seg button {
+  font: inherit; font-size: 0.78rem; padding: 4px 11px; border: 0; cursor: pointer;
+  background: var(--panel); color: var(--ink-soft);
+}
+.seg button + button { border-left: 1px solid var(--rule); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--paper); font-weight: 600; }
+button.plain {
+  font: inherit; font-size: 0.78rem; padding: 4px 10px; cursor: pointer;
+  background: var(--panel); color: var(--ink); border: 1px solid var(--rule); border-radius: 3px;
+}
+button.plain:hover { border-color: var(--accent); }
+label.check { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---- browser ---- */
+.browser {
+  position: relative; background: var(--panel); border: 1px solid var(--rule);
+  border-radius: 3px; overflow: hidden; user-select: none;
+}
+.ruler { position: relative; height: 26px; border-bottom: 1px solid var(--rule); }
+.tick { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--rule); }
+.tick span {
+  position: absolute; left: 3px; top: 5px; font-size: 0.66rem; color: var(--ink-soft);
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.band { position: absolute; top: 0; bottom: 0; pointer-events: none; }
+.track { position: relative; border-bottom: 1px solid var(--rule); }
+.track:last-child { border-bottom: 0; }
+.track-label {
+  position: absolute; left: 6px; top: 3px; z-index: 4;
+  font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--ink-soft); font-weight: 600; pointer-events: none;
+  background: color-mix(in srgb, var(--panel) 78%, transparent); padding: 0 3px;
+}
+.feat {
+  position: absolute; border-radius: 2px; cursor: pointer; min-width: 2px;
+  font-size: 0.64rem; line-height: 14px; white-space: nowrap; overflow: hidden;
+  color: var(--paper); padding-inline: 3px;
+}
+.feat.clipped { border-inline: 2px dotted var(--paper); }
+.tssline { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); z-index: 3; }
+.tssline.alt { width: 0; border-left: 2px dashed var(--warn); opacity: 0.85; }
+.tsslabel {
+  position: absolute; z-index: 5; font-size: 0.64rem; font-weight: 600; color: var(--accent);
+  background: var(--panel); padding: 0 3px; top: 2px; white-space: nowrap;
+}
+canvas { display: block; width: 100%; }
+.hint { font-size: 0.74rem; color: var(--ink-soft); margin: 7px 0 0; }
+
+/* ---- split ---- */
+.split { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 22px; margin-top: 26px; }
+@media (max-width: 920px) { .split { grid-template-columns: 1fr; } }
+.card { background: var(--panel); border: 1px solid var(--rule); border-radius: 3px; }
+.card > header { padding: 11px 13px; border-bottom: 1px solid var(--rule); display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.card > .body { padding: 13px; }
+.scroll { max-height: 460px; overflow-y: auto; }
+
+table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+th, td { text-align: left; padding: 6px 9px; border-bottom: 1px solid var(--rule); }
+th { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-soft); position: sticky; top: 0; background: var(--panel); z-index: 1; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--band); }
+tbody tr[aria-selected="true"] { background: var(--accent-soft); }
+.pill {
+  display: inline-block; font-size: 0.66rem; font-weight: 600; padding: 1px 6px;
+  border-radius: 9px; border: 1px solid currentColor;
+}
+.pill.pass { color: var(--pass); }
+.pill.fail { color: var(--fail); }
+.pill.na { color: var(--na); }
+.pill.warn { color: var(--warn); }
+
+.meter { display: flex; gap: 2px; align-items: center; }
+.meter i { width: 7px; height: 11px; border-radius: 1px; background: var(--rule); display: block; }
+.meter i.on { background: var(--pass); }
+
+dl.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 14px; margin: 0; font-size: 0.8rem; }
+dl.kv dt { color: var(--ink-soft); }
+dl.kv dd { margin: 0; overflow-wrap: anywhere; }
+
+.strand { margin: 10px 0; }
+.strand .lab { font-size: 0.68rem; color: var(--ink-soft); margin-bottom: 2px; }
+.strand .seq {
+  font-family: var(--font-mono); font-size: 0.82rem; letter-spacing: 0.04em;
+  word-break: break-all; background: var(--band); padding: 6px 8px; border-radius: 2px;
+}
+.rule-row { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--rule); font-size: 0.8rem; }
+.rule-row:last-child { border-bottom: 0; }
+.rule-row .what { font-weight: 500; }
+.rule-row .why { color: var(--ink-soft); font-size: 0.76rem; }
+.bar { height: 9px; background: var(--band-strong); border-radius: 2px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--fail); }
+.empty { color: var(--ink-soft); font-size: 0.82rem; }
+.cellnote { font-size: 0.78rem; color: var(--ink-soft); margin: 8px 0 0; }
+footer.src { margin-top: 30px; padding-top: 14px; border-top: 1px solid var(--rule); font-size: 0.75rem; color: var(--ink-soft); }
+footer.src ul { margin: 6px 0 0; padding-left: 18px; }
+#loading { padding: 40px 0; text-align: center; color: var(--ink-soft); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<script id="view-data" type="application/json">__VIEW_DATA__</script>
+
+<div class="wrap">
+  <div id="loading">
+    <p class="eyebrow">Loading design run</p>
+    <p>The promoter, its candidates and its annotations will appear here.</p>
+  </div>
+  <div id="app" hidden></div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  const DATA = JSON.parse(document.getElementById("view-data").textContent);
+  const app = document.getElementById("app");
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  /* TSS-relative numbering has no zero: +1 is the first transcribed base, -1 the base before. */
+  const tssStart = DATA.promoter.tss_start;
+  function tssAt(offset) {
+    if (tssStart == null) return null;
+    const v = tssStart + offset;
+    return v >= 0 ? v + 1 : v;
+  }
+  const signed = (v) => (v == null ? "n/a" : (v > 0 ? "+" + v : String(v)));
+  const promLen = DATA.promoter.length;
+
+  const state = {
+    view: [0, promLen],          // visible promoter offsets
+    selected: null,
+    show: "passing",             // passing | all
+    cell: (DATA.cell_types[0] || {}).id || null,
+    showMotifs: true,
+  };
+
+  /* ---------------- header ---------------- */
+  function header() {
+    const g = DATA.gene, t = DATA.transcript, p = DATA.promoter, c = DATA.configuration;
+    const name = g ? g.symbol : "Pasted promoter";
+    const facts = [];
+    if (p.contig) facts.push(["Locus", `chr${p.contig}:${p.start.toLocaleString()}–${p.end.toLocaleString()}`]);
+    if (p.strand) facts.push(["Strand", p.strand === "-" ? "minus" : "plus"]);
+    if (p.assembly) facts.push(["Assembly", p.assembly]);
+    facts.push(["Promoter", `${p.length.toLocaleString()} bp, ${p.gc_percent}% GC`]);
+    if (t) facts.push(["Transcript", `${t.ensembl_id}${t.refseq_match ? " / " + t.refseq_match : ""}${t.is_mane_select ? " (MANE Select)" : ""}`]);
+    facts.push(["Rules", c.preset.name || c.preset.id || "custom"]);
+
+    let html = `<header class="top">
+      <div class="locus">
+        <span class="gene">${esc(name)}</span>
+        ${g ? `<span class="mono" style="color:var(--ink-soft);font-size:.8rem">${esc(g.ensembl_id)}</span>` : ""}
+      </div>
+    </header>
+    ${g && g.description ? `<p style="margin:2px 0 10px;color:var(--ink-soft);font-size:.85rem">${esc(g.description)}</p>` : ""}
+    <div class="facts">${facts.map(([k, v]) => `<span>${esc(k)} <b>${esc(v)}</b></span>`).join("")}</div>`;
+
+    const div = (c.preset.divergences || []);
+    if (div.length) {
+      html += `<div class="notice"><b>This preset departs from what it reproduces.</b><ul>${
+        div.map((d) => `<li>${esc(d)}</li>`).join("")}</ul></div>`;
+    }
+    if (DATA.unevaluated_rules.length) {
+      html += `<div class="notice"><b>Rules that could not be evaluated for any candidate:</b>
+        <span class="mono">${DATA.unevaluated_rules.map(esc).join(", ")}</span>.
+        Reported once here rather than per candidate. They neither excluded nor scored anything.</div>`;
+    }
+    return html;
+  }
+
+  /* ---------------- controls ---------------- */
+  function controls() {
+    const cells = DATA.cell_types.map((c) =>
+      `<button type="button" data-cell="${esc(c.id)}" aria-pressed="${c.id === state.cell}">${esc(c.name)}</button>`
+    ).join("");
+    return `<div class="controls">
+      <span class="control">Candidates
+        <span class="seg">
+          <button type="button" data-show="passing" aria-pressed="${state.show === "passing"}">Passing</button>
+          <button type="button" data-show="all" aria-pressed="${state.show === "all"}">All</button>
+        </span>
+      </span>
+      ${cells ? `<span class="control">Cell type <span class="seg" id="cellseg">${cells}</span></span>` : ""}
+      <label class="check control"><input type="checkbox" id="motiftoggle" ${state.showMotifs ? "checked" : ""}> Motif predictions</label>
+      <span class="control" style="margin-left:auto">
+        <button class="plain" type="button" id="zoomout">Zoom out</button>
+        <button class="plain" type="button" id="zoomfit">Whole promoter</button>
+      </span>
+    </div>`;
+  }
+
+  /* ---------------- track browser ---------------- */
+  const WANG = [-1000, -100], PREFERRED = [-500, -200];
+
+  function offsetOfTss(target) {
+    if (tssStart == null) return null;
+    const o = target > 0 ? target - 1 - tssStart : target - tssStart;
+    return o;
+  }
+
+  function browser() {
+    return `<div class="browser" id="browser">
+      <div class="ruler" id="ruler"></div>
+      <div class="track" id="t-context" style="height:20px"></div>
+      <div class="track" id="t-reg" style="height:40px"><span class="track-label">Regulatory build</span></div>
+      <div class="track" id="t-motif" style="height:52px"><span class="track-label">Motif predictions</span></div>
+      <div class="track" id="t-cand" style="height:84px"><span class="track-label">Candidates</span>
+        <canvas id="cand"></canvas>
+      </div>
+    </div>
+    <p class="hint">Drag to pan, scroll or pinch to zoom, click a candidate to inspect it.
+    Shaded bands mark the window the rules admit (${signed(WANG[0])} to ${signed(WANG[1])}) and the
+    region the paper reports activity in (${signed(PREFERRED[0])} to ${signed(PREFERRED[1])}).</p>`;
+  }
+
+  function pxPerBase(width) { return width / (state.view[1] - state.view[0]); }
+  function xOf(offset, width) { return (offset - state.view[0]) * pxPerBase(width); }
+
+  function drawRuler(width) {
+    const ruler = document.getElementById("ruler");
+    const span = state.view[1] - state.view[0];
+    const steps = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000];
+    const step = steps.find((s) => span / s <= 14) || 10000;
+    let html = "";
+    const first = Math.ceil(state.view[0] / step) * step;
+    for (let o = first; o <= state.view[1]; o += step) {
+      const x = xOf(o, width);
+      html += `<div class="tick" style="left:${x}px"><span>${esc(signed(tssAt(o)))}</span></div>`;
+    }
+    ruler.innerHTML = html;
+  }
+
+  function drawContext(width) {
+    const t = document.getElementById("t-context");
+    let html = "";
+    const bands = [[WANG, "var(--band)"], [PREFERRED, "var(--band-strong)"]];
+    for (const [range, colour] of bands) {
+      const a = offsetOfTss(range[0]), b = offsetOfTss(range[1]);
+      if (a == null) continue;
+      const left = xOf(Math.min(a, b), width), right = xOf(Math.max(a, b), width);
+      html += `<div class="band" style="left:${left}px;width:${Math.max(0, right - left)}px;background:${colour}"></div>`;
+    }
+    for (const island of DATA.tracks.cpg_islands) {
+      const left = xOf(island.start, width), right = xOf(island.end, width);
+      html += `<div class="feat" title="${esc(island.detail)}" style="left:${left}px;width:${Math.max(2, right - left)}px;top:2px;height:15px;background:var(--warn)">CpG island</div>`;
+    }
+    const tssOffset = DATA.promoter.tss_offset;
+    if (tssOffset != null) {
+      html += `<div class="tssline" style="left:${xOf(tssOffset, width)}px"></div>`;
+      html += `<div class="tsslabel" style="left:${xOf(tssOffset, width) + 4}px">TSS +1</div>`;
+    }
+    for (const alt of DATA.tracks.alternative_tss) {
+      html += `<div class="tssline alt" title="${esc(alt.detail)}" style="left:${xOf(alt.start, width)}px"></div>`;
+    }
+    t.innerHTML = html;
+  }
+
+  function lay(items, width, rows) {
+    /* Greedy row packing so overlapping features stay readable. */
+    const ends = new Array(rows).fill(-Infinity);
+    return items.map((item) => {
+      const left = xOf(item.start, width), right = Math.max(left + 2, xOf(item.end, width));
+      let row = ends.findIndex((e) => e < left - 2);
+      if (row < 0) row = 0;
+      ends[row] = right;
+      return { item, left, right, row };
+    });
+  }
+
+  const REG_COLOUR = {
+    "regulatory-promoter": "var(--pass)",
+    "regulatory-promoter_flanking_region": "var(--accent)",
+    "regulatory-enhancer": "var(--warn)",
+    "regulatory-CTCF_binding_site": "var(--na)",
+  };
+
+  function drawRegulatory(width) {
+    const t = document.getElementById("t-reg");
+    const items = DATA.tracks.regulatory.filter((f) => f.end > state.view[0] && f.start < state.view[1]);
+    let html = `<span class="track-label">Regulatory build</span>`;
+    if (!items.length) {
+      const note = (DATA.regulatory_summary && DATA.regulatory_summary.caveat) ||
+        "Nothing annotated in view.";
+      html += `<div style="position:absolute;left:140px;top:11px;font-size:.74rem;color:var(--ink-soft);right:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(note)}">${esc(note)}</div>`;
+    }
+    for (const p of lay(items, width, 2)) {
+      html += `<div class="feat ${p.item.clipped ? "clipped" : ""}" data-detail="${esc(p.item.detail)}"
+        title="${esc(p.item.label + " — " + p.item.detail)}"
+        style="left:${p.left}px;width:${p.right - p.left}px;top:${16 + p.row * 17}px;height:15px;background:${REG_COLOUR[p.item.kind] || "var(--na)"}">${esc(p.item.label)}</div>`;
+    }
+    t.innerHTML = html;
+  }
+
+  function drawMotifs(width) {
+    const t = document.getElementById("t-motif");
+    let html = `<span class="track-label">Motif predictions</span>`;
+    if (!state.showMotifs) {
+      t.innerHTML = html + `<div style="position:absolute;left:140px;top:17px;font-size:.74rem;color:var(--ink-soft)">Hidden.</div>`;
+      return;
+    }
+    const items = DATA.tracks.motifs.filter((f) => f.end > state.view[0] && f.start < state.view[1]);
+    if (!items.length) {
+      html += `<div style="position:absolute;left:140px;top:17px;font-size:.74rem;color:var(--ink-soft)">No motif above what base composition alone explains, in view.</div>`;
+    }
+    for (const p of lay(items, width, 3)) {
+      html += `<div class="feat" data-detail="${esc(p.item.detail)}" title="${esc(p.item.detail)}"
+        style="left:${p.left}px;width:${p.right - p.left}px;top:${16 + p.row * 12}px;height:11px;line-height:11px;background:var(--accent);font-size:.6rem">${esc(p.item.label)}</div>`;
+    }
+    t.innerHTML = html;
+  }
+
+  function candidatesInView() {
+    return DATA.candidates.filter((c) => c.offset + 19 > state.view[0] && c.offset < state.view[1]);
+  }
+
+  function drawCandidates(width) {
+    const canvas = document.getElementById("cand");
+    const dpr = window.devicePixelRatio || 1;
+    const height = 84;
+    canvas.width = Math.max(1, Math.floor(width * dpr));
+    canvas.height = Math.floor(height * dpr);
+    canvas.style.height = height + "px";
+    const g = canvas.getContext("2d");
+    g.scale(dpr, dpr);
+    g.clearRect(0, 0, width, height);
+    const css = getComputedStyle(document.body);
+    const colour = (name) => css.getPropertyValue(name).trim() || "#888";
+    const pass = colour("--pass"), fail = colour("--fail"), accent = colour("--accent");
+    const base = 74, top = 20;
+
+    g.strokeStyle = colour("--rule");
+    g.beginPath(); g.moveTo(0, base + 0.5); g.lineTo(width, base + 0.5); g.stroke();
+
+    const items = candidatesInView();
+    const max = DATA.candidates.length ? (DATA.candidates[0].max_preference_points || 7) : 7;
+    for (const c of items) {
+      const x = xOf(c.offset, width);
+      const w = Math.max(1, 19 * pxPerBase(width));
+      const rejected = (c.excluded_by || []).length > 0;
+      if (rejected) {
+        if (state.show !== "all") continue;
+        g.fillStyle = fail; g.globalAlpha = 0.28;
+        g.fillRect(x, base - 5, w, 5);
+      } else {
+        const frac = max ? c.preference_points / max : 0;
+        const h = 6 + frac * (base - top - 6);
+        g.globalAlpha = 1;
+        g.fillStyle = (state.selected === c.id) ? accent : pass;
+        g.fillRect(x, base - h, w, h);
+      }
+    }
+    g.globalAlpha = 1;
+    if (state.selected) {
+      const sel = DATA.candidates.find((c) => c.id === state.selected);
+      if (sel) {
+        const x = xOf(sel.offset, width);
+        g.strokeStyle = accent; g.lineWidth = 1.5;
+        g.beginPath(); g.moveTo(x, 0); g.lineTo(x, base); g.stroke();
+      }
+    }
+  }
+
+  function redrawTracks() {
+    const el = document.getElementById("browser");
+    if (!el) return;
+    const width = el.clientWidth;
+    drawRuler(width); drawContext(width); drawRegulatory(width);
+    drawMotifs(width); drawCandidates(width);
+  }
+
+  /* ---------------- candidate list ---------------- */
+  function list() {
+    const ranked = DATA.candidates
+      .filter((c) => (state.show === "all" ? true : !(c.excluded_by || []).length))
+      .sort((a, b) => {
+        const ar = a.rank == null ? 1e9 : a.rank, br = b.rank == null ? 1e9 : b.rank;
+        return ar - br || a.offset - b.offset;
+      });
+    const rows = ranked.slice(0, 400).map((c) => {
+      const rejected = (c.excluded_by || []).length > 0;
+      const span = c.tss_span ? `${signed(c.tss_span[0])} to ${signed(c.tss_span[1])}` : "—";
+      const max = c.max_preference_points || 7;
+      const meter = Array.from({ length: max }, (_, i) =>
+        `<i class="${i < c.preference_points ? "on" : ""}"></i>`).join("");
+      return `<tr data-id="${esc(c.id)}" aria-selected="${state.selected === c.id}">
+        <td class="n">${c.rank == null ? "—" : c.rank}</td>
+        <td class="mono">${esc(c.id)}</td>
+        <td class="num">${esc(span)}</td>
+        <td class="n num">${c.gc_percent}</td>
+        <td>${rejected
+          ? `<span class="pill fail">rejected</span>`
+          : `<span class="meter" title="${c.preference_points} of ${max} preferences">${meter}</span>`}</td>
+      </tr>`;
+    }).join("");
+    const shown = Math.min(400, ranked.length);
+    return `<section class="card">
+      <header>
+        <h2>Candidates</h2>
+        <span class="eyebrow">${DATA.counts.passing} passing of ${DATA.counts.generated} generated</span>
+      </header>
+      <div class="body scroll" style="padding:0">
+        <table><thead><tr>
+          <th class="n">Rank</th><th>Id</th><th>Position vs TSS</th><th class="n">GC%</th><th>Score</th>
+        </tr></thead><tbody id="rows">${rows}</tbody></table>
+        ${shown < ranked.length ? `<p class="hint" style="padding:8px 10px">Showing the first ${shown} of ${ranked.length}. Zoom the browser to find others by position.</p>` : ""}
+      </div>
+    </section>`;
+  }
+
+  /* ---------------- detail ---------------- */
+  function detail() {
+    const c = DATA.candidates.find((x) => x.id === state.selected);
+    if (!c) {
+      return `<section class="card"><header><h2>Candidate detail</h2></header>
+        <div class="body"><p class="empty">Select a candidate in the table or on the browser to see
+        every rule verdict, the duplex strands, and which nearest-neighbour tables agree about
+        the guide strand.</p></div></section>`;
+    }
+    const rejected = (c.excluded_by || []).length > 0;
+    const max = c.max_preference_points || 7;
+    let body = `<dl class="kv">
+      <dt>Position</dt><dd>${c.tss_span ? esc(signed(c.tss_span[0]) + " to " + signed(c.tss_span[1]) + " relative to the TSS") : "no TSS anchor"}
+        ${c.genomic ? `<br><span class="mono" style="font-size:.76rem">chr${esc(c.genomic.contig)}:${c.genomic.start.toLocaleString()}–${c.genomic.end.toLocaleString()} (${esc(c.genomic.strand)})</span>` : ""}</dd>
+      <dt>GC content</dt><dd class="num">${c.gc_percent}%</dd>
+      <dt>Score</dt><dd>${esc(c.score_summary || (c.preference_points + " of " + max))}</dd>
+    </dl>`;
+
+    if (rejected) {
+      body += `<div class="notice" style="border-color:var(--fail)"><b>Excluded by ${c.excluded_by.map(esc).join(", ")}.</b>
+        <div style="margin-top:4px">${esc(c.rejection_summary || "")}</div></div>`;
+    }
+
+    body += `<div class="strand"><div class="lab">Target site (DNA, 5'→3')</div>
+      <div class="seq">${esc(c.target_site_dna)}</div></div>`;
+    if (c.antisense_strand_rna) {
+      body += `<div class="strand"><div class="lab">Guide / antisense strand (RNA, 5'→3')</div>
+        <div class="seq">${esc(c.antisense_strand_rna)}</div></div>
+        <div class="strand"><div class="lab">Passenger / sense strand (RNA, 5'→3')</div>
+        <div class="seq">${esc(c.sense_strand_rna)}</div></div>`;
+    }
+
+    if (c.guide_prediction) {
+      const gp = c.guide_prediction;
+      body += `<h3 style="margin-top:16px">Guide strand prediction</h3>
+        <p class="hint" style="margin-top:2px">${esc(gp.summary || "")}</p>`;
+      body += (gp.assessments || []).map((a) => `<div class="rule-row">
+        <div><span class="pill ${gp.tables_agree ? "pass" : "warn"}">${esc(String(a.predicted_guide))}</span></div>
+        <div><div class="what mono" style="font-size:.76rem">${esc(a.table)} · ${a.difference == null ? "" : a.difference.toFixed(2)} ${esc(a.unit || "")}</div>
+        <div class="why">${esc(a.explanation || "")}</div></div></div>`).join("");
+    }
+
+    if (c.rules && c.rules.length) {
+      body += `<h3 style="margin-top:16px">Every rule applied</h3>`;
+      body += c.rules.map((r) => {
+        const cls = r.outcome === "pass" ? "pass" : r.outcome === "fail" ? "fail" : "na";
+        const label = r.outcome === "not-applicable" ? "n/a" : r.outcome;
+        return `<div class="rule-row">
+          <div><span class="pill ${cls}">${esc(label)}</span></div>
+          <div><div class="what mono" style="font-size:.76rem">${esc(r.id)}${r.points ? " · 1 point" : ""}</div>
+          <div class="why">${esc(r.detail)}</div></div></div>`;
+      }).join("");
+    } else {
+      body += `<p class="hint" style="margin-top:14px">Per-rule measurements were abbreviated for
+        rejected candidates in this export. The rules that excluded it are listed above.</p>`;
+    }
+
+    return `<section class="card"><header><h2>${esc(c.id)}</h2>
+      <span class="eyebrow">${rejected ? "rejected" : "rank " + (c.rank || "—")}</span></header>
+      <div class="body scroll">${body}</div></section>`;
+  }
+
+  /* ---------------- lower panels ---------------- */
+  function cellPanel() {
+    const cell = DATA.cell_types.find((c) => c.id === state.cell);
+    if (!cell) return "";
+    const motifCount = DATA.tracks.motifs.length;
+    return `<section class="card"><header><h2>${esc(cell.name)}</h2>
+      <span class="eyebrow">${cell.known ? esc(cell.status) : "no occupancy data"}</span></header>
+      <div class="body">
+        <p style="margin:0 0 8px">${esc(cell.description)}</p>
+        <dl class="kv"><dt>Dividing</dt><dd>${cell.proliferating ? "yes" : "no"}</dd>
+        <dt>Factor binding</dt><dd>${cell.known ? esc(cell.status) : "not assayed"}</dd></dl>
+        ${cell.absence_note ? `<p class="cellnote"><b>What this panel cannot tell you.</b> ${esc(cell.absence_note)}</p>` : ""}
+        <p class="cellnote">The ${motifCount} motif ${motifCount === 1 ? "match" : "matches"} drawn above
+        are sequence predictions. They are computed without reference to any cell type and say
+        nothing about whether a factor is bound in ${esc(cell.name)}.</p>
+      </div></section>`;
+  }
+
+  function motifPanel() {
+    const rows = DATA.motif_scans.map((s) => `<tr>
+      <td><b>${esc(s.motif)}</b> <span class="mono" style="font-size:.72rem;color:var(--ink-soft)">${esc(s.matrix_id)}</span></td>
+      <td class="n num">${s.sites}</td>
+      <td class="n num">${s.expected}</td>
+      <td class="n num">${s.enrichment == null ? "—" : s.enrichment.toFixed(2) + "×"}</td>
+      <td>${s.exceeds_chance ? `<span class="pill pass">above chance</span>` : `<span class="pill na">chance</span>`}</td>
+    </tr>`).join("");
+    return `<section class="card"><header><h2>Motifs scanned</h2>
+      <span class="eyebrow">matches vs what composition alone gives</span></header>
+      <div class="body scroll" style="padding:0">
+        <table><thead><tr><th>Factor</th><th class="n">Found</th><th class="n">Expected</th>
+        <th class="n">Enrichment</th><th>Verdict</th></tr></thead><tbody>${rows}</tbody></table>
+        <p class="hint" style="padding:9px 10px">Expected counts come from shuffles of this promoter
+        that preserve its base composition. A promoter is GC-rich and so are most promoter-factor
+        motifs, so a large match count on its own means little.</p>
+      </div></section>`;
+  }
+
+  function rejectionPanel() {
+    const breakdown = DATA.rejection_breakdown || [];
+    if (!breakdown.length) {
+      return `<section class="card"><header><h2>Rejections</h2></header>
+        <div class="body"><p class="empty">No candidate was excluded.</p></div></section>`;
+    }
+    const worst = breakdown[0].percent_of_generated || 1;
+    const rows = breakdown.map((b) => `<div style="margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;gap:10px;font-size:.78rem">
+        <span class="mono">${esc(b.rule)}</span>
+        <span class="num" style="color:var(--ink-soft)">${b.rejected.toLocaleString()} · ${b.percent_of_generated}%</span>
+      </div>
+      <div class="bar"><i style="width:${(b.percent_of_generated / worst) * 100}%"></i></div>
+    </div>`).join("");
+    return `<section class="card"><header><h2>Rejections by rule</h2>
+      <span class="eyebrow">${DATA.counts.rejected.toLocaleString()} of ${DATA.counts.generated.toLocaleString()}</span></header>
+      <div class="body">${rows}
+      <p class="hint">A candidate can fail more than one rule, so these do not sum to the total.
+      Every rejected candidate is kept in this export with the rules that excluded it.</p></div></section>`;
+  }
+
+  function footer() {
+    const caveat = DATA.regulatory_summary;
+    return `<footer class="src">
+      <p><b>Provenance.</b> Every rule in this run carries its citation and evidence class; the
+      resolved configuration is embedded in this page's data rather than named by preset, because a
+      preset's meaning can change between versions.</p>
+      ${caveat ? `<p><b>Regulatory annotation.</b> ${esc(caveat.provenance)}. ${esc(caveat.summary)}
+        ${caveat.caveat ? esc(caveat.caveat) : ""}</p>` : ""}
+      <p><b>What a high rank is not.</b> Wang et al. report that of designed duplexes, 15–20%
+      significantly activate the target gene, about 70% have no effect, and 5–10% suppress it. Rank
+      here is a prioritisation aid, not a prediction of activity.</p>
+    </footer>`;
+  }
+
+  /* ---------------- render ---------------- */
+  function render() {
+    app.innerHTML = header() + controls() + browser() +
+      `<div class="split">${list()}${detail()}</div>` +
+      `<div class="split">${cellPanel()}${rejectionPanel()}</div>` +
+      `<div style="margin-top:22px">${motifPanel()}</div>` + footer();
+    wire();
+    redrawTracks();
+  }
+
+  function wire() {
+    app.querySelectorAll("[data-show]").forEach((b) =>
+      b.addEventListener("click", () => { state.show = b.dataset.show; render(); }));
+    const seg = document.getElementById("cellseg");
+    if (seg) seg.querySelectorAll("[data-cell]").forEach((b) =>
+      b.addEventListener("click", () => { state.cell = b.dataset.cell; render(); }));
+    const mt = document.getElementById("motiftoggle");
+    if (mt) mt.addEventListener("change", () => { state.showMotifs = mt.checked; redrawTracks(); });
+    const zo = document.getElementById("zoomout");
+    if (zo) zo.addEventListener("click", () => zoom(1.6, 0.5));
+    const zf = document.getElementById("zoomfit");
+    if (zf) zf.addEventListener("click", () => { state.view = [0, promLen]; redrawTracks(); });
+
+    const rows = document.getElementById("rows");
+    if (rows) rows.addEventListener("click", (e) => {
+      const tr = e.target.closest("tr[data-id]");
+      if (tr) select(tr.dataset.id);
+    });
+
+    const browserEl = document.getElementById("browser");
+    if (browserEl) {
+      browserEl.addEventListener("wheel", (e) => {
+        e.preventDefault();
+        const rect = browserEl.getBoundingClientRect();
+        zoom(e.deltaY > 0 ? 1.18 : 1 / 1.18, (e.clientX - rect.left) / rect.width);
+      }, { passive: false });
+      let dragging = false, lastX = 0;
+      browserEl.addEventListener("pointerdown", (e) => {
+        dragging = true; lastX = e.clientX; browserEl.setPointerCapture(e.pointerId);
+      });
+      browserEl.addEventListener("pointermove", (e) => {
+        if (!dragging) return;
+        const width = browserEl.clientWidth;
+        const shift = (e.clientX - lastX) / pxPerBase(width);
+        lastX = e.clientX;
+        pan(-shift);
+      });
+      browserEl.addEventListener("pointerup", (e) => {
+        dragging = false;
+        browserEl.releasePointerCapture(e.pointerId);
+      });
+    }
+    const canvas = document.getElementById("cand");
+    if (canvas) canvas.addEventListener("click", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const offset = state.view[0] + (e.clientX - rect.left) / pxPerBase(rect.width);
+      const pool = candidatesInView().filter((c) =>
+        state.show === "all" || !(c.excluded_by || []).length);
+      if (!pool.length) return;
+      let best = pool[0];
+      for (const c of pool) {
+        if (Math.abs(c.offset + 9.5 - offset) < Math.abs(best.offset + 9.5 - offset)) best = c;
+      }
+      select(best.id);
+    });
+  }
+
+  function select(id) {
+    state.selected = id;
+    render();
+    const row = document.querySelector(`tr[data-id="${CSS.escape(id)}"]`);
+    if (row) row.scrollIntoView({ block: "nearest" });
+  }
+
+  function clampView() {
+    let [a, b] = state.view;
+    const minSpan = 40;
+    if (b - a < minSpan) { const m = (a + b) / 2; a = m - minSpan / 2; b = m + minSpan / 2; }
+    if (a < 0) { b -= a; a = 0; }
+    if (b > promLen) { a -= b - promLen; b = promLen; }
+    state.view = [Math.max(0, a), Math.min(promLen, b)];
+  }
+  function zoom(factor, anchor) {
+    const [a, b] = state.view, span = b - a, focus = a + span * anchor;
+    const next = span * factor;
+    state.view = [focus - next * anchor, focus + next * (1 - anchor)];
+    clampView(); redrawTracks();
+  }
+  function pan(bases) {
+    state.view = [state.view[0] + bases, state.view[1] + bases];
+    clampView(); redrawTracks();
+  }
+
+  let frame = null;
+  window.addEventListener("resize", () => {
+    if (frame) cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(redrawTracks);
+  });
+  const scheme = window.matchMedia("(prefers-color-scheme: dark)");
+  scheme.addEventListener("change", redrawTracks);
+
+  document.getElementById("loading").hidden = true;
+  app.hidden = false;
+  /* Open on the region the rules admit, which is where a reader looks first. */
+  const a = offsetOfTss(WANG[0]), b = offsetOfTss(WANG[1]);
+  if (a != null && b != null) {
+    const lo = Math.max(0, Math.min(a, b) - 150), hi = Math.min(promLen, Math.max(a, b) + 150);
+    if (hi - lo > 40) state.view = [lo, hi];
+  }
+  const firstPassing = DATA.candidates.find((c) => c.rank === 1);
+  if (firstPassing) state.selected = firstPassing.id;
+  render();
+})();
+</script>

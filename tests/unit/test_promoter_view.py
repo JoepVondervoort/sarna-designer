@@ -411,3 +411,39 @@ class TestCellPanelExport:
         exported = view.to_dict()
         assert {panel["id"] for panel in exported["cell_types"]} == {"hela", "af22"}
         assert all(panel["absence_note"] for panel in exported["cell_types"])
+
+
+class TestRanksReachTheExport:
+    """DesignResult.generated carries no ranks; exporting it directly loses the ordering.
+
+    The failure is silent — a renderer sorting by rank sees ``None`` everywhere and falls back to
+    position, so the list looks plausible and is not ranked. Found by checking a generated page.
+    """
+
+    def test_generated_candidates_have_no_rank_of_their_own(self) -> None:
+        # The premise. Ranking returns copies so it cannot alter candidates a caller already holds.
+        result = design_sarnas(promoter_on(Strand.PLUS), WANG_2015.resolve())
+        assert all(candidate.rank is None for candidate in result.generated)
+        assert any(candidate.rank is not None for candidate in result.ranked)
+
+    def test_the_view_merges_the_ranks_back_in(self) -> None:
+        view = view_on(Strand.PLUS)
+        ranked = view.ranked_candidates()
+        assert len(ranked) == len(view.result.generated)
+        with_rank = [candidate for candidate in ranked if candidate.rank is not None]
+        assert len(with_rank) == len(view.result.passing)
+
+    def test_position_order_is_preserved(self) -> None:
+        offsets = [candidate.offset for candidate in view_on(Strand.PLUS).ranked_candidates()]
+        assert offsets == sorted(offsets)
+
+    def test_rejected_candidates_keep_no_rank(self) -> None:
+        for candidate in view_on(Strand.PLUS).ranked_candidates():
+            if candidate.is_rejected:
+                assert candidate.rank is None
+
+    def test_the_export_contains_a_rank_one_candidate(self) -> None:
+        exported = view_on(Strand.PLUS).to_dict()
+        ranks = [c["rank"] for c in exported["candidates"] if c["rank"] is not None]
+        assert 1 in ranks
+        assert sorted(ranks) == list(range(1, len(ranks) + 1))

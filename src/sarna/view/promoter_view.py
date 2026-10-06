@@ -222,6 +222,19 @@ class PromoterView:
                 )
         return tuple(sorted(placed, key=lambda s: (s.start, s.label)))
 
+    def ranked_candidates(self) -> tuple[Candidate, ...]:
+        """Return every generated candidate, in position order, carrying its rank.
+
+        ``DesignResult.ranked`` holds *copies* that carry a rank, because ranking must not
+        retroactively alter candidates a caller already holds. ``DesignResult.generated`` therefore
+        has ``rank is None`` throughout, and exporting it directly produces a list a renderer
+        cannot order — which it does silently, by falling back to position. This merges the two.
+        """
+        ranks = {candidate.id: candidate for candidate in self.result.ranked}
+        return tuple(
+            ranks.get(candidate.id, candidate) for candidate in self.result.generated
+        )
+
     def rejection_breakdown(self) -> tuple[dict[str, Any], ...]:
         """Return how many candidates each mandatory rule excluded, most first.
 
@@ -305,7 +318,7 @@ class PromoterView:
                 candidate.to_dict()
                 if full_rules_for_rejected or not candidate.is_rejected
                 else _compact(candidate)
-                for candidate in self.result.generated
+                for candidate in self.ranked_candidates()
             ],
             "rejection_breakdown": list(self.rejection_breakdown()),
             "tracks": {

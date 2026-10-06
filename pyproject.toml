@@ -37,6 +37,7 @@ packages = ["src/sarna"]
 artifacts = [
     "src/sarna/validation/data/*.csv",
     "src/sarna/regulatory/data/*.json",
+    "src/sarna/view/*.html",
 ]
 
 [tool.ruff]

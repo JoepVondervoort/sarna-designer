@@ -27,6 +27,7 @@ from sarna.genome.ensembl import (
 )
 from sarna.regulatory.features import fetch_regulatory_features
 from sarna.regulatory.motifs import scan_all
+from sarna.view.html import render as render_html
 from sarna.view.promoter_view import (
     PromoterView,
     alternative_tss_spans,
@@ -97,6 +98,9 @@ def main(argv: list[str] | None = None) -> int:
     destination.write_text(json.dumps(payload, indent=1))
     size_kb = destination.stat().st_size / 1024
     print(f"\nwrote {destination} ({size_kb:.0f} KB)")
+    if args.html is not None:
+        args.html.write_text(render_html(view), encoding="utf-8")
+        print(f"wrote {args.html} ({args.html.stat().st_size / 1024:.0f} KB, self-contained)")
     print("  top rejection reasons:")
     for entry in payload["rejection_breakdown"][:4]:
         print(
@@ -149,6 +153,12 @@ def _parse(argv: list[str] | None) -> argparse.Namespace:
         ),
     )
     parser.add_argument("--out", type=Path, default=None, help="output JSON path")
+    parser.add_argument(
+        "--html",
+        type=Path,
+        default=None,
+        help="also write a self-contained interactive HTML page to this path",
+    )
     return parser.parse_args(argv)
 
 
