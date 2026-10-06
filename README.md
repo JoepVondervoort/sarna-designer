@@ -4,13 +4,18 @@ An internal research application for designing promoter-targeting **small activa
 (saRNAs), taking a researcher from a gene symbol or a pasted promoter sequence through to
 ranked, annotated, exportable duplex candidates.
 
-> **Status: Phase 2 — the design engine works; there is no interface yet.**
-> `design_sarnas(promoter, config)` generates, evaluates, gates and ranks candidates from a
-> pasted promoter or an assembly-anchored one, on either strand, and explains every verdict.
-> **There is no gene lookup, no API and no UI** — nothing resolves a gene symbol to a promoter
-> yet, so Workflow A does not exist. The engine has not been validated against any empirical
-> design list, because none is available. Treat its output as a prioritisation aid under review,
-> not as a validated result.
+> **Status: Phase 3 — gene symbol to annotated, browsable design run.**
+> A gene symbol resolves to a promoter through Ensembl, the engine designs and ranks candidates
+> on either strand and explains every verdict, the promoter is annotated with CpG islands,
+> regulatory features and TF motif predictions, and the whole run renders as one self-contained
+> interactive HTML page. **There is no HTTP API and no hosted UI**; the library, four scripts and
+> the generated page are the interfaces.
+>
+> The engine is now validated against measured activity for the first time — 125 assayed
+> sequences, 14 of them activators — and Wang's published sequence gates exclude none of the 14.
+> Read [`docs/scientific/empirical-validation.md`](docs/scientific/empirical-validation.md) for
+> what that does and does not establish. Treat a high rank as a prioritisation aid, not a
+> prediction of activity.
 
 ## What problem this solves
 
@@ -31,9 +36,18 @@ Li L-C. _Inducing gene expression by targeting promoter sequences using small ac
 J Biol Methods, 2015** ([PMC4379447](https://pmc.ncbi.nlm.nih.gov/articles/PMC4379447/)),
 whose Table 1 is the canonical criteria set.
 
-Two rule presets ship (see [ADR 0002](docs/adr/0002-wang-2015-default-legacy-preset.md)):
+Four rule presets ship (see [ADR 0002](docs/adr/0002-wang-2015-default-legacy-preset.md) and
+[ADR 0011](docs/adr/0011-optional-rules-are-hypotheses-not-findings.md)):
 
 - **`wang-2015`** — the default. Conformant with Table 1.
+- **`strict`** — tightens only the *location* criteria, because the measured data supports Wang's
+  sequence criteria exactly as published. Two obvious-looking tightenings were tried, measured and
+  rejected: requiring zero CpG excludes 4 of the 14 known activators, and requiring an asymmetry
+  margin of 0.5 kcal/mol excludes 2 more.
+- **`exploratory`** — adds optional criteria from Reynolds et al. 2004, Ui-Tei et al. 2004 and the
+  thesis's own positional analysis. Admits exactly the same candidates as the default, since every
+  added rule is a preference; it reorders them. Its score denominator is 13, so its numbers are
+  **not comparable** with any other preset's.
 - **`legacy-scanner`** — reproduces the original script's *filtering* closely, defects included,
   so historical designs can be re-derived. **Not bit-for-bit**, and the two known divergences are
   declared on the preset itself so they appear in exports and the UI: position 1 G/C is scored as
@@ -91,25 +105,60 @@ print(rejected.id, rejected.rejection_summary)   # never silently dropped
 `result.to_dict()` is a JSON-serialisable record of the run, including the resolved
 configuration, every candidate and every rule verdict.
 
+### From a gene symbol
+
+```python
+from sarna.genome.ensembl import promoter_for_symbol
+
+gene, transcript, promoter = promoter_for_symbol("SCN1A")   # MANE Select, or it raises
+result = design_sarnas(promoter, WANG_2015.resolve())
+```
+
+`select_transcript` returns the MANE Select transcript or **refuses**, listing the alternatives: a
+promoter is a property of a transcript, and SCN1A alone has 16 distinct TSSs across 75 kb
+([ADR 0012](docs/adr/0012-mane-select-or-refuse.md)).
+
+### Checking a rule against measured activity
+
+```python
+from sarna.validation.benchmark import benchmark
+from sarna.validation.dataset import load_chapter4_dataset
+
+report = benchmark(load_chapter4_dataset(), WANG_2015.resolve())
+print(report.summary)
+for lost in report.rejected_activators:        # duplexes that worked and the gate would discard
+    print(lost.sequence.name, [r.rule_id for r in lost.candidate.excluded_by])
+```
+
 ## Current limitations
 
-- **No gene lookup.** Workflow A (gene symbol to promoter) is not implemented, so a promoter must
-  be supplied as sequence.
-- **No API or UI.** The engine is a library only.
-- **No empirical validation.** The engine reproduces the rules as published and as scripted; it
-  has not been checked against measured activation data, and none is available to us.
+- **No HTTP API and no hosted UI.** The library, the scripts and the generated HTML page are the
+  interfaces.
+- **3' overhangs are not modelled.** Candidates are 19 nt cores; what a researcher orders is a
+  21-mer with a 3' UU overhang on both strands. This is the largest remaining gap before the tool
+  is usable at the bench.
+- **Empirical validation is narrow.** 125 assayed sequences exist, but all were designed to pass
+  Wang's gate, so the set cannot show a gate to be too permissive — only too strict. The sequences
+  also arrive without their promoter coordinates, so the location rules and four of the seven
+  preferences cannot be evaluated against them.
+- **No cell-type binding data.** Motif predictions are sequence-only and say nothing about any
+  cell type. ENCODE would populate HeLa; AF22 has no public ChIP-seq.
+- **Bundled JASPAR matrices are CC BY-NC-SA 4.0**, which makes the package non-commercial. The
+  project licence is still undecided.
 - Promoter fixtures must be CpG-depleted or real sequence. Uniform random sequence is called as
   one large CpG island by any correct detector, which rejects nearly every candidate — see
   [`docs/scientific/synthetic-promoter-fixtures.md`](docs/scientific/synthetic-promoter-fixtures.md).
-- The legacy scripts have **14 catalogued defects**, three scientifically material. They are
-  preserved unfixed by design; see [`legacy/README.md`](legacy/README.md).
+- The legacy scripts have **18 catalogued defects**, three scientifically material. They are
+  preserved unfixed by design; see [`legacy/README.md`](legacy/README.md). The `legacy-scanner`
+  preset excludes 5 of the 14 duplexes known to activate their target, four of them on its
+  zero-CpG rule.
 - The AF22 histone bigWigs (GSE108506) are on **GRCh37/hg19**, while Ensembl REST serves
   **GRCh38** by default. Verified 2026-10-06 from the bigWig headers. The legacy annotation
   pipeline combined the two without converting, so **every regulatory annotation it produced is
   unreliable** (defect B15). How the new engine reconciles the assemblies is an open
   architecture decision; the design path is unaffected.
-- `Designs.xlsx`, the empirical design list that would be the most valuable test fixture
-  available, is missing and cannot be supplied.
+- `Designs.xlsx` is still missing, but the thesis's own chapter 4 supplies a labelled set of 125
+  assayed sequences, which is now the project's validation fixture.
 
 ## Repository layout
 
@@ -122,7 +171,10 @@ sarna-designer/
 │   ├── genome/              Assembly-tagged coordinates, TSS positions, promoters
 │   ├── rules/               The rule catalogue, parameters, provenance and results
 │   ├── thermo/              Nearest-neighbour tables, duplex ends, guide prediction
-│   └── design/              Contexts, evaluators, presets and the design pipeline
+│   ├── design/              Contexts, evaluators, presets and the design pipeline
+│   ├── regulatory/          TF motifs, Ensembl Regulatory Build, the evidence model
+│   ├── validation/          Assayed sequences and the benchmark that can refute a rule
+│   └── view/                View model and the self-contained HTML browser
 ├── docs/
 │   ├── adr/                 Architecture decision records
 │   ├── scientific/          Legacy inventory, rule provenance, validation records
@@ -160,7 +212,14 @@ present.
 Tests that need the AF22 bigWigs skip cleanly when the files are absent; point
 `SARNA_AF22_DIR` at them if they live somewhere other than `~/af22_data`.
 
-Build and run commands will be added with the API and frontend layers, which do not exist yet.
+To design against a real gene and open the result:
+
+```bash
+.venv/bin/python scripts/build_promoter_view.py SCN1A --html scn1a.html
+```
+
+The first run fetches from Ensembl and caches to `.cache/ensembl`; afterwards it works offline.
+The page carries its own data, so it can be mailed or committed beside a manuscript.
 
 ## Licence
 
