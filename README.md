@@ -50,9 +50,11 @@ prioritisation aid, not a prediction of activity.
 - Nothing is implemented. See status above.
 - The legacy scripts have **14 catalogued defects**, three scientifically material. They are
   preserved unfixed by design; see [`legacy/README.md`](legacy/README.md).
-- Whether the AF22 histone bigWigs (GSE108506) are on the same assembly as Ensembl's default
-  (GRCh38) is **unverified**. An assembly mismatch here would invalidate every regulatory
-  annotation and is a blocking open question.
+- The AF22 histone bigWigs (GSE108506) are on **GRCh37/hg19**, while Ensembl REST serves
+  **GRCh38** by default. Verified 2026-10-06 from the bigWig headers. The legacy annotation
+  pipeline combined the two without converting, so **every regulatory annotation it produced is
+  unreliable** (defect B15). How the new engine reconciles the assemblies is an open
+  architecture decision; the design path is unaffected.
 - `Designs.xlsx`, the empirical design list that would be the most valuable test fixture
   available, is missing and cannot be supplied.
 

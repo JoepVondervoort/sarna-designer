@@ -125,6 +125,7 @@ Severity: **S1** = wrong scientific output, **S2** = wrong behaviour, **S3** = h
 | B12 | **S3** | Scanner | `from pylab import *` — unused, and star-imports numpy/matplotlib names over builtins. |
 | B13 | **S3** | Scanner `complement` | Named/documented as "reverse complement" in its error message but correctly computes a plain complement. |
 | B14 | **S3** | Both | Everything is index-arithmetic `while` loops with manual counters; no functions have type hints; `promotername` is a hardcoded module constant. |
+| B15 | **S1** | EpiMarker — Ensembl REST ↔ `af22_data/*.bw` | **Assembly mismatch, verified 2026-10-06 (§12).** TSS coordinates come from Ensembl REST, which defaults to **GRCh38**; the AF22 bigWigs are **GRCh37/hg19**. Coordinates are also named differently (`1` vs `chr1`). Every histone-signal lookup therefore reads the wrong locus. This was the blocking open question — it is now closed, and the answer is that the mismatch is real. |
 
 ## 8. Code to preserve vs refactor
 
@@ -214,3 +215,49 @@ User (2026-10-06): the paper "explained why the score was like that… It should
 our new application as well." ⇒ **per-rule score contribution and its rationale must be
 visible in the UI for every candidate**, not just a final number. Feeds the Explainable
 Ranking requirement.
+
+---
+
+## 12. Genome assembly of the AF22 bigWigs — RESOLVED 2026-10-06
+
+Previously the blocking open question ("are the AF22 bigWigs on the same assembly as Ensembl's
+default?"). **They are not.**
+
+Method: chromosome sizes were read directly from the bigWig headers with `pyBigWig` and
+compared against the known GRCh37 and GRCh38 lengths.
+
+| Chromosome | Observed in all 6 `.bw` | GRCh37/hg19 | GRCh38 |
+|---|---|---|---|
+| `chr1` | 249,250,621 | **249,250,621** ✅ | 248,956,422 |
+| `chrX` | 155,270,560 | **155,270,560** ✅ | 156,040,895 |
+
+All six files (GSM2902405–GSM2902410) agree: 25 contigs, UCSC-style `chr`-prefixed names,
+**GRCh37/hg19**. This is consistent with GSE108506's 2017 deposition date.
+
+### Two distinct incompatibilities
+
+1. **Assembly.** Ensembl REST (`rest.ensembl.org`) serves **GRCh38** by default. The legacy
+   EpiMarker script pins no assembly and so silently received GRCh38 TSS coordinates, then
+   used them to index hg19 signal tracks.
+2. **Contig naming.** Ensembl returns `1`, `2`, `X`; the bigWigs expect `chr1`, `chr2`, `chrX`.
+   A lookup with the Ensembl name raises or returns empty rather than wrong data — so this one
+   fails loudly, whereas the assembly mismatch fails **silently**.
+
+### Scientific consequence
+
+GRCh37→GRCh38 coordinate shifts are locus-dependent and range from zero to several megabases.
+The pipeline samples 50 bp-binned signal in a ±30 kb window, so any shift beyond a few hundred
+base pairs puts the read outside the intended region entirely. **Every regulatory annotation
+produced by the legacy EpiMarker script must be treated as unreliable**, independently of B1
+(minus-strand coordinates) and B4 (single-bp sampling), both of which compound it.
+
+This does not affect the Scanner: it has no coordinate concept at all (§3), which is why the
+design path is unaffected and only the annotation path is implicated.
+
+### Not yet decided
+
+How the new engine reconciles the two — pinning the GRCh37 Ensembl endpoint, lifting the
+bigWigs over to GRCh38, or lifting query coordinates per-request — is an open architecture
+decision requiring an ADR. Whichever is chosen, the engine must **pin and assert the assembly
+explicitly at every genomic boundary** rather than relying on a service default, and must
+normalise contig naming at the bigWig adapter.
