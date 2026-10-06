@@ -12,6 +12,7 @@ from typing import Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from sarna.rules.parameters import RuleParameter
 from sarna.rules.provenance import EvidenceClass, Provenance
 
 _KEBAB_CASE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
@@ -66,6 +67,20 @@ class Rule(BaseModel):
 
     group: str | None = None
     """Optional UI grouping, so related single-point preferences can collapse into one line."""
+
+    parameters: tuple[RuleParameter, ...] = ()
+    """Tunable values this rule exposes, with their defaults, bounds and units (ADR 0003)."""
+
+    def parameter(self, name: str) -> RuleParameter:
+        """Return the parameter called ``name``.
+
+        Raises:
+            KeyError: If this rule has no such parameter.
+        """
+        for parameter in self.parameters:
+            if parameter.name == name:
+                return parameter
+        raise KeyError(f"rule {self.id!r} has no parameter {name!r}")
 
     @model_validator(mode="after")
     def _check_id_and_integrity(self) -> Self:

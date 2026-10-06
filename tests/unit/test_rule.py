@@ -132,3 +132,26 @@ class TestRuleKind:
         assert str(RuleKind.MANDATORY) == "mandatory"
         assert str(RuleKind.PREFERENCE) == "preference"
         assert str(RuleKind.TIEBREAK) == "tiebreak"
+
+
+class TestRuleParameters:
+    def test_a_rule_may_expose_no_parameters(self):
+        assert make_rule().parameters == ()
+
+    def test_parameters_are_reachable_by_name(self):
+        from sarna.rules.parameters import RuleParameter
+
+        bound = RuleParameter(
+            name="minimum-gc-fraction",
+            default=0.40,
+            minimum=0.0,
+            maximum=1.0,
+            unit="fraction",
+            description="Lowest GC fraction a target may have.",
+        )
+        rule = make_rule(parameters=(bound,))
+        assert rule.parameter("minimum-gc-fraction").default == 0.40
+
+    def test_an_unknown_parameter_name_raises(self):
+        with pytest.raises(KeyError, match="no-such-parameter"):
+            make_rule().parameter("no-such-parameter")

@@ -1,0 +1,105 @@
+"""Tunable values attached to a design rule.
+
+ADR 0003 requires a rule to publish its ``default``, ``valid_range`` and ``unit`` where they
+are meaningful. Those three together are what let the UI render a setting the user can reason
+about, and what makes the difference between presets inspectable: ``wang-2015`` and
+``legacy-scanner`` disagree about the upper GC bound, and that disagreement should read as one
+parameter with two values, not as two different programs.
+"""
+
+import re
+from typing import Self
+
+from pydantic import BaseModel, ConfigDict, model_validator
+
+_KEBAB_CASE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+
+ParameterValue = bool | int | float
+
+
+class RuleParameter(BaseModel):
+    """A single tunable value belonging to a rule."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    """Stable kebab-case identifier, unique within its rule."""
+
+    default: ParameterValue
+    """The value used unless a preset overrides it."""
+
+    minimum: float | None = None
+    maximum: float | None = None
+
+    unit: str | None = None
+    """Unit of measurement, e.g. ``nt``, ``bp``, ``fraction``. ``None`` for booleans."""
+
+    description: str
+    """What this value controls, in plain language."""
+
+    @property
+    def is_boolean(self) -> bool:
+        """Return whether this parameter is on/off rather than numeric."""
+        return isinstance(self.default, bool)
+
+    @model_validator(mode="after")
+    def _check_name_bounds_and_default(self) -> Self:
+        """Validate the name format, the bounds, and that the default satisfies them."""
+        if not _KEBAB_CASE.match(self.name):
+            raise ValueError(
+                f"parameter name {self.name!r} must be kebab-case, e.g. 'minimum-gc-fraction'"
+            )
+        if not self.description.strip():
+            raise ValueError(f"description must not be blank for parameter {self.name!r}")
+        if self.is_boolean:
+            if self.minimum is not None or self.maximum is not None:
+                raise ValueError(
+                    f"parameter {self.name!r} is boolean and cannot carry numeric bounds"
+                )
+            return self
+        if (
+            self.minimum is not None
+            and self.maximum is not None
+            and self.minimum > self.maximum
+        ):
+            raise ValueError(
+                f"minimum {self.minimum} exceeds maximum {self.maximum} for "
+                f"parameter {self.name!r}"
+            )
+        self._check_in_bounds(self.default, what="default")
+        return self
+
+    def _check_in_bounds(self, value: ParameterValue, what: str) -> None:
+        if self.minimum is not None and value < self.minimum:
+            raise ValueError(
+                f"{what} {value} is below the minimum {self.minimum} for "
+                f"parameter {self.name!r}"
+            )
+        if self.maximum is not None and value > self.maximum:
+            raise ValueError(
+                f"{what} {value} is above the maximum {self.maximum} for "
+                f"parameter {self.name!r}"
+            )
+
+    def validated(self, value: ParameterValue) -> ParameterValue:
+        """Return ``value`` if it is a legal override for this parameter.
+
+        Args:
+            value: The candidate override, typically from a preset or the UI.
+
+        Returns:
+            The value unchanged.
+
+        Raises:
+            ValueError: If the value is the wrong type or outside the bounds.
+        """
+        if self.is_boolean:
+            if not isinstance(value, bool):
+                raise ValueError(
+                    f"parameter {self.name!r} is boolean; got {value!r}"
+                )
+            return value
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            raise ValueError(f"parameter {self.name!r} is numeric; got {value!r}")
+        self._check_in_bounds(value, what="value")
+        return value
