@@ -163,17 +163,27 @@ STRICT = Preset(
         # The paper permits -1000 to -100 but reports activity concentrated in -500 to -200.
         # Strict gates on the reported region instead of merely preferring it.
         "tss-window": {"window-start-bp": -500, "window-end-bp": -200},
-        "cpg-count": {"maximum-cpg-count": 0},
-        # A difference of exactly zero means the two ends are equally stable, so strand
-        # selection is undetermined. The default admits that; strict does not.
-        "thermodynamic-asymmetry": {"minimum-asymmetry-kcal": 0.5},
+        # The looser island definition finds more and shorter islands, so excluding any overlap
+        # with one rejects more candidates. Gardiner-Garden & Frommer is the stricter choice
+        # here precisely because it is the more permissive island detector.
+        "not-in-cpg-island": {
+            "island-minimum-length": 200,
+            "island-minimum-gc-fraction": 0.50,
+            "island-minimum-observed-expected-cpg": 0.60,
+        },
     },
     divergences=(
         "The -500 to -200 bp admission window comes from the paper's narrative text, not from "
         "Table 1, which permits -1000 to -100. Candidates Wang et al. would admit are excluded "
         "here, so this preset is stricter than the paper rather than conformant with it.",
-        "Requiring an asymmetry margin of 0.5 kcal/mol is this project's choice, not a published "
-        "threshold. No source states how large the difference between duplex ends must be.",
+        "Only location criteria are tightened. The sequence criteria stay at Wang's values "
+        "because the one empirical dataset available supports them exactly as published: "
+        "GC 40-60 %, at most one CpG, and no run over four bases each exclude none of the 14 "
+        "measured activators (docs/scientific/empirical-validation.md).",
+        "Two tightenings that look obvious were measured and rejected. Requiring zero CpG "
+        "excludes 4 of the 14 known activators, and activators in fact carry slightly more CpG "
+        "than non-activators, not less. Requiring an asymmetry margin of 0.5 kcal/mol excludes "
+        "a further 2. Both are available as manual overrides; neither is in this preset.",
     ),
 )
 
@@ -201,6 +211,12 @@ EXPLORATORY = Preset(
         "have changed your shortlist; do not use it to justify a design."
     ),
     rule_ids=(*_DEFAULT_RULE_IDS, *_EXPLORATORY_ADDED),
+    overrides={
+        # Reynolds' form of the A/U-rich criterion rather than Ui-Tei's. Ui-Tei's threshold is
+        # missed by 7 of the 14 measured activators and Reynolds' by 1, so at Ui-Tei's setting
+        # the rule would mostly penalise the sequences it is meant to reward.
+        "au-rich-guide-5-prime": {"window-length-nt": 5, "minimum-au-count": 3},
+    },
     divergences=(
         "Four of the six added rules are EXPLORATORY: pos3-a and no-g-at-13 have no established "
         "mechanism, and pos10-g and central-stability come from an analysis that does not "

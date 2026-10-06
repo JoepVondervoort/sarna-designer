@@ -28,6 +28,8 @@ from sarna.rules.catalog.optional import (
 )
 from sarna.rules.provenance import ProvenanceKind
 from sarna.rules.rule import RuleKind
+from sarna.validation.benchmark import benchmark
+from sarna.validation.dataset import load_chapter4_dataset
 
 
 class TestPresetRegistry:
@@ -310,13 +312,30 @@ class TestStrictPreset:
         assert window.number("window-start-bp") == -500
         assert window.number("window-end-bp") == -200
 
-    def test_it_tolerates_no_cpg(self) -> None:
-        assert self.CONFIG.rule("cpg-count").integer("maximum-cpg-count") == 0
+    def test_it_uses_the_looser_island_definition_to_exclude_more(self) -> None:
+        # Gardiner-Garden & Frommer detects more and shorter islands than Takai & Jones, so
+        # excluding any overlap with one rejects more candidates. The more permissive detector
+        # is the stricter gate.
+        island = self.CONFIG.rule("not-in-cpg-island")
+        assert island.number("island-minimum-length") == 200
+        assert island.number("island-minimum-gc-fraction") == pytest.approx(0.50)
 
-    def test_it_requires_a_positive_asymmetry_margin(self) -> None:
-        # The default admits a difference of exactly zero, where strand selection is undetermined.
-        asymmetry = self.CONFIG.rule("thermodynamic-asymmetry")
-        assert asymmetry.number("minimum-asymmetry-kcal") == pytest.approx(0.5)
+    def test_it_leaves_wangs_sequence_criteria_alone(self) -> None:
+        # The measured activators support them exactly as published, so there is nothing to
+        # tighten. Only location criteria, which this dataset cannot test, are narrowed.
+        assert self.CONFIG.rule("cpg-count").integer("maximum-cpg-count") == 1
+        assert self.CONFIG.rule("gc-content").number("maximum-gc-fraction") == pytest.approx(0.60)
+        assert self.CONFIG.rule("thermodynamic-asymmetry").number(
+            "minimum-asymmetry-kcal"
+        ) == pytest.approx(0.0)
+
+    def test_it_does_not_reject_more_known_activators_than_the_default(self) -> None:
+        # The check that caught the first version of this preset, which excluded 5 of the 14
+        # measured activators by requiring zero CpG and a 0.5 kcal/mol asymmetry margin.
+        dataset = load_chapter4_dataset()
+        strict = benchmark(dataset, self.CONFIG, permutations=1)
+        default = benchmark(dataset, WANG_2015.resolve(), permutations=1)
+        assert len(strict.rejected_activators) <= len(default.rejected_activators)
 
     def test_it_adds_no_preferences_so_its_score_stays_comparable_with_the_default(self) -> None:
         assert self.CONFIG.max_preference_points == WANG_2015.resolve().max_preference_points
@@ -327,9 +346,12 @@ class TestStrictPreset:
         assert "stricter than the paper" in joined
         assert "narrative text" in joined
 
-    def test_it_declares_that_the_asymmetry_threshold_is_unpublished(self) -> None:
+    def test_it_declares_the_tightenings_it_measured_and_rejected(self) -> None:
+        # A preset that declined an obvious setting for a measured reason should say so, or the
+        # next person will "fix" it back.
         joined = " ".join(STRICT.divergences).lower()
-        assert "not a published" in joined
+        assert "measured and rejected" in joined
+        assert "4 of the 14" in joined
 
 
 class TestExploratoryPreset:

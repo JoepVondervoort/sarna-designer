@@ -28,6 +28,7 @@ analyses, two of them well powered, pointing at one region. That is the stronges
 here, and it is :data:`AU_RICH_GUIDE_5_PRIME`.
 """
 
+from sarna.rules.options import RuleOption
 from sarna.rules.parameters import RuleParameter
 from sarna.rules.provenance import EvidenceClass, Provenance
 from sarna.rules.rule import Rule, RuleKind
@@ -71,6 +72,7 @@ def _optional(
     consequence: str,
     group: str,
     parameters: tuple[RuleParameter, ...] = (),
+    options: tuple[RuleOption, ...] = (),
 ) -> Rule:
     """Build an off-by-default preference."""
     return Rule(
@@ -84,6 +86,7 @@ def _optional(
         enabled_by_default=False,
         group=group,
         parameters=parameters,
+        options=options,
     )
 
 
@@ -132,6 +135,33 @@ AU_RICH_GUIDE_5_PRIME = _optional(
                 "How many of those positions must be A or T. Five is Ui-Tei et al.'s "
                 "threshold; three over positions 15-19 is Reynolds et al.'s, which is the "
                 "more permissive of the two."
+            ),
+        ),
+    ),
+    options=(
+        RuleOption(
+            id="ui-tei-2004",
+            label="5 of the last 7 (Ui-Tei et al. 2004)",
+            provenance=UI_TEI_2004,
+            values={"window-length-nt": 7, "minimum-au-count": 5},
+            note=(
+                "The published criterion: at least five A/U in the 5' terminal third of the "
+                "guide. Derived from siRNA knockdown, and on the one saRNA dataset available it "
+                "is not met by 7 of 14 measured activators, so at this threshold the rule costs "
+                "half of them a point. Kept as the default because it is what the source says."
+            ),
+            is_default=True,
+        ),
+        RuleOption(
+            id="reynolds-2004",
+            label="3 of the last 5 (Reynolds et al. 2004)",
+            provenance=REYNOLDS_2004,
+            values={"window-length-nt": 5, "minimum-au-count": 3},
+            note=(
+                "Reynolds et al.'s form of the same criterion, over positions 15-19. Markedly "
+                "better calibrated for activation: only 1 of the 14 measured activators misses "
+                "it, against 7 under Ui-Tei's threshold. Prefer this one if you intend the rule "
+                "to reward activators rather than to restate a knockdown criterion."
             ),
         ),
     ),

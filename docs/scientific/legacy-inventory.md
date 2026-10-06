@@ -128,6 +128,7 @@ Severity: **S1** = wrong scientific output, **S2** = wrong behaviour, **S3** = h
 | B15 | **S1** | EpiMarker — Ensembl REST ↔ `af22_data/*.bw` | **Assembly mismatch, verified 2026-10-06 (§12).** TSS coordinates come from Ensembl REST, which defaults to **GRCh38**; the AF22 bigWigs are **GRCh37/hg19**. Coordinates are also named differently (`1` vs `chr1`). Every histone-signal lookup therefore reads the wrong locus. This was the blocking open question — it is now closed, and the answer is that the mismatch is real. |
 | B16 | **S1** | Scanner `endbase` (lines 139-175) | **Not a thermodynamic test.** It scores one terminal base per end as `AAE/2` for A/U and `GGE/2` for G/C, so with only two possible values per end the condition reduces exactly to *position 1 is G or C* **and** *position 19 is A or U*. The script therefore enforces as a **mandatory gate** what Wang 2015 Table 1 marks only as "preferably" (G/C at position 1); given the existing `pos19-a` gate the second half is automatically satisfied. Not an arithmetic defect but a previously unnoticed scientific divergence between the presets: `legacy-scanner` needs a mandatory position-1 rule that `wang-2015` scores as a preference. Identified 2026-10-06 while deciding ADR 0009. **The catalogue does not yet carry this rule.** |
 | B17 | **S2** | Scanner `CpGislanddetector` (lines 289-298) | **Misattributed criteria.** The comment says the detector uses "roughly the same algorithm as used by D. Takai and P. A. Jones", but its thresholds — >= 200 bp, GC > 50 %, obs/exp > 0.6 — are **Gardiner-Garden & Frommer 1987**. Takai & Jones 2002 deliberately tightened them to >= 500 bp, GC >= 55 %, obs/exp >= 0.65, because the 1987 criteria over-call: on human chromosomes 21 and 22 they yielded 14 062 islands, over half of them Alu repeats, against 1 101 under the stricter set. The misattribution was copied into this project's own rule rationale and is now corrected; `wang-2015` defaults to Takai & Jones and both definitions ship as sourced options. Also in this function: `CpG > 7` where the comment says "at least 7", and `len(sequence) > 200` discards a sequence of exactly the window length. Identified 2026-10-06. |
+| B18 | **S2** | Scanner `score` — the position-7 term | **Anti-correlated with measured activity.** The script weights an unsourced "position 7 is U" criterion at 1000, making it one of two dominant ranking terms (see B16's sibling finding on `endbase`). Measured against the only empirical dataset available — 14 saRNAs with reproducible >= 1.5-fold activation against 111 without, from thesis chapter 4 — position 7 is U in **43 % of activators against 60 % of non-activators**, an 18-point separation in the wrong direction. With 14 activators this is six sequences against eight and does not establish that the rule is harmful; what it establishes is the complete absence of support in the only direction that could have rescued a rule with no literature and no mechanism. The rule remains catalogued, unsourced and off by default, so historical rankings stay explainable. Identified 2026-10-06; see `docs/scientific/empirical-validation.md`. |
 
 ## 8. Code to preserve vs refactor
 
@@ -280,3 +281,28 @@ rejects `MT` explicitly rather than treating hg19 and GRCh37 as synonymous there
 No scientific cost: mitochondrial DNA is not packaged into nucleosomes, so histone ChIP signal
 is not interpretable on it, and saRNA targets are nuclear promoters. The point is recorded
 because "GRCh37 ≡ hg19" is a tempting shorthand that is wrong in exactly this one place.
+
+### Addendum — the legacy gates exclude five saRNAs known to activate their targets
+
+Measured 2026-10-06 against the chapter 4 dataset (`scripts/validate_against_chapter4.py`). The
+`legacy-scanner` preset rejects **5 of the 14** duplexes with reproducible activation:
+
+| Duplex | Excluded by | Note |
+|---|---|---|
+| P53 | `cpg-count` | Published activator (Lin et al. 2017) |
+| SCN1A-10 | `cpg-count`, `thermodynamic-asymmetry` | This project's own, chapters 2-3 |
+| CEBPA | `cpg-count`, `pos19-a` | MTL-CEBPA, in human clinical trials |
+| DEPDC5-4 | `thermodynamic-asymmetry` | Chapter 4's own screen |
+| KLF4 | `cpg-count` | Published activator (Voutila et al. 2012) |
+
+Four of the five fall to the script's **zero-CpG** rule, where Wang et al. permit one. The
+direction matters: activators in this set carry slightly *more* CpG than non-activators (mean 0.29
+against 0.17), so there is no empirical case for the tightening and a measured cost of 29 % of
+known activators. Wang's own published settings exclude none of the fourteen.
+
+The two `thermodynamic-asymmetry` rejections come from the defective legacy stacking table (B2)
+rather than from a threshold choice — `wang-2015`, with the same 0.0 kcal/mol threshold and the
+corrected RNA table, admits both.
+
+This is the clearest statement available of what reproducing the legacy script costs, and it is
+why `legacy-scanner` is documented as "for re-deriving historical designs, not for new work".
