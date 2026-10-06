@@ -195,6 +195,13 @@ dl.kv dd { margin: 0; overflow-wrap: anywhere; }
 .bar i { display: block; height: 100%; background: var(--fail); }
 .empty { color: var(--ink-soft); font-size: 0.82rem; }
 .cellnote { font-size: 0.78rem; color: var(--ink-soft); margin: 8px 0 0; }
+.marks { display: grid; gap: 7px; margin: 10px 0 0; }
+.markrow { display: grid; grid-template-columns: 82px minmax(0, 1fr) 62px; gap: 8px; align-items: center; }
+.markrow .mk { font-size: 0.72rem; font-family: var(--font-mono); }
+.markrow .fold { font-size: 0.72rem; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+.markrow .fold.on { color: var(--pass); font-weight: 600; }
+.spark { height: 18px; background: var(--band); border-radius: 2px; overflow: hidden; position: relative; }
+.spark canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 footer.src { margin-top: 30px; padding-top: 14px; border-top: 1px solid var(--rule); font-size: 0.75rem; color: var(--ink-soft); }
 footer.src ul { margin: 6px 0 0; padding-left: 18px; }
 #loading { padding: 40px 0; text-align: center; color: var(--ink-soft); }
@@ -573,6 +580,53 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
   }
 
   /* ---------------- lower panels ---------------- */
+  function chromatinBlock(cell) {
+    const chrom = cell.chromatin;
+    if (!chrom) return "";
+    if (!chrom.readable) {
+      return `<p class="cellnote"><b>Chromatin state could not be read.</b> ${esc(chrom.problem || "")}
+        — ${esc(chrom.problem_detail || "")}</p>`;
+    }
+    const rows = (chrom.signals || []).map((s) => `<div class="markrow">
+      <span class="mk" title="${esc(s.interpretation)}">${esc(s.mark)}</span>
+      <span class="spark" data-mark="${esc(s.mark)}" data-cell="${esc(cell.id)}"><canvas></canvas></span>
+      <span class="fold ${s.present ? "on" : ""}" title="mean ${s.mean}, background median ${s.background_median}">${s.fold_over_background}×</span>
+    </div>`).join("");
+    return `<h3 style="margin-top:14px;font-size:.9rem">Chromatin at this promoter</h3>
+      <p class="hint" style="margin-top:2px">${esc(chrom.summary)}</p>
+      <div class="marks">${rows}</div>
+      <p class="cellnote">${esc(chrom.provenance)}. Fold is over the median of random same-contig
+      windows of the same width; a mark counts as present above ${esc(String((chrom.signals[0] || {}).threshold ?? 5))}×.
+      ${esc(chrom.assembly_note || "")}</p>`;
+  }
+
+  function drawSparklines() {
+    const cell = DATA.cell_types.find((c) => c.id === state.cell);
+    if (!cell || !cell.signal_tracks) return;
+    const css = getComputedStyle(document.body);
+    const line = css.getPropertyValue("--accent").trim() || "#0f6e76";
+    for (const el of app.querySelectorAll(".spark[data-mark]")) {
+      const values = cell.signal_tracks[el.dataset.mark];
+      const canvas = el.querySelector("canvas");
+      if (!values || !canvas) continue;
+      const dpr = window.devicePixelRatio || 1;
+      const w = el.clientWidth, h = el.clientHeight;
+      canvas.width = Math.max(1, Math.floor(w * dpr));
+      canvas.height = Math.max(1, Math.floor(h * dpr));
+      const g = canvas.getContext("2d");
+      g.scale(dpr, dpr);
+      /* Scaled per mark against its own maximum: these are read-depth tracks, so one shared
+         scale would flatten every mark except the strongest. */
+      const peak = Math.max(...values, 1e-9);
+      g.fillStyle = line;
+      const step = w / values.length;
+      values.forEach((v, i) => {
+        const bar = Math.max(0.5, (v / peak) * h);
+        g.fillRect(i * step, h - bar, Math.max(0.6, step), bar);
+      });
+    }
+  }
+
   function cellPanel() {
     const cell = DATA.cell_types.find((c) => c.id === state.cell);
     if (!cell) return "";
@@ -583,6 +637,7 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
         <p style="margin:0 0 8px">${esc(cell.description)}</p>
         <dl class="kv"><dt>Dividing</dt><dd>${cell.proliferating ? "yes" : "no"}</dd>
         <dt>Factor binding</dt><dd>${cell.known ? esc(cell.status) : "not assayed"}</dd></dl>
+        ${chromatinBlock(cell)}
         ${cell.absence_note ? `<p class="cellnote"><b>What this panel cannot tell you.</b> ${esc(cell.absence_note)}</p>` : ""}
         <p class="cellnote">The ${motifCount} motif ${motifCount === 1 ? "match" : "matches"} drawn above
         are sequence predictions. They are computed without reference to any cell type and say
@@ -652,6 +707,7 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
       `<div style="margin-top:22px">${motifPanel()}</div>` + footer();
     wire();
     redrawTracks();
+    drawSparklines();
   }
 
   function wire() {
@@ -740,10 +796,10 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
   let frame = null;
   window.addEventListener("resize", () => {
     if (frame) cancelAnimationFrame(frame);
-    frame = requestAnimationFrame(redrawTracks);
+    frame = requestAnimationFrame(() => { redrawTracks(); drawSparklines(); });
   });
   const scheme = window.matchMedia("(prefers-color-scheme: dark)");
-  scheme.addEventListener("change", redrawTracks);
+  scheme.addEventListener("change", () => { redrawTracks(); drawSparklines(); });
 
   document.getElementById("loading").hidden = true;
   app.hidden = false;

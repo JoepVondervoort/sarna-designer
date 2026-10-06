@@ -534,6 +534,38 @@ class Af22ChromatinReader:
             source_interval=interval,
         )
 
+    def signal_track(
+        self, interval: GenomicInterval, mark: HistoneMark, bins: int = 200
+    ) -> tuple[float, ...] | None:
+        """Return ``mark``'s mean signal in ``bins`` equal slices across ``interval``.
+
+        For drawing a profile rather than judging a locus, so it returns raw means and leaves
+        scaling to the caller. Bins are in the interval's **own 5'-to-3' order**: on the minus
+        strand the track is reversed after reading, because the promoter is drawn in transcript
+        orientation and a profile read in reference order would be mirrored.
+
+        Returns:
+            One mean per bin, or ``None`` if the mark has no track or the interval cannot be
+            converted. ``None`` rather than zeros: no data is not an absence of signal.
+        """
+        reader = self._readers.get(mark)
+        if reader is None:
+            return None
+        try:
+            converted = convert_interval(interval, self._converter, self.track_assembly)
+        except LiftoverError:
+            return None
+        contig = f"chr{converted.contig}"
+        available = reader.chroms()
+        if contig not in available:
+            return None
+        end = min(converted.end, available[contig])
+        if end <= converted.start:
+            return None
+        values = reader.stats(contig, converted.start, end, type="mean", nBins=bins)
+        read = tuple(float(v or 0.0) for v in values)
+        return tuple(reversed(read)) if interval.strand.sign < 0 else read
+
     def background(
         self, reader: SignalReader, mark: HistoneMark, contig: str, window_length: int
     ) -> BackgroundModel:

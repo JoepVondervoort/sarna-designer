@@ -25,6 +25,7 @@ from sarna.genome.ensembl import (
     EnsemblError,
     NoManeSelectTranscriptError,
 )
+from sarna.regulatory.chromatin import open_af22_reader
 from sarna.regulatory.features import fetch_regulatory_features
 from sarna.regulatory.motifs import scan_all
 from sarna.view.html import render as render_html
@@ -84,6 +85,13 @@ def main(argv: list[str] | None = None) -> int:
     for scan in above_chance[:5]:
         print(f"      {scan.motif.name:7s} {len(scan.sites):4d} sites, {scan.summary}")
 
+    chromatin = None if args.no_chromatin else open_af22_reader()
+    if chromatin is not None:
+        marks = ", ".join(str(m) for m in chromatin.marks)
+        print(f"  AF22 chromatin tracks loaded: {marks}")
+    else:
+        print("  AF22 chromatin tracks not loaded (absent, or --no-chromatin)")
+
     view = PromoterView(
         result=result,
         gene=gene,
@@ -91,7 +99,9 @@ def main(argv: list[str] | None = None) -> int:
         alternative_tss=alternatives,
         regulatory=regulatory,
         motif_scans=motif_scans,
-        cell_panels=cell_panels_for(),
+        cell_panels=cell_panels_for(
+            promoter=promoter, chromatin_reader=chromatin
+        ),
     )
     payload = view.to_dict(full_rules_for_rejected=args.full_rules)
     destination = args.out or Path(f"{gene.symbol.lower()}_promoter_view.json")
@@ -151,6 +161,11 @@ def _parse(argv: list[str] | None) -> argparse.Namespace:
             "21 MB for a 2.5 kb promoter against under 2 MB. Rejected candidates are always "
             "present either way, with the rules that excluded them."
         ),
+    )
+    parser.add_argument(
+        "--no-chromatin",
+        action="store_true",
+        help="skip AF22 histone tracks even if they are present",
     )
     parser.add_argument("--out", type=Path, default=None, help="output JSON path")
     parser.add_argument(

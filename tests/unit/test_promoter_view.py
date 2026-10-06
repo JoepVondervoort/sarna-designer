@@ -17,6 +17,12 @@ from sarna.genome.coordinates import Assembly, GenomicInterval, Strand
 from sarna.genome.ensembl import Gene, Transcript
 from sarna.genome.promoter import Promoter
 from sarna.genome.tss import TssPosition
+from sarna.regulatory.chromatin import (
+    BackgroundModel,
+    ChromatinProfile,
+    ChromatinSignal,
+    HistoneMark,
+)
 from sarna.regulatory.evidence import AF22, HELA, CellTypeStatus
 from sarna.regulatory.features import (
     RegulatoryAnnotation,
@@ -228,6 +234,41 @@ class TestMotifTrack:
         assert len(exported["motif_scans"]) == len(MOTIFS)
 
 
+class _StubChromatinReader:
+    """Stands in for the AF22 reader so the view can be tested without 890 MB of bigWigs."""
+
+    marks = (HistoneMark.H3K4ME3, HistoneMark.H3K27ME3)
+
+    def profile(self, interval: GenomicInterval, cell: object = None) -> ChromatinProfile:
+        """Return a profile with one enriched activating mark."""
+        background = BackgroundModel(
+            contig=interval.contig,
+            mark=HistoneMark.H3K4ME3,
+            window_length=interval.length,
+            median=1.0,
+            percentile_95=3.0,
+            windows=250,
+            seed=11,
+        )
+        signal = ChromatinSignal(
+            mark=HistoneMark.H3K4ME3,
+            cell_type=AF22,
+            mean=50.0,
+            maximum=90.0,
+            background=background,
+            source_interval=interval,
+        )
+        return ChromatinProfile(interval=interval, cell_type=AF22, signals=(signal,))
+
+    def signal_track(
+        self, interval: GenomicInterval, mark: HistoneMark, bins: int = 200
+    ) -> tuple[float, ...] | None:
+        """Return a flat track for the marks this stub has."""
+        if mark not in self.marks:
+            return None
+        return tuple(float(i) for i in range(bins))
+
+
 class TestCellTypePanels:
     def test_both_characterised_cell_types_get_a_panel(self) -> None:
         panels = cell_panels_for()
@@ -246,11 +287,44 @@ class TestCellTypePanels:
         assert hela.absence_note is not None
         assert "ENCODE" in hela.absence_note
 
-    def test_the_af22_note_explains_why_there_is_no_route(self) -> None:
+    def test_the_af22_note_explains_why_there_is_no_factor_data(self) -> None:
         af22 = next(p for p in cell_panels_for() if p.cell_type is AF22)
         assert af22.absence_note is not None
         assert "No public ChIP-seq" in af22.absence_note
-        assert "B15" in af22.absence_note
+
+    def test_a_panel_with_chromatin_still_says_it_is_not_occupancy(self) -> None:
+        # The gap that survives loading histone tracks: accessibility is not occupancy, and
+        # nothing in this project says which factor is bound in AF22.
+        promoter = promoter_on(Strand.PLUS)
+        reader = _StubChromatinReader()
+        panels = cell_panels_for(
+            [AF22], promoter=promoter, chromatin_reader=reader, bins=8  # type: ignore[arg-type]
+        )
+        panel = panels[0]
+        assert panel.has_chromatin
+        assert panel.status is not CellTypeStatus.NOT_ASSAYED
+        assert panel.absence_note is not None
+        assert "factor occupancy is not" in panel.absence_note
+
+    def test_chromatin_signal_tracks_reach_the_panel_for_drawing(self) -> None:
+        panels = cell_panels_for(
+            [AF22],
+            promoter=promoter_on(Strand.PLUS),
+            chromatin_reader=_StubChromatinReader(),  # type: ignore[arg-type]
+            bins=8,
+        )
+        tracks = panels[0].signal_tracks
+        assert "H3K4me3" in tracks
+        assert len(tracks["H3K4me3"]) == 8
+
+    def test_hela_gets_no_chromatin_because_no_hela_tracks_exist(self) -> None:
+        panels = cell_panels_for(
+            [HELA],
+            promoter=promoter_on(Strand.PLUS),
+            chromatin_reader=_StubChromatinReader(),  # type: ignore[arg-type]
+        )
+        assert panels[0].chromatin is None
+        assert panels[0].status is CellTypeStatus.NOT_ASSAYED
 
     def test_a_specific_selection_can_be_requested(self) -> None:
         assert len(cell_panels_for([HELA])) == 1

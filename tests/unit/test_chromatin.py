@@ -471,3 +471,54 @@ class TestProfileAccessors:
         tracks = {HistoneMark.H3K4ME3: StubTrack(contigs={"chr2": 1000})}
         reader = Af22ChromatinReader(tracks, StubConverter())
         assert reader.profile(PROMOTER_38).signals == ()
+
+
+@pytest.mark.strand
+class TestSignalTracks:
+    """Binned signal for drawing, which must be in the promoter's own 5'-to-3' order."""
+
+    class Ramp(StubTrack):
+        """Returns an ascending ramp across the requested bins, so order is visible."""
+
+        def stats(
+            self, chromosome: str, start: int, end: int, type: str = "mean", nBins: int = 1
+        ) -> Sequence[float | None]:
+            return [float(index) for index in range(nBins)]
+
+    def reader(self) -> Af22ChromatinReader:
+        return Af22ChromatinReader({HistoneMark.H3K4ME3: self.Ramp()}, StubConverter())
+
+    def test_a_plus_strand_track_is_returned_in_reference_order(self) -> None:
+        plus = GenomicInterval(Assembly.GRCH38, "2", 166_127_520, 166_130_020, Strand.PLUS)
+        track = self.reader().signal_track(plus, HistoneMark.H3K4ME3, bins=5)
+        assert track == (0.0, 1.0, 2.0, 3.0, 4.0)
+
+    def test_a_minus_strand_track_is_reversed_into_transcript_order(self) -> None:
+        # The promoter is drawn 5'->3' in transcript orientation, so a profile read in reference
+        # order would be mirrored — the peak would appear at the wrong end of the drawing.
+        minus = GenomicInterval(Assembly.GRCH38, "2", 166_127_520, 166_130_020, Strand.MINUS)
+        track = self.reader().signal_track(minus, HistoneMark.H3K4ME3, bins=5)
+        assert track == (4.0, 3.0, 2.0, 1.0, 0.0)
+
+    def test_a_mark_with_no_track_returns_none_rather_than_zeros(self) -> None:
+        # No data is not an absence of signal, and a renderer must be able to tell them apart.
+        assert self.reader().signal_track(PROMOTER_38, HistoneMark.H3K9ME3, bins=5) is None
+
+    def test_an_unconvertible_interval_returns_none(self) -> None:
+        reader = Af22ChromatinReader(
+            {HistoneMark.H3K4ME3: self.Ramp()},
+            StubConverter(unmapped=frozenset({PROMOTER_38.start})),
+        )
+        assert reader.signal_track(PROMOTER_38, HistoneMark.H3K4ME3, bins=5) is None
+
+    def test_a_contig_absent_from_the_track_returns_none(self) -> None:
+        reader = Af22ChromatinReader(
+            {HistoneMark.H3K4ME3: StubTrack(contigs={"chr1": 249_250_621})}, StubConverter()
+        )
+        assert reader.signal_track(PROMOTER_38, HistoneMark.H3K4ME3, bins=5) is None
+
+    def test_an_interval_past_the_contig_end_returns_none(self) -> None:
+        reader = Af22ChromatinReader(
+            {HistoneMark.H3K4ME3: StubTrack(contigs={"chr2": 1000})}, StubConverter()
+        )
+        assert reader.signal_track(PROMOTER_38, HistoneMark.H3K4ME3, bins=5) is None

@@ -6,7 +6,7 @@ traceability outranks clean code: every rule carries a citation, every verdict c
 **State:** gene symbol → promoter → ranked candidates → interactive page all work.
 `design_sarnas(promoter, config)` is the engine; `EnsemblClient` resolves a gene to a promoter;
 `sarna.regulatory` annotates it; `sarna.view.html.render` writes a self-contained browser.
-1071 tests, 100% statement coverage, mypy strict clean. **No HTTP API** — the library and its
+1125 tests, 100% statement coverage, mypy strict clean. **No HTTP API** — the library and its
 scripts are the only interfaces.
 
 ## Commands
@@ -14,8 +14,9 @@ scripts are the only interfaces.
 Use `.venv/bin/python`; there is a miniconda base environment that must stay untouched.
 
 ```bash
-.venv/bin/python -m pytest -q                      # 1071 tests, ~13 s
+.venv/bin/python -m pytest -q                      # 1125 tests, ~15 s
 .venv/bin/python -m pytest -m network              # 8 live-Ensembl tests, excluded by default
+.venv/bin/python -m pytest -m tracks               # needs the AF22 bigWigs; skips if absent
 .venv/bin/python -m mypy src tests scripts         # strict
 .venv/bin/python -m ruff check .
 ```
@@ -29,6 +30,7 @@ Scripts that measure rather than assert, which is the house pattern:
 scripts/validate_against_chapter4.py       # every preset against 125 assayed sequences
 scripts/positional_motif_significance.py   # ~2 min; permutation test over the motif grid
 scripts/locate_scn1a_designs.py            # needs network; maps the thesis's designs to GRCh38
+scripts/af22_chromatin_at_targets.py       # needs network + AF22 tracks; controls included
 scripts/build_promoter_view.py SCN1A --html out.html    # needs network the first time
 ```
 
@@ -60,6 +62,9 @@ Violating one of these produces wrong science that type-checks and passes unrela
   position order; use `PromoterView.ranked_candidates`.
 - **`legacy/` is immutable.** Preserved verbatim as the scientific ground truth; linting and
   formatting exclude it.
+- **Chromatin "presence" is enrichment, never raw signal.** The AF22 tracks have no input
+  normalisation, so every mark reads about 1.0 everywhere; presence is fold over a 250-window
+  same-contig background. A raw threshold would call every mark present at every locus.
 - **Synthetic promoter fixtures must be CpG-depleted or real sequence.** Uniform random sequence
   has CpG obs/exp of 1.0 by construction and is called as one giant island, rejecting nearly
   every candidate. The symptom looks exactly like a broken design rule. See
@@ -95,6 +100,7 @@ Read the ADR before reopening its question; each records the alternatives and wh
 | Where the thesis's SCN1A designs actually sit | `scn1a-design-coordinates.md` |
 | What TF annotation can and cannot honestly show | `tf-binding.md` |
 | Why random sequence is an invalid promoter fixture | `synthetic-promoter-fixtures.md` |
+| AF22 chromatin: targets open, SCN1A closed | `af22-chromatin.md` |
 | Guide prediction: 13% of candidates flip between tables | `guide-prediction-divergence.md` |
 
 `GLOSSARY.md` fixes the vocabulary — use its terms rather than coining synonyms.
@@ -151,11 +157,10 @@ of its rules were fitted to this very data, which the tests assert so the circul
 - **`pos19-a` excludes CEBPA**, the duplex in MTL-CEBPA and the first saRNA in human trials.
   Documented, not worked around: the gate stays conformant with Table 1. Making it a preference
   would be defensible and has not been done speculatively.
-- **No cell-type occupancy data.** The `CELL_TYPE_OBSERVATION` evidence kind exists and nothing
-  produces one. ENCODE would populate HeLa; AF22 has no public ChIP-seq, and its histone tracks
-  are blocked on defect B15.
-- **Assembly reconciliation is unimplemented.** ADR 0004 put liftover inside the bigWig adapter;
-  that adapter does not exist, so no AF22 chromatin annotation runs (defect B15).
+- **No factor occupancy anywhere.** AF22 chromatin *accessibility* is measured, which is not the
+  same thing. `CELL_TYPE_OBSERVATION` for a transcription factor is still unproduced; ENCODE would
+  populate HeLa, and AF22 has no public TF ChIP-seq at all. The asymmetry is permanent-ish: the
+  tool will always know more about HeLa than about the disease-relevant line.
 - **Licence.** Bundled JASPAR matrices are CC BY-NC-SA 4.0, so shipping them makes the package
   non-commercial. `LICENSE` still says undecided. See `docs/scientific/tf-binding.md`.
 
@@ -164,3 +169,8 @@ of its rules were fitted to this very data, which the tests assert so the circul
 Highest value first: recover promoter coordinates for the rest of the chapter 4 dataset, which
 makes the location rules testable against measured activity; then the 3' overhang decision and an
 order-ready export; then ENCODE occupancy for HeLa. An HTTP API only if the user wants one.
+
+One open scientific question worth putting to the user: chapter 4's SCN1A screens appear to have
+been run in undifferentiated AF22, whose SCN1A promoter carries no active mark. If so, those null
+results are predicted by the mechanism rather than informative about the duplexes, and the
+comparison belongs in differentiated neurons. See `docs/scientific/af22-chromatin.md`.

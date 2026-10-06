@@ -20,7 +20,7 @@ weak evidence. The view passes both through from :mod:`sarna.regulatory` rather 
 them into "features".
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -28,7 +28,8 @@ from sarna.design.candidate import Candidate
 from sarna.design.pipeline import DesignResult
 from sarna.genome.ensembl import Gene, Transcript
 from sarna.genome.promoter import Promoter
-from sarna.regulatory.evidence import CELL_TYPES, CellType, CellTypeStatus
+from sarna.regulatory.chromatin import Af22ChromatinReader, ChromatinProfile
+from sarna.regulatory.evidence import AF22, CELL_TYPES, CellType, CellTypeStatus
 from sarna.regulatory.features import RegulatoryAnnotation
 from sarna.regulatory.motifs import MotifScan
 
@@ -92,15 +93,28 @@ class PlacedSpan:
 class CellTypePanel:
     """What is known about one cell type at this promoter, including when that is nothing.
 
-    Exists so an interface cannot render an empty column as a negative result. ``status`` is
-    ``NOT_ASSAYED`` for every cell type until factor-occupancy data is wired in, and
-    ``absence_note`` says so in words.
+    Exists so an interface cannot render an empty column as a negative result. A cell type with no
+    data is ``NOT_ASSAYED`` with an ``absence_note`` saying so in words; one with chromatin tracks
+    carries a real :class:`~sarna.regulatory.chromatin.ChromatinProfile` and its own verdict.
+
+    Note what each half covers. The chromatin profile says whether the promoter is **accessible**
+    in this cell type. It says nothing about which transcription factor is bound there, and the
+    motif predictions elsewhere in the view say nothing about this cell type. Both gaps are stated
+    rather than papered over.
     """
 
     cell_type: CellType
     status: CellTypeStatus
     observations: tuple[PlacedSpan, ...] = ()
     absence_note: str | None = None
+    chromatin: ChromatinProfile | None = None
+    signal_tracks: Mapping[str, tuple[float, ...]] = field(default_factory=dict)
+    """Per-mark binned signal across the promoter, in transcript 5'-to-3' order."""
+
+    @property
+    def has_chromatin(self) -> bool:
+        """Return whether real chromatin data was read for this cell type."""
+        return self.chromatin is not None and self.chromatin.is_readable
 
     def to_dict(self) -> dict[str, Any]:
         """Return the panel as JSON-serialisable data."""
@@ -113,6 +127,11 @@ class CellTypePanel:
             "known": self.status.is_known,
             "observations": [span.to_dict() for span in self.observations],
             "absence_note": self.absence_note,
+            "chromatin": self.chromatin.to_dict() if self.chromatin else None,
+            "signal_tracks": {
+                mark: [round(value, 3) for value in values]
+                for mark, values in self.signal_tracks.items()
+            },
         }
 
 
@@ -399,32 +418,82 @@ def alternative_tss_spans(
 
 def cell_panels_for(
     cell_types: Sequence[CellType] | None = None,
+    promoter: Promoter | None = None,
+    chromatin_reader: Af22ChromatinReader | None = None,
+    bins: int = 200,
 ) -> tuple[CellTypePanel, ...]:
-    """Build cell-type panels for the cell types this project characterises.
+    """Build cell-type panels, filling in chromatin state where tracks are available.
 
-    Every panel is ``NOT_ASSAYED`` and carries an absence note, because no factor-occupancy data
-    is wired in yet. That is the honest state, and representing it explicitly is what stops an
-    interface from rendering an empty panel as "nothing binds here".
+    Args:
+        cell_types: Which cell types to build panels for. Defaults to those this project
+            characterises.
+        promoter: The promoter being viewed, needed to read signal across it.
+        chromatin_reader: An open AF22 track reader, or ``None``.
+        bins: How many slices to read the signal in, for drawing.
+
+    Returns:
+        One panel per cell type. A panel with no data is ``NOT_ASSAYED`` and says why, which is
+        what stops an interface from rendering an empty panel as "nothing binds here".
     """
     selected = list(CELL_TYPES.values()) if cell_types is None else list(cell_types)
-    return tuple(
-        CellTypePanel(
-            cell_type=cell,
-            status=CellTypeStatus.NOT_ASSAYED,
-            absence_note=(
-                f"No factor-occupancy data is loaded for {cell.name}. Motif matches shown "
-                f"elsewhere are sequence predictions and say nothing about this cell type. "
-                + (
-                    "ENCODE holds extensive ChIP-seq for HeLa-S3 and wiring it in would "
-                    "populate this panel properly."
-                    if cell.is_proliferating
-                    else "No public ChIP-seq exists for this line. The project's AF22 histone "
-                    "tracks would give chromatin state rather than factor occupancy, and are "
-                    "blocked on the GRCh37/GRCh38 reconciliation (defect B15)."
-                )
-            ),
+    panels = []
+    for cell in selected:
+        profile = None
+        tracks: dict[str, tuple[float, ...]] = {}
+        if (
+            chromatin_reader is not None
+            and promoter is not None
+            and promoter.interval is not None
+            and cell is AF22
+        ):
+            profile = chromatin_reader.profile(promoter.interval, cell)
+            for mark in chromatin_reader.marks:
+                values = chromatin_reader.signal_track(promoter.interval, mark, bins)
+                if values is not None:
+                    tracks[str(mark)] = values
+        panels.append(
+            CellTypePanel(
+                cell_type=cell,
+                status=(
+                    CellTypeStatus.OBSERVED_BOUND
+                    if profile is not None and profile.activating_marks
+                    else CellTypeStatus.ASSAYED_NOT_BOUND
+                    if profile is not None and profile.is_readable
+                    else CellTypeStatus.NOT_ASSAYED
+                ),
+                absence_note=_absence_note(cell, profile),
+                chromatin=profile,
+                signal_tracks=tracks,
+            )
         )
-        for cell in selected
+    return tuple(panels)
+
+
+def _absence_note(cell: CellType, profile: ChromatinProfile | None) -> str:
+    """Return what this panel cannot tell the reader, which is never nothing.
+
+    Even with chromatin tracks loaded, accessibility is not occupancy: nothing here says which
+    factor is bound. Saying so is the point of the note.
+    """
+    if profile is not None and profile.is_readable:
+        return (
+            f"Chromatin accessibility in {cell.name} is measured here; factor occupancy is not. "
+            f"No ChIP-seq for individual transcription factors exists for this line, so the motif "
+            f"matches shown elsewhere remain sequence predictions and say nothing about "
+            f"{cell.name}."
+        )
+    base = (
+        f"No factor-occupancy data is loaded for {cell.name}. Motif matches shown elsewhere are "
+        f"sequence predictions and say nothing about this cell type. "
+    )
+    if cell.is_proliferating:
+        return base + (
+            "ENCODE holds extensive ChIP-seq for HeLa-S3 and wiring it in would populate this "
+            "panel properly."
+        )
+    return base + (
+        "No public ChIP-seq exists for this line. Its histone tracks give chromatin state rather "
+        "than factor occupancy, and are not loaded in this run."
     )
 
 
