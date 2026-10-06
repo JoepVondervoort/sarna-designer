@@ -428,6 +428,19 @@ THERMODYNAMIC_ASYMMETRY = _gate(
             unit="table",
             description="Which set of stacking energies to compute the duplex ends with.",
         ),
+        RuleParameter(
+            name="end-length-nt",
+            default=4,
+            minimum=2,
+            maximum=10,
+            unit="nt",
+            description=(
+                "How many terminal nucleotides count as an 'end' when comparing the two ends' "
+                "stability. Four, because the unwinding helicase reads about four bases at a "
+                "time (Schwarz et al. 2003). Raising it averages over more of the duplex and "
+                "blurs the terminal asymmetry the rule is testing."
+            ),
+        ),
     ),
     options=(
         RuleOption(

@@ -66,7 +66,8 @@ def thermodynamic_asymmetry(
 ) -> RuleResult:
     """Check the guide strand's 5' end is the less stable by at least the required margin."""
     table = _selected_table(resolved)
-    assessment = assess_asymmetry(context.target, table)
+    end_length = resolved.integer("end-length-nt")
+    assessment = assess_asymmetry(context.target, table, end_length=end_length)
     threshold = _threshold_in(table.unit, resolved.number("minimum-asymmetry-kcal"))
     measurements: dict[str, ParameterValue] = {
         "asymmetry": assessment.difference,
@@ -75,6 +76,7 @@ def thermodynamic_asymmetry(
         "three-prime-energy": assessment.three_prime.energy,
         "predicted-guide": str(assessment.predicted_guide),
         "nearest-neighbour-table": table.id,
+        "end-length-nt": end_length,
     }
     if assessment.predicted_guide is GuideStrand.ANTISENSE and (
         assessment.difference >= threshold
@@ -100,7 +102,8 @@ def asymmetry_margin(context: CandidateContext, resolved: ResolvedRule) -> RuleR
     candidates with one parameter set and ordering them with another would be incoherent.
     """
     table = _selected_table(resolved)
-    assessment = assess_asymmetry(context.target, table)
+    end_length = resolved.integer("end-length-nt")
+    assessment = assess_asymmetry(context.target, table, end_length=end_length)
     return RuleResult.tiebreak(
         resolved.rule,
         assessment.difference,
@@ -110,5 +113,6 @@ def asymmetry_margin(context: CandidateContext, resolved: ResolvedRule) -> RuleR
             "asymmetry": assessment.difference,
             "asymmetry-unit": table.unit,
             "nearest-neighbour-table": table.id,
+            "end-length-nt": end_length,
         },
     )

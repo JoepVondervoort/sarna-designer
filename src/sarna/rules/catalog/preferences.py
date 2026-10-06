@@ -174,6 +174,16 @@ ASYMMETRY_MARGIN = Rule(
                 "rather than inherited so that the value a run used is recorded."
             ),
         ),
+        RuleParameter(
+            name="end-length-nt",
+            default=4,
+            minimum=2,
+            maximum=10,
+            unit="nt",
+            description=(
+                "Terminal nucleotides counted as an end, as for the mandatory asymmetry rule."
+            ),
+        ),
     ),
 )
 
