@@ -38,6 +38,9 @@ from enum import Enum
 from importlib import resources
 from typing import Any
 
+from sarna.genome.coordinates import Assembly, GenomicInterval, Strand
+from sarna.genome.promoter import Promoter
+from sarna.genome.tss import TssPosition
 from sarna.rules.provenance import Provenance
 from sarna.sequence.alphabet import Nucleic
 from sarna.sequence.nucleic import NucleicSequence
@@ -236,9 +239,143 @@ def target_dna_sequences(dataset: Sequence[ValidationSequence]) -> tuple[Nucleic
 __all__ = [
     "ACTIVATION_THRESHOLD_FOLD",
     "CHAPTER4_CAVEATS",
+    "CONTEXT_CAVEATS",
     "Activity",
+    "DesignLocation",
     "ValidationDataset",
     "ValidationSequence",
     "load_chapter4_dataset",
+    "load_chapter4_locations",
     "target_dna_sequences",
 ]
+
+
+COORDINATES_FILENAME = "vondervoort_2026_chapter4_coordinates.csv"
+
+CONTEXT_CAVEATS: tuple[str, ...] = (
+    "Coordinates were recovered by searching each gene's locus for the target sequence, not read "
+    "from the chapter, which records none. A design matching more than once was rejected rather "
+    "than guessed: CHD8-9 and CHD8-10 each match 12 places, so 123 of 125 are located.",
+    "519 bp of context is stored per design, which makes the 3' flank preferences evaluable and "
+    "shows local GC and CpG density. It is not enough for CpG *island* detection, which needs "
+    "500 bp of island before it can call one, so island overlap stays unevaluable.",
+    "Offsets are given against both the MANE Select TSS and the nearest annotated TSS. The second "
+    "is weak where a gene has many: TSC2 has 67 annotated TSSs, DEPDC5 45.",
+    "Validated against two published saRNAs whose names encode their position: VHL-821 recovers "
+    "at -818 from the MANE Select TSS and dsP21-322 at -310. Three and twelve bases, across "
+    "twenty years of annotation drift.",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class DesignLocation:
+    """Where one assayed design sits on the genome, with enough context to evaluate it.
+
+    The addition that makes the location rules testable against measured activity. Without it the
+    TSS windows and the 3' flank preferences report not-applicable for every sequence in the
+    dataset, which is five of the seven preferences and three of the gates.
+    """
+
+    name: str
+    gene: str
+    target: GenomicInterval
+    """The target site's genomic span, on the gene's own strand."""
+
+    context: NucleicSequence
+    """Genomic context around the target, 5'->3' in transcript orientation."""
+
+    context_offset: int
+    """0-based offset of the target within :attr:`context`."""
+
+    mane_transcript: str | None
+    mane_offset: int | None
+    """Continuous offset from the MANE Select TSS. Negative is upstream."""
+
+    nearest_transcript: str
+    nearest_tss: int
+    nearest_offset: int
+    distinct_tss: int
+    """How many distinct TSSs the gene has. Large values make ``nearest_offset`` weak."""
+
+    @property
+    def offset(self) -> int:
+        """Return the MANE Select offset where there is one, else the nearest."""
+        return self.mane_offset if self.mane_offset is not None else self.nearest_offset
+
+    @property
+    def tss_position(self) -> TssPosition:
+        """Return the target's first base as a TSS position, which has no zero."""
+        return TssPosition.from_offset(self.offset)
+
+    def promoter(self) -> Promoter:
+        """Return the stored context as a promoter, anchored to the TSS and the genome.
+
+        The context is already in transcript orientation, so it is passed straight to
+        :class:`~sarna.genome.promoter.Promoter` rather than through
+        ``from_reference_sequence``. The interval is derived from the target's, which makes
+        ``promoter.genomic_interval(context_offset, 19)`` reproduce the target interval — the
+        check that the orientation and offsets agree.
+        """
+        length = len(self.context)
+        if self.target.strand.sign > 0:
+            start = self.target.start - self.context_offset
+            end = start + length
+        else:
+            end = self.target.end + self.context_offset
+            start = end - length
+        return Promoter(
+            sequence=self.context,
+            tss_start=TssPosition.from_offset(self.offset - self.context_offset),
+            interval=GenomicInterval(
+                assembly=self.target.assembly,
+                contig=self.target.contig,
+                start=start,
+                end=end,
+                strand=self.target.strand,
+            ),
+        )
+
+
+def load_chapter4_locations() -> dict[str, DesignLocation]:
+    """Load the recovered coordinates, keyed by design name.
+
+    Produced by ``scripts/locate_dataset_designs.py``, which needs the network; the result is
+    committed so that using it does not.
+
+    Returns:
+        One entry per located design. Designs that could not be placed unambiguously are absent
+        rather than present with a guess.
+    """
+    source = resources.files(DATA_PACKAGE).joinpath(COORDINATES_FILENAME)
+    with resources.as_file(source) as path, path.open(newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    return {row["name"]: _location_from(row) for row in rows}
+
+
+def _location_from(row: dict[str, str]) -> DesignLocation:
+    """Build one location from a CSV row."""
+    context = NucleicSequence.parse(row["context_sequence"], Nucleic.DNA)
+    offset = int(row["target_offset_in_context"])
+    strand = Strand.PLUS if row["strand"] == "+" else Strand.MINUS
+    five_prime = int(row["five_prime_coordinate"])
+    length = 19
+    low = five_prime if strand is Strand.PLUS else five_prime - length + 1
+    return DesignLocation(
+        name=row["name"],
+        gene=row["gene"],
+        target=GenomicInterval(
+            assembly=Assembly(row["assembly"]),
+            contig=row["contig"],
+            start=low,
+            end=low + length,
+            strand=strand,
+        ),
+        context=context,
+        context_offset=offset,
+        mane_transcript=row["mane_transcript"] or None,
+        mane_offset=int(row["mane_tss_offset"]) if row["mane_tss_offset"] else None,
+        nearest_transcript=row["nearest_transcript"],
+        nearest_tss=int(row["nearest_tss_coordinate"]),
+        nearest_offset=int(row["nearest_tss_offset"]),
+        distinct_tss=int(row["distinct_tss_in_gene"]),
+    )

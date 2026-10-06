@@ -7,11 +7,14 @@ made from it, and would look like a scientific finding rather than a parsing bug
 
 import pytest
 
+from sarna.genome.coordinates import Assembly, Strand
 from sarna.sequence.alphabet import Nucleic
 from sarna.validation.dataset import (
+    CONTEXT_CAVEATS,
     Activity,
     ValidationDataset,
     load_chapter4_dataset,
+    load_chapter4_locations,
     target_dna_sequences,
 )
 
@@ -161,3 +164,111 @@ class TestImmutability:
 
     def test_the_loader_returns_the_documented_type(self) -> None:
         assert isinstance(DATASET, ValidationDataset)
+
+
+LOCATIONS = load_chapter4_locations()
+
+
+class TestRecoveredCoordinates:
+    """The addition that makes the location rules testable against measured activity."""
+
+    def test_123_of_125_designs_are_located(self) -> None:
+        # CHD8-9 and CHD8-10 each match 12 places in their locus, so they are absent rather
+        # than present with a guess.
+        assert len(LOCATIONS) == 123
+        assert "CHD8-9" not in LOCATIONS
+        assert "CHD8-10" not in LOCATIONS
+
+    def test_every_located_design_is_in_the_dataset(self) -> None:
+        for name in LOCATIONS:
+            assert DATASET.by_name(name)
+
+    def test_coordinates_are_on_grch38(self) -> None:
+        assert all(loc.target.assembly is Assembly.GRCH38 for loc in LOCATIONS.values())
+
+    def test_each_target_interval_is_19_bases(self) -> None:
+        assert all(loc.target.length == 19 for loc in LOCATIONS.values())
+
+    def test_the_stored_context_contains_its_target_at_the_stated_offset(self) -> None:
+        # The check that the minus-strand reverse-complement and the offset agree. Without it a
+        # mirrored context would look plausible and place every flank on the wrong side.
+        for name, loc in LOCATIONS.items():
+            expected = DATASET.by_name(name).target_dna.bases
+            start = loc.context_offset + 1
+            assert loc.context.subsequence(start, start + 18).bases == expected
+
+    def test_every_design_has_the_flank_the_preferences_need(self) -> None:
+        # Positions 20-23 lie in the promoter beyond the target, so the context must reach them.
+        for loc in LOCATIONS.values():
+            assert len(loc.context) >= loc.context_offset + 19 + 4
+
+
+@pytest.mark.strand
+class TestTheRecoveredPromoters:
+    def test_every_promoter_reproduces_its_target_interval(self) -> None:
+        # The round trip: the promoter's own strand arithmetic, run forwards, must land back on
+        # the interval the coordinates record. This is the test that catches a sign error.
+        for loc in LOCATIONS.values():
+            promoter = loc.promoter()
+            assert promoter.genomic_interval(loc.context_offset, 19) == loc.target
+
+    def test_both_strands_are_represented(self) -> None:
+        strands = {loc.target.strand for loc in LOCATIONS.values()}
+        assert strands == {Strand.PLUS, Strand.MINUS}
+
+    def test_the_tss_span_matches_the_recorded_offset(self) -> None:
+        for loc in LOCATIONS.values():
+            span = loc.promoter().tss_span(loc.context_offset, 19)
+            assert span is not None
+            assert span[0] == loc.tss_position
+
+    def test_a_minus_strand_design_is_placed_correctly(self) -> None:
+        # SCN1A is on the minus strand, where upstream means higher coordinates.
+        loc = LOCATIONS["SCN1A-11"]
+        assert loc.target.strand is Strand.MINUS
+        assert loc.nearest_offset == -6010
+
+
+class TestExternalValidationOfTheCoordinates:
+    """Two published saRNAs are named for their TSS-relative position. That is the control.
+
+    Nothing in the chain — Ensembl lookup, MANE Select choice, strand handling, locus fetch,
+    sequence search, offset arithmetic — can be meaningfully wrong and still land within a few
+    bases of a position published twenty years ago.
+    """
+
+    def test_dsp21_322_recovers_near_minus_322(self) -> None:
+        location = LOCATIONS["P21-322"]
+        assert location.mane_offset is not None
+        assert abs(location.mane_offset - (-322)) < 20
+
+    def test_vhl_821_recovers_near_minus_821(self) -> None:
+        location = LOCATIONS["VHL-821"]
+        assert location.mane_offset is not None
+        assert abs(location.mane_offset - (-821)) < 10
+
+    def test_the_caveats_record_this_validation(self) -> None:
+        joined = " ".join(CONTEXT_CAVEATS)
+        assert "VHL-821" in joined
+        assert "annotation drift" in joined
+
+    def test_the_caveats_record_what_the_context_cannot_support(self) -> None:
+        joined = " ".join(CONTEXT_CAVEATS)
+        assert "island" in joined
+        assert "67 annotated TSSs" in joined
+
+
+class TestTheNearestTssIsAWeakAnchor:
+    def test_genes_with_many_tss_are_flagged_by_the_count(self) -> None:
+        # TSC2 has 67 annotated TSSs, so "nearest" is close to meaningless there.
+        crowded = max(LOCATIONS.values(), key=lambda loc: loc.distinct_tss)
+        assert crowded.distinct_tss > 40
+
+    def test_both_anchors_are_available(self) -> None:
+        location = LOCATIONS["TSC2-8"]
+        assert location.mane_offset is not None
+        assert location.mane_offset != location.nearest_offset
+
+    def test_the_mane_offset_is_preferred_when_present(self) -> None:
+        location = LOCATIONS["TSC2-8"]
+        assert location.offset == location.mane_offset

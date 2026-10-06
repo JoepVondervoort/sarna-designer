@@ -25,7 +25,7 @@ reader can check against their intuition, which "p = 0.3" is not.
 """
 
 import random
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -37,7 +37,11 @@ from sarna.design.pipeline import DEFAULT_COMPARISON_TABLES
 from sarna.genome.promoter import Promoter
 from sarna.rules.results import RuleOutcome
 from sarna.thermo.guide import compare_asymmetry
-from sarna.validation.dataset import ValidationDataset, ValidationSequence
+from sarna.validation.dataset import (
+    DesignLocation,
+    ValidationDataset,
+    ValidationSequence,
+)
 
 DEFAULT_PERMUTATIONS = 10_000
 DEFAULT_SEED = 20261006
@@ -207,15 +211,29 @@ class BenchmarkResult:
         }
 
 
-def score_sequence(sequence: ValidationSequence, config: DesignConfig) -> ScoredSequence:
+def score_sequence(
+    sequence: ValidationSequence, config: DesignConfig, location: DesignLocation | None = None
+) -> ScoredSequence:
     """Evaluate one assayed sequence as though it were a candidate.
 
-    The sequence is wrapped in a promoter consisting of nothing but itself, with no TSS and no
-    coordinates. Rules needing that context report not-applicable, which is the correct outcome
-    rather than a failure: the dataset does not record where these targets came from.
+    Args:
+        sequence: The assayed duplex.
+        config: The resolved rules to apply.
+        location: Recovered genomic context, from ``load_chapter4_locations``. With it, the TSS
+            windows and the 3' flank preferences can be evaluated; without it they report
+            not-applicable, which is the correct outcome rather than a failure — the chapter
+            records no coordinates.
+
+    Returns:
+        The sequence with the engine's verdict about it.
     """
-    promoter = Promoter(sequence=sequence.target_dna)
-    context = CandidateContext.at(promoter, offset=0, length=len(sequence.target))
+    if location is not None:
+        promoter = location.promoter()
+        offset = location.context_offset
+    else:
+        promoter = Promoter(sequence=sequence.target_dna)
+        offset = 0
+    context = CandidateContext.at(promoter, offset=offset, length=len(sequence.target))
     duplex = context.target.as_rna()
     candidate = Candidate(
         id=sequence.name,
@@ -223,8 +241,8 @@ def score_sequence(sequence: ValidationSequence, config: DesignConfig) -> Scored
         target=context.target,
         sense_strand=duplex,
         antisense_strand=duplex.reverse_complement(),
-        tss_span=None,
-        interval=None,
+        tss_span=context.tss_span,
+        interval=context.interval,
         results=tuple(evaluate(context, resolved) for resolved in config),
         guide_comparison=compare_asymmetry(context.target, DEFAULT_COMPARISON_TABLES),
         max_preference_points=config.max_preference_points,
@@ -237,6 +255,7 @@ def benchmark(
     config: DesignConfig,
     permutations: int = DEFAULT_PERMUTATIONS,
     seed: int = DEFAULT_SEED,
+    locations: Mapping[str, DesignLocation] | None = None,
 ) -> BenchmarkResult:
     """Score every sequence in ``dataset`` and measure how well the ranking separates activity.
 
@@ -245,6 +264,9 @@ def benchmark(
         config: The resolved rules to apply, normally from a preset.
         permutations: Label shuffles for the AUC's null distribution.
         seed: Random seed, carried into the result so the p-value is reproducible.
+        locations: Recovered coordinates keyed by design name. Supplying them makes the location
+            rules evaluable, which changes what the benchmark measures: without them it reports
+            the sequence-intrinsic rules alone.
 
     Returns:
         The scored sequences, the ranking's AUC with its p-value, and per-rule pass rates.
@@ -253,7 +275,10 @@ def benchmark(
         ValueError: If the dataset has no activators or no non-activators, leaving nothing to
             discriminate between.
     """
-    scored = tuple(score_sequence(sequence, config) for sequence in dataset)
+    placed = locations or {}
+    scored = tuple(
+        score_sequence(sequence, config, placed.get(sequence.name)) for sequence in dataset
+    )
     activating = [s.points for s in scored if s.is_activating]
     inactive = [s.points for s in scored if not s.is_activating]
     if not activating or not inactive:

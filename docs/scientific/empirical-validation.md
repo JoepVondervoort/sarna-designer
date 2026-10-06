@@ -20,11 +20,11 @@ show a gate to be too permissive. It *can* show a gate to be too strict — if a
 demonstrably worked is excluded, that is a real finding, and it is the finding this page leads
 with.
 
-**Sequences arrive without their promoters.** The chapter tabulates target sites, not coordinates.
-So the TSS windows, CpG-island overlap and the 3' flank preferences report not-applicable and
-contribute nothing. Everything measured below is the behaviour of the *sequence-intrinsic* rules
-alone. Recovering the coordinates — mapping each target back to the promoter it was designed
-against — would lift this limitation and is the single most valuable addition to the dataset.
+**The coordinates have since been recovered** (`scripts/locate_dataset_designs.py`), so the
+location rules are now testable too — see "The TSS window excludes most of the activators" below.
+123 of the 125 designs are placed; CHD8-9 and CHD8-10 each match 12 places in their locus and are
+left unplaced rather than guessed. CpG-island overlap remains unevaluable, because 519 bp of stored
+context cannot support a detector that needs 500 bp of island before it calls one.
 
 **Cell type dominated the experiment.** AF22 neural stem cells produced no activators at any
 locus, including the P21 control that works reliably in HeLa. No sequence rule can represent that,
@@ -154,3 +154,95 @@ possible statement of how little signal there is to fit.
 - **Record the negatives per cell line.** "Did not activate" currently pools HeLa and AF22, and
   the chapter's own strongest effect is that these differ. Separating them would let a cell-type
   term enter the model at all.
+
+
+## The TSS window excludes most of the activators
+
+Added after the coordinates were recovered. This is the one finding of the "gate too strict" kind
+that a range-restricted set can legitimately deliver, and it is a large one.
+
+With coordinates supplied, `wang-2015` excludes **10 of the 14** duplexes known to activate their
+target, all 10 on `tss-window` alone. The four survivors are exactly the four published literature
+duplexes:
+
+| Activator | Offset from MANE Select TSS | Inside −1000…−100? |
+|---|---|---|
+| VEGF (Turunen et al. 2017) | −708 | yes |
+| TP53 (Lin et al. 2017) | −394 | yes |
+| dsP21-322 (Li et al. 2006) | −310 | yes |
+| VHL-821 (Kang et al. 2018) | −818 | yes |
+| KLF4 (Voutila et al. 2012) | −45 | **no**, nearer than −100 |
+| CEBPA (Reebye et al. 2018) | −1088 | **no**, 88 bp past −1000 |
+| DEPDC5-4 | −1704 | no |
+| TSC2-8 | −1438 | no |
+| NPRL3-5 | +732 | no, downstream |
+| CHD2-8 | −8735 (+5386 from nearest TSS) | no |
+| CHD2-10 | −8568 (+5553 from nearest TSS) | no |
+| SCN1A-10 | −21318 (−124 from nearest TSS) | no |
+| SCN1A-12 | +48681 (−5669 from nearest TSS) | no |
+| SCN1A-14 | +48820 (−5530 from nearest TSS) | no |
+
+Four of the four duplexes published by groups following Wang's convention fall inside the window.
+None of the ten from this project does.
+
+### The anchor is not the explanation
+
+The obvious objection is that these offsets are measured from the wrong TSS. Several designs
+clearly target a non-MANE TSS — SCN1A's do, as `scn1a-design-coordinates.md` sets out. So the test
+was repeated taking, for each design, whichever of the two anchors is **more favourable**:
+
+| Window | Activators inside |
+|---|---|
+| Wang Table 1, −1000…−100 | 6 / 14 |
+| thesis chapter 4, −2000…+500 | 10 / 14 |
+| widened further, −3000…+1000 | 10 / 14 |
+
+Even at its most generous, Wang's window excludes 8 of the 14. Four — SCN1A-12 and -14 at about
+−5.5 kb, CHD2-8 and -10 at about +5.4 kb — lie outside any window a promoter definition would
+reasonably draw.
+
+### What is and is not shown
+
+**Shown:** activation is observed at positions Wang's Table 1 window excludes, including two
+published duplexes just past its edges — KLF4 at −45 and CEBPA, now in human clinical trials, at
+−1088.
+
+**Not shown:** that the window is wrong. The designs were *made* in a −2000…+500 window, so the
+dataset's composition is biased toward positions outside Wang's by construction. But that bias
+explains why those positions were *tested*; it does not explain why they *worked*. A duplex at −45
+that raised its target is evidence about −45 regardless of why someone tried it.
+
+**Also not shown:** that the window is useless. 36 of 123 designs fall inside it and 4 of the 14
+activators do, which is a hit rate of 11% inside against 10 of 87 outside — indistinguishable on
+these numbers. The window neither earns nor loses its place here.
+
+### What the tool does about it
+
+Nothing automatically. `tss-window` stays a mandatory gate at −1000…−100, because that is what
+Table 1 says and conformance is the default preset's job. Three things changed instead:
+
+- The rule now offers a **sourced alternative**: the thesis's own −2000…+500 definition, with the
+  measured trade-off in its note. A user who does not want KLF4-like candidates excluded can select
+  it as a recorded decision.
+- The parameter cannot express the `+500` half, because both edges are capped at 0. A target
+  downstream of the TSS overlaps the transcript, where the rule's own rationale — and the
+  distinction from silencing — stops applying. Selecting the thesis option gives −2000…0.
+- **Whether `tss-window` should be a gate at all is an open question for the user.** Making it a
+  preference would admit every one of the 14 activators while costing the strongest single filter
+  in the engine, which currently rejects 64% of candidates on a real promoter. That is a scientific
+  trade-off, not a code change, and it is not being made unilaterally.
+
+## How the coordinates were validated
+
+Recovering coordinates by sequence search could go wrong silently — wrong strand, wrong anchor,
+off-by-one. Three checks, the last of them external:
+
+- **Round trip.** For all 123, the promoter built from the stored context reproduces the recorded
+  target interval through `Promoter.genomic_interval`, which is the engine's own strand arithmetic
+  run forwards. A sign error fails this on one strand.
+- **Sequence identity.** Fetching each recorded interval back from Ensembl returns exactly the
+  expected target, reverse-complemented where the gene is on the minus strand.
+- **Published positions.** Two of the duplexes are *named* for their TSS-relative position.
+  `VHL-821` recovers at **−818** and `dsP21-322` at **−310** — 3 and 12 bases from the names, across
+  twenty years of annotation drift. Nothing in the chain can be meaningfully wrong and still land
+  there.

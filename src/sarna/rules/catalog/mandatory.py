@@ -380,6 +380,43 @@ TSS_WINDOW = _gate(
             description="Nearest edge of the permitted window, relative to the TSS.",
         ),
     ),
+    options=(
+        RuleOption(
+            id="wang-2015",
+            label="-1000 to -100 bp (Wang et al. 2015)",
+            provenance=TABLE_1,
+            values={"window-start-bp": -1000, "window-end-bp": -100},
+            is_default=True,
+            note=(
+                "The window stated in the paper, and the one the four published saRNAs in the "
+                "validation set all fall inside: VEGF at -708, TP53 at -394, dsP21-322 at -310 "
+                "and VHL-821 at -818 from their MANE Select TSS. Recommended, with the caveat in "
+                "the next option."
+            ),
+        ),
+        RuleOption(
+            id="vondervoort-2026",
+            label="-2000 to +500 bp (thesis chapter 4)",
+            provenance=Provenance.citation(
+                "van de Vondervoort 2026",
+                "chapter 4, Material and methods — saRNA design, promoter defined as -2000 to "
+                "+500 bp of the MANE Select TSS",
+            ),
+            values={"window-start-bp": -2000, "window-end-bp": 0},
+            note=(
+                "The window the thesis designed in, and it matters because activation was "
+                "measured outside Wang's. Of the 14 duplexes known to activate their target, "
+                "Wang's window admits 6 and this one admits 10, taking the most generous TSS "
+                "anchor for each (docs/scientific/empirical-validation.md). KLF4 worked at -45, "
+                "closer than Wang's -100 edge, and CEBPA — in human clinical trials — at -1088, "
+                "just beyond the -1000 edge. Choose this to avoid excluding candidates like "
+                "those; it admits roughly twice as many candidates, so expect a longer list with "
+                "weaker average evidence. Note the parameter cannot express the +500 half: the "
+                "window's edges are capped at 0, because a target downstream of the TSS overlaps "
+                "the transcript and the rule's own rationale stops applying there."
+            ),
+        ),
+    ),
 )
 
 POS18_AT = _gate(

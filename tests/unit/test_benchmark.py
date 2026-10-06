@@ -20,7 +20,11 @@ from sarna.validation.benchmark import (
     benchmark,
     score_sequence,
 )
-from sarna.validation.dataset import ValidationSequence, load_chapter4_dataset
+from sarna.validation.dataset import (
+    ValidationSequence,
+    load_chapter4_dataset,
+    load_chapter4_locations,
+)
 
 DATASET = load_chapter4_dataset()
 
@@ -234,3 +238,73 @@ class TestSummaryRendering:
 
     def test_an_auc_below_one_half_is_described_as_below(self) -> None:
         assert "below the 50%" in self._result(0.41, 0.90).summary
+
+
+class TestWithRecoveredCoordinates:
+    """Supplying coordinates changes what the benchmark measures, and that is the point.
+
+    Without them the location rules report not-applicable for all 125 sequences, which is five of
+    the seven preferences and three of the gates. With them, the gate can be shown too strict —
+    the one direction this range-restricted dataset is able to detect.
+    """
+
+    LOCATIONS: ClassVar = load_chapter4_locations()
+
+    def test_without_coordinates_the_location_rules_are_unevaluable(self) -> None:
+        result = benchmark(DATASET, WANG_2015.resolve(), permutations=10)
+        unevaluable = {r.rule_id for r in result.rule_discrimination if r.was_never_evaluated}
+        assert "tss-window" in unevaluable
+        assert "flank-20-au" in unevaluable
+
+    def test_with_coordinates_the_location_rules_become_evaluable(self) -> None:
+        result = benchmark(
+            DATASET, WANG_2015.resolve(), permutations=10, locations=self.LOCATIONS
+        )
+        unevaluable = {r.rule_id for r in result.rule_discrimination if r.was_never_evaluated}
+        assert "tss-window" not in unevaluable
+        assert "flank-20-au" not in unevaluable
+
+    def test_island_overlap_stays_unevaluable(self) -> None:
+        # 519 bp of context cannot support island detection, which needs 500 bp of island first.
+        result = benchmark(
+            DATASET, WANG_2015.resolve(), permutations=10, locations=self.LOCATIONS
+        )
+        unevaluable = {r.rule_id for r in result.rule_discrimination if r.was_never_evaluated}
+        assert "not-in-cpg-island" in unevaluable
+
+    def test_the_tss_window_gate_excludes_ten_of_the_fourteen_activators(self) -> None:
+        # The finding. Only the four published literature duplexes survive the window.
+        result = benchmark(
+            DATASET, WANG_2015.resolve(), permutations=10, locations=self.LOCATIONS
+        )
+        lost = {s.sequence.name for s in result.rejected_activators}
+        assert len(lost) == 10
+        by_window = {
+            s.sequence.name
+            for s in result.rejected_activators
+            if any(r.rule_id == "tss-window" for r in s.candidate.excluded_by)
+        }
+        assert len(by_window) == 10
+
+    def test_the_four_published_activators_survive_the_window(self) -> None:
+        result = benchmark(
+            DATASET, WANG_2015.resolve(), permutations=10, locations=self.LOCATIONS
+        )
+        lost = {s.sequence.name for s in result.rejected_activators}
+        for name in ("VEGF", "P53", "P21-322", "VHL-821"):
+            assert name not in lost
+
+    def test_candidates_gain_genomic_coordinates(self) -> None:
+        scored = score_sequence(
+            DATASET.by_name("P21-322"), WANG_2015.resolve(), self.LOCATIONS["P21-322"]
+        )
+        assert scored.candidate.interval is not None
+        assert scored.candidate.tss_span is not None
+        assert scored.candidate.tss_span[0].value == self.LOCATIONS["P21-322"].offset
+
+    def test_the_ranking_still_does_not_discriminate(self) -> None:
+        # Coordinates make more rules evaluable; they do not make the ranking informative.
+        result = benchmark(
+            DATASET, WANG_2015.resolve(), permutations=400, seed=3, locations=self.LOCATIONS
+        )
+        assert not result.discriminates
