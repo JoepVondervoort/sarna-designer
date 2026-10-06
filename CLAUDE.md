@@ -6,7 +6,7 @@ traceability outranks clean code: every rule carries a citation, every verdict c
 **State:** gene symbol → promoter → ranked candidates → interactive page all work.
 `design_sarnas(promoter, config)` is the engine; `EnsemblClient` resolves a gene to a promoter;
 `sarna.regulatory` annotates it; `sarna.view.html.render` writes a self-contained browser.
-1125 tests, 100% statement coverage, mypy strict clean. **No HTTP API** — the library and its
+1149 tests, 100% statement coverage, mypy strict clean. **No HTTP API** — the library and its
 scripts are the only interfaces.
 
 ## Commands
@@ -14,7 +14,7 @@ scripts are the only interfaces.
 Use `.venv/bin/python`; there is a miniconda base environment that must stay untouched.
 
 ```bash
-.venv/bin/python -m pytest -q                      # 1125 tests, ~15 s
+.venv/bin/python -m pytest -q                      # 1149 tests, ~15 s
 .venv/bin/python -m pytest -m network              # 8 live-Ensembl tests, excluded by default
 .venv/bin/python -m pytest -m tracks               # needs the AF22 bigWigs; skips if absent
 .venv/bin/python -m mypy src tests scripts         # strict
@@ -31,6 +31,7 @@ scripts/validate_against_chapter4.py       # every preset against 125 assayed se
 scripts/positional_motif_significance.py   # ~2 min; permutation test over the motif grid
 scripts/locate_scn1a_designs.py            # needs network; maps the thesis's designs to GRCh38
 scripts/af22_chromatin_at_targets.py       # needs network + AF22 tracks; controls included
+scripts/locate_dataset_designs.py          # needs network; already run, its CSV is committed
 scripts/build_promoter_view.py SCN1A --html out.html    # needs network the first time
 ```
 
@@ -111,18 +112,23 @@ Read the ADR before reopening its question; each records the alternatives and wh
 chapter 4, 14 of which activated their gene. It is the only thing here that can show a rule to be
 **wrong** rather than merely unconventional, and it has already refuted one preset.
 
-Two limits decide what any number from it means, and both are in `CHAPTER4_CAVEATS`:
+Every sequence was built to pass Wang's gate, so the set is **range-restricted**: it cannot show a
+gate too permissive, only one too strict. `CHAPTER4_CAVEATS` carries the rest.
 
-- Every sequence was built to pass Wang's gate, so the set is **range-restricted**. It cannot show
-  a gate too permissive. It *can* show one too strict, and that is the finding to look for.
-- The sequences arrive **without their promoters**, so five of seven preferences and all the
-  location gates report not-applicable. Recovering the coordinates is the single most valuable
-  addition; `scripts/locate_scn1a_designs.py` does it for the 15 SCN1A designs.
+`load_chapter4_locations()` adds recovered GRCh38 coordinates for 123 of the 125, with 519 bp of
+context each, so the TSS windows and 3' flank preferences are evaluable — pass `locations=` to
+`benchmark`. Island overlap still is not: 519 bp cannot support a 500 bp island detector.
 
-Headline results: Wang's published sequence gates exclude **none** of the 14 activators, while
-every alternative setting measured excludes at least one. No preset's *ranking* beats chance
-(AUC 0.41–0.53) — expected, given the range restriction. `exploratory` scores highest because two
-of its rules were fitted to this very data, which the tests assert so the circularity stays visible.
+Headline results:
+
+- Wang's **sequence** gates exclude **none** of the 14 activators; every alternative setting
+  measured excludes at least one.
+- Wang's **window** gate excludes **10 of 14**, and the 4 survivors are exactly the 4 published
+  literature duplexes. Taking the most favourable TSS anchor for each design it still excludes 8.
+  Not acted on — see the open decision below.
+- No preset's *ranking* beats chance (AUC 0.41–0.53), with or without coordinates.
+- `exploratory` scores highest because two of its rules were fitted to this very data. The tests
+  assert that, so the circularity stays visible.
 
 ## How to work here
 
@@ -154,6 +160,11 @@ of its rules were fitted to this very data, which the tests assert so the circul
   overhang to both strands, and what a researcher orders is the 21-mer. Whether the overhang is
   synthetic (`UU`) or taken from flanking genomic sequence is a design decision for the export
   step, not yet made. This is the largest gap before the tool is usable at the bench.
+- **Should `tss-window` be a gate at all?** The biggest open question in the engine. As a gate at
+  Wang's −1000…−100 it rejects 64% of candidates on a real promoter and 10 of the 14 known
+  activators, including KLF4 at −45 and CEBPA (in human trials) at −1088. As a preference it would
+  admit all 14 and lose the strongest filter the engine has. The rule now offers the thesis's own
+  −2000…+500 window as a sourced option; the gate-versus-preference choice is the user's.
 - **`pos19-a` excludes CEBPA**, the duplex in MTL-CEBPA and the first saRNA in human trials.
   Documented, not worked around: the gate stays conformant with Table 1. Making it a preference
   would be defensible and has not been done speculatively.
@@ -166,9 +177,10 @@ of its rules were fitted to this very data, which the tests assert so the circul
 
 ## Next
 
-Highest value first: recover promoter coordinates for the rest of the chapter 4 dataset, which
-makes the location rules testable against measured activity; then the 3' overhang decision and an
-order-ready export; then ENCODE occupancy for HeLa. An HTTP API only if the user wants one.
+Two questions for the user before more building, both scientific rather than technical: whether
+`tss-window` should remain a gate, and whether chapter 4's SCN1A screens were in undifferentiated
+AF22. Then the 3' overhang decision and an order-ready export, which is the last thing standing
+between this and bench use; then ENCODE occupancy for HeLa. An HTTP API only if the user wants one.
 
 One open scientific question worth putting to the user: chapter 4's SCN1A screens appear to have
 been run in undifferentiated AF22, whose SCN1A promoter carries no active mark. If so, those null
