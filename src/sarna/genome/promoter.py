@@ -176,6 +176,69 @@ class Promoter:
             strand=self.interval.strand,
         )
 
+    def offset_of(self, coordinate: int) -> int | None:
+        """Return the promoter offset of a genomic ``coordinate``, or ``None`` if outside.
+
+        The inverse of :meth:`genomic_interval`, and needed to place anything that arrives in
+        genomic coordinates — a regulatory feature, another transcript's TSS — onto a promoter
+        held in transcript orientation. Kept here beside its inverse so the two cannot drift
+        apart, and because this is the only other place strand arithmetic is allowed to live.
+
+        Args:
+            coordinate: A 0-based genomic coordinate on the promoter's contig.
+
+        Returns:
+            The 0-based offset into the promoter sequence, or ``None`` if the coordinate lies
+            outside the promoter or the promoter is unanchored. ``None`` rather than a clamped
+            value: a feature that starts before the promoter must be drawn as truncated, not as
+            starting at zero.
+        """
+        if self.interval is None:
+            return None
+        if not self.interval.start <= coordinate < self.interval.end:
+            return None
+        if self.interval.strand.sign > 0:
+            return coordinate - self.interval.start
+        # On the minus strand offset 0 is the highest coordinate, so the mapping runs backwards.
+        return self.interval.end - 1 - coordinate
+
+    def span_of(self, interval: GenomicInterval) -> tuple[int, int] | None:
+        """Return a genomic interval's offsets within the promoter, clipped to it.
+
+        Args:
+            interval: The span to place, on the same assembly and contig.
+
+        Returns:
+            ``(start_offset, end_offset)`` half-open in promoter coordinates, or ``None`` if the
+            span does not overlap the promoter at all. A span extending past either edge is
+            clipped, so a caller drawing it knows it reaches the boundary.
+
+        Raises:
+            ValueError: If the interval is on a different assembly or contig, which would
+                otherwise produce silently meaningless offsets.
+        """
+        if self.interval is None:
+            return None
+        if interval.assembly is not self.interval.assembly:
+            raise ValueError(
+                f"cannot place a {interval.assembly} interval on a {self.interval.assembly} "
+                f"promoter; convert at the liftover adapter, not here"
+            )
+        if interval.contig != self.interval.contig:
+            raise ValueError(
+                f"interval is on contig {interval.contig!r} but the promoter is on "
+                f"{self.interval.contig!r}"
+            )
+        low = max(interval.start, self.interval.start)
+        high = min(interval.end, self.interval.end)
+        if low >= high:
+            return None
+        # Both endpoints map, then sort: on the minus strand the mapping reverses their order.
+        first = self.offset_of(low)
+        last = self.offset_of(high - 1)
+        assert first is not None and last is not None
+        return (min(first, last), max(first, last) + 1)
+
     @property
     def tss_coordinate(self) -> int | None:
         """Return the genomic coordinate of the first transcribed base, if determinable.

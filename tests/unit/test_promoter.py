@@ -255,3 +255,100 @@ class TestTssCoordinate:
             sequence=NucleicSequence.parse(TWENTY_MER), tss_start=TssPosition(-20)
         )
         assert region.tss_coordinate is None
+
+
+@pytest.mark.strand
+class TestGenomicToPromoterMapping:
+    """``offset_of`` and ``span_of`` are the inverse of ``genomic_interval``.
+
+    Needed to place anything arriving in genomic coordinates onto a promoter held in transcript
+    orientation. Verified as a round trip against the forward mapping rather than by restating
+    the arithmetic, which is what would make a sign error invisible.
+    """
+
+    def plus(self) -> Promoter:
+        return Promoter(
+            sequence=NucleicSequence.parse("ACGT" * 25),
+            tss_start=TssPosition(-100),
+            interval=GenomicInterval(Assembly.GRCH38, "1", 1000, 1100, Strand.PLUS),
+        )
+
+    def minus(self) -> Promoter:
+        return Promoter(
+            sequence=NucleicSequence.parse("ACGT" * 25),
+            tss_start=TssPosition(-100),
+            interval=GenomicInterval(Assembly.GRCH38, "1", 1000, 1100, Strand.MINUS),
+        )
+
+    def test_on_the_plus_strand_offset_zero_is_the_lowest_coordinate(self) -> None:
+        assert self.plus().offset_of(1000) == 0
+        assert self.plus().offset_of(1099) == 99
+
+    def test_on_the_minus_strand_offset_zero_is_the_highest_coordinate(self) -> None:
+        # The whole point. Getting this backwards is defect B1 in its other direction.
+        assert self.minus().offset_of(1099) == 0
+        assert self.minus().offset_of(1000) == 99
+
+    def test_the_mapping_round_trips_against_genomic_interval_on_both_strands(self) -> None:
+        for promoter in (self.plus(), self.minus()):
+            for offset in (0, 1, 19, 50, 80):
+                window = promoter.genomic_interval(offset, 19)
+                assert window is not None
+                recovered = promoter.span_of(window)
+                assert recovered == (offset, offset + 19)
+
+    def test_a_coordinate_outside_the_promoter_is_none_not_clamped(self) -> None:
+        # A feature starting before the promoter must be drawn truncated, not at zero.
+        assert self.plus().offset_of(999) is None
+        assert self.plus().offset_of(1100) is None
+
+    def test_an_unanchored_promoter_cannot_map_anything(self) -> None:
+        bare = Promoter(sequence=NucleicSequence.parse("ACGT" * 25))
+        assert bare.offset_of(1000) is None
+        interval = GenomicInterval(Assembly.GRCH38, "1", 1000, 1100)
+        assert bare.span_of(interval) is None
+
+    def test_a_span_overlapping_one_edge_is_clipped(self) -> None:
+        overlapping = GenomicInterval(Assembly.GRCH38, "1", 990, 1010, Strand.PLUS)
+        assert self.plus().span_of(overlapping) == (0, 10)
+
+    def test_a_span_clipped_on_the_minus_strand_lands_at_the_other_end(self) -> None:
+        # Low coordinates are the promoter's 3' end on the minus strand, so a span hanging off
+        # the low side clips to the *end* of the promoter, not the start.
+        overlapping = GenomicInterval(Assembly.GRCH38, "1", 990, 1010, Strand.MINUS)
+        assert self.minus().span_of(overlapping) == (90, 100)
+
+    def test_a_span_that_does_not_overlap_is_none(self) -> None:
+        elsewhere = GenomicInterval(Assembly.GRCH38, "1", 2000, 2100)
+        assert self.plus().span_of(elsewhere) is None
+
+    def test_a_span_on_another_contig_is_an_error(self) -> None:
+        other = GenomicInterval(Assembly.GRCH38, "2", 1000, 1100)
+        with pytest.raises(ValueError, match="contig"):
+            self.plus().span_of(other)
+
+    def test_a_span_on_another_assembly_is_an_error(self) -> None:
+        # Silently producing offsets across assemblies is defect B15.
+        other = GenomicInterval(Assembly.GRCH37, "1", 1000, 1100)
+        with pytest.raises(ValueError, match="liftover adapter"):
+            self.plus().span_of(other)
+
+    def test_a_tss_just_past_the_promoters_end_maps_to_none(self) -> None:
+        # These fixtures start at -100 and are 100 bp long, so +1 is exactly one base past the
+        # last offset. The forward and inverse mappings must agree that it is outside.
+        for promoter in (self.plus(), self.minus()):
+            coordinate = promoter.tss_coordinate
+            assert coordinate is not None
+            assert promoter.offset_of(coordinate) is None
+
+    def test_a_tss_inside_the_promoter_maps_to_the_offset_tss_start_implies(self) -> None:
+        # 120 bp starting at -100, so +1 sits at offset 100 and the window runs to +20.
+        for strand in (Strand.PLUS, Strand.MINUS):
+            promoter = Promoter(
+                sequence=NucleicSequence.parse("ACGT" * 30),
+                tss_start=TssPosition(-100),
+                interval=GenomicInterval(Assembly.GRCH38, "1", 1000, 1120, strand),
+            )
+            coordinate = promoter.tss_coordinate
+            assert coordinate is not None
+            assert promoter.offset_of(coordinate) == 100
