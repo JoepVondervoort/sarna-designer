@@ -53,5 +53,7 @@ Consequences of this record being mandatory:
 - The legacy weighting is additionally flagged in the UI as producing **colliding tiers**
   (`pos18=2, pos7=0` ties `pos18=1, pos7=1` at 2000), which is a real artefact of the chosen
   weights and exactly the kind of thing this ADR exists to make visible.
-- Whether ranking stays a weighted sum or becomes explicitly tiered is **still open** and is a
-  remaining grilling question. This ADR constrains only *reporting*, not the ranking model.
+- Whether ranking stays a weighted sum or becomes explicitly tiered was left open here; this ADR
+  constrains only *reporting*, not the ranking model. **Closed by
+  [ADR 0006](0006-criteria-count-ranking.md)**, which replaces the weighted sum with an
+  equally-weighted count of criteria met.

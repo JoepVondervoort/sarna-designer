@@ -38,6 +38,19 @@ Every design rule carries its **source citation, evidence class and rationale**,
 UI ([ADR 0003](docs/adr/0003-rule-provenance-is-first-class.md)). Rules with no traceable
 source are labelled `unsourced` rather than quietly presented as established biology.
 
+### How candidates are ranked
+
+Mandatory criteria are a **gate**: fail one and the candidate is excluded, with the failing rule
+named. Everything else is a **checklist of preferences, each worth one point, all weighted
+equally** — a candidate reads as "meets 5 of 7 preferences", itemised. Ties break on
+thermodynamic asymmetry, reported as a tie-break rather than folded into the score. See
+[ADR 0006](docs/adr/0006-criteria-count-ranking.md).
+
+This follows the structure of Wang 2015 Table 1, which separates requirements from criteria
+marked "preferably". It is **not** a formula taken from the paper: the paper publishes no
+weights and no ranking formula at all. Equal weighting is a deliberate choice, because the
+evidence gives no basis for ranking the preferences against each other.
+
 ### Honest expectations
 
 Wang et al. report that of designed duplexes, **15–20 % significantly activate** the target
