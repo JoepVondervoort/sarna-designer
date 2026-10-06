@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+
+# Environment
+.env
+.env.local
+
+# Large genomic data — never commit. See docs/development/data.md
+*.bw
+*.bigWig
+*.bam
+*.fa
+*.fasta
+*.2bit
+data/
+af22_data/
+
+# Caches produced by the genomics layer
+.cache/
+cache/
+
+# Node (added once the frontend stack is decided)
+node_modules/
+dist/
+build/
+
+# Editor / OS
+.DS_Store
+.idea/

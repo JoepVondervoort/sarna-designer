@@ -1,0 +1,12 @@
+LICENSING UNDECIDED — PLACEHOLDER
+
+No licence has been chosen for this repository yet. Until one is, default copyright applies:
+all rights reserved by the author, and no permission to use, copy, modify or distribute is
+granted.
+
+This is a deliberate placeholder, not an oversight. The choice depends on unresolved questions
+(internal-only vs. published tool; whether institutional policy constrains it; whether any
+dependency imposes a copyleft obligation). It is tracked as an open grilling question.
+
+Note on dependencies: this project draws on external scientific datasets (Ensembl, NCBI GEO,
+ENCODE) whose own terms must be reviewed before any redistribution of derived data.

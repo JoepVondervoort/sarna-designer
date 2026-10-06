@@ -1,0 +1,32 @@
+# Tooling configuration only. Package/distribution metadata is deliberately absent until the
+# architecture decision (single package vs. monorepo) is settled — see the open grilling
+# questions in docs/architecture/.
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# legacy/ is a preserved historical record (ADR 0001). Never lint or reformat it.
+extend-exclude = ["legacy"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "ANN", "D"]
+ignore = ["D203", "D213"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+exclude = ["^legacy/"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Strand/coordinate correctness is the highest-risk area in this project; mark those tests so
+# they can be run as a fast pre-commit gate.
+markers = [
+    "strand: plus/minus strand and coordinate-conversion correctness",
+    "regression: pins legacy-scanner preset output against legacy/sarna_promoter_scanner.py",
+    "network: requires live external APIs; excluded from the default run",
+]
+addopts = "-m 'not network'"
