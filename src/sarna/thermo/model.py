@@ -11,35 +11,13 @@ parameters mis-assigned. That is exactly defect B2 in the legacy script, which i
 """
 
 from collections.abc import Mapping
-from enum import Enum
 from itertools import product
 from typing import Self
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from sarna.rules.provenance import Provenance
-
-
-class Nucleic(Enum):
-    """Which nucleic acid a table's parameters describe."""
-
-    RNA = "RNA"
-    DNA = "DNA"
-
-    def __str__(self) -> str:
-        """Return ``RNA`` or ``DNA``."""
-        return self.value
-
-    @property
-    def bases(self) -> tuple[str, ...]:
-        """Return the four bases of this alphabet."""
-        return ("A", "C", "G", "U") if self is Nucleic.RNA else ("A", "C", "G", "T")
-
-    @property
-    def complement(self) -> Mapping[str, str]:
-        """Return the base-pairing map for this alphabet."""
-        partner = "U" if self is Nucleic.RNA else "T"
-        return {"A": partner, partner: "A", "G": "C", "C": "G"}
+from sarna.sequence.alphabet import Nucleic
 
 
 class NearestNeighbourTable(BaseModel):
@@ -112,3 +90,6 @@ class NearestNeighbourTable(BaseModel):
     def is_self_consistent(self) -> bool:
         """Return whether every stack equals its reverse complement, as physics requires."""
         return not self.inconsistent_stacks
+
+
+__all__ = ["NearestNeighbourTable", "Nucleic"]
