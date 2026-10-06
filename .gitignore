@@ -21,7 +21,10 @@ htmlcov/
 *.fa
 *.fasta
 *.2bit
-data/
+# Downloaded genomic data at the repository root only. Anchored, because an unanchored `data/`
+# also matched src/sarna/validation/data/, silently excluding a packaged reference dataset that
+# the library loads through importlib.resources.
+/data/
 af22_data/
 
 # Caches produced by the genomics layer
@@ -36,3 +39,8 @@ build/
 # Editor / OS
 .DS_Store
 .idea/
+
+# The thesis PDF (72 MB). Its scientific content is extracted into
+# src/sarna/validation/data/ and docs/scientific/, which are committed; the PDF itself is the
+# author's own document and does not belong in the repository's history.
+docs/*.pdf

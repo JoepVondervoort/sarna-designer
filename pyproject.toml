@@ -32,6 +32,9 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sarna"]
+# Reference datasets are part of the library, not test scaffolding: the validation harness
+# must find them in an installed wheel, not only in a source checkout.
+artifacts = ["src/sarna/validation/data/*.csv"]
 
 [tool.ruff]
 line-length = 100
