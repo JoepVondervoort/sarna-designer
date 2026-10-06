@@ -294,3 +294,54 @@ class TestPerformance:
         started = time.perf_counter()
         find_cpg_islands(long_promoter, TAKAI_JONES_2002)
         assert time.perf_counter() - started < 1.0
+
+
+class TestUniformRandomSequenceIsCalledAsAnIsland:
+    """Documents why a synthetic promoter fixture must be CpG-depleted.
+
+    A CpG island is defined by CpG being *more frequent than composition predicts*. Uniform
+    random sequence has observed/expected around 1.0 by construction, so any correct detector
+    calls it an island. Real DNA outside islands is depleted to around 0.2 because methylated
+    CpG deaminates to TpG, and that depletion is what makes an island stand out.
+
+    This is kept as a test because the first end-to-end design run used a uniform random
+    promoter and returned zero candidates, which looked like a bug in the design rules.
+    See docs/scientific/synthetic-promoter-fixtures.md.
+    """
+
+    @staticmethod
+    def _random(bases: str, weights: list[int], seed: int, length: int = 1200) -> str:
+        import random
+
+        return "".join(random.Random(seed).choices(bases, weights=weights, k=length))
+
+    def test_uniform_random_sequence_is_called_as_an_island(self) -> None:
+        uniform = NucleicSequence.parse(self._random("ACGT", [22, 28, 28, 22], seed=7))
+        assert find_cpg_islands(uniform, TAKAI_JONES_2002) != ()
+
+    def test_cpg_depleted_sequence_of_the_same_kind_is_not(self) -> None:
+        import random
+
+        generator = random.Random(7)
+        out: list[str] = []
+        for _ in range(1200):
+            base = generator.choices("ACGT", weights=[26, 24, 24, 26])[0]
+            # Suppress most CpG, as deamination has done to real genomic DNA.
+            if out and out[-1] == "C" and base == "G" and generator.random() > 0.2:
+                base = generator.choice("AT")
+            out.append(base)
+        depleted = NucleicSequence.parse("".join(out))
+        # The observed/expected ratio is the quantity the criteria actually test, and the one
+        # that distinguishes real genomic baseline (around 0.2) from random sequence (1.0).
+        bases = depleted.bases
+        expected = (bases.count("C") * bases.count("G")) / len(bases)
+        assert depleted.cpg_count / expected < TAKAI_JONES_2002.minimum_observed_expected
+        assert find_cpg_islands(depleted, TAKAI_JONES_2002) == ()
+
+    def test_uniform_random_sequence_has_a_ratio_near_one(self) -> None:
+        # The reason the test above works: expected is derived from the same composition that
+        # generated the sequence, so the ratio is 1.0 by construction.
+        uniform = NucleicSequence.parse(self._random("ACGT", [22, 28, 28, 22], seed=7))
+        bases = uniform.bases
+        expected = (bases.count("C") * bases.count("G")) / len(bases)
+        assert uniform.cpg_count / expected == pytest.approx(1.0, abs=0.1)
