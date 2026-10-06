@@ -7,11 +7,15 @@ The ``consequence`` text is written for a researcher deciding whether to change 
 for a developer reading the code.
 """
 
+from sarna.rules.options import RuleOption
 from sarna.rules.parameters import RuleParameter
 from sarna.rules.provenance import EvidenceClass, Provenance
 from sarna.rules.rule import Rule, RuleKind
 
 TABLE_1 = Provenance.citation("Wang et al. 2015", "Table 1")
+
+
+LEGACY_SCRIPT = Provenance.legacy_script("sarna_promoter_scanner.py")
 
 
 def _gate(
@@ -22,6 +26,7 @@ def _gate(
     consequence: str,
     parameters: tuple[RuleParameter, ...] = (),
     provenance: Provenance = TABLE_1,
+    options: tuple[RuleOption, ...] = (),
 ) -> Rule:
     return Rule(
         id=rule_id,
@@ -32,6 +37,7 @@ def _gate(
         rationale=rationale,
         consequence=consequence,
         parameters=parameters,
+        options=options,
     )
 
 
@@ -93,6 +99,30 @@ GC_CONTENT = _gate(
             description="Highest GC fraction a target may have.",
         ),
     ),
+    options=(
+        RuleOption(
+            id="wang-2015",
+            label="40-60 % (Wang et al. 2015)",
+            provenance=TABLE_1,
+            values={"minimum-gc-fraction": 0.40, "maximum-gc-fraction": 0.60},
+            note=(
+                "The band stated in the paper. Recommended unless you are reproducing an "
+                "older design."
+            ),
+            is_default=True,
+        ),
+        RuleOption(
+            id="legacy-scanner",
+            label="40-65 % (original script)",
+            provenance=LEGACY_SCRIPT,
+            values={"minimum-gc-fraction": 0.40, "maximum-gc-fraction": 0.65},
+            note=(
+                "What the original script used. More permissive at the top end, so it admits "
+                "GC-rich candidates the paper would exclude. Choose it to reproduce an "
+                "existing design, not to make a new one."
+            ),
+        ),
+    ),
 )
 
 NO_HOMOPOLYMER_RUN = _gate(
@@ -145,6 +175,40 @@ CPG_COUNT = _gate(
             maximum=5,
             unit="count",
             description="How many CpG dinucleotides the target may contain.",
+        ),
+    ),
+    options=(
+        RuleOption(
+            id="wang-2015",
+            label="At most one CpG",
+            provenance=TABLE_1,
+            values={"maximum-cpg-count": 1},
+            note="The tolerance stated in the paper.",
+            is_default=True,
+        ),
+        RuleOption(
+            id="legacy-scanner",
+            label="No CpG at all (original script)",
+            provenance=LEGACY_SCRIPT,
+            values={"maximum-cpg-count": 0},
+            note=(
+                "Stricter than the paper. The original script rejected any target containing "
+                "a CpG, which discards sound candidates in CpG-rich promoters."
+            ),
+        ),
+        RuleOption(
+            id="permissive",
+            label="Up to two CpGs",
+            provenance=Provenance.unsourced(
+                "No source states a tolerance above one; offered only to widen a search that "
+                "returns too few candidates."
+            ),
+            values={"maximum-cpg-count": 2},
+            note=(
+                "Beyond anything the literature supports. Use only to see what a very "
+                "restricted promoter would otherwise yield, and treat the extra candidates "
+                "as unvalidated."
+            ),
         ),
     ),
 )
@@ -310,6 +374,50 @@ THERMODYNAMIC_ASYMMETRY = _gate(
             description=(
                 "Smallest acceptable stability difference between the two duplex ends. Zero "
                 "requires only that the guide 5' end is not the more stable of the two."
+            ),
+        ),
+        RuleParameter(
+            name="nearest-neighbour-table",
+            default="rna-xia-1998",
+            choices=("rna-xia-1998", "dna-santalucia-1998", "legacy-dna-kj"),
+            unit="table",
+            description="Which set of stacking energies to compute the duplex ends with.",
+        ),
+    ),
+    options=(
+        RuleOption(
+            id="rna-xia-1998",
+            label="RNA parameters (Xia et al. 1998)",
+            provenance=Provenance.citation(
+                "Xia et al. 1998", "Biochemistry 37(42):14719-14735"
+            ),
+            values={"nearest-neighbour-table": "rna-xia-1998"},
+            note=(
+                "Recommended. An saRNA duplex is RNA:RNA, so these are the parameters that "
+                "describe it."
+            ),
+            is_default=True,
+        ),
+        RuleOption(
+            id="dna-santalucia-1998",
+            label="DNA parameters (SantaLucia 1998)",
+            provenance=Provenance.citation("SantaLucia 1998", "PNAS 95(4):1460-1465"),
+            values={"nearest-neighbour-table": "dna-santalucia-1998"},
+            note=(
+                "Computes asymmetry on the DNA-equivalent sequence. Much of the siRNA design "
+                "literature follows this convention, so it is offered for comparison, but the "
+                "duplex that is actually loaded is RNA."
+            ),
+        ),
+        RuleOption(
+            id="legacy-dna-kj",
+            label="Original script table (defective)",
+            provenance=LEGACY_SCRIPT,
+            values={"nearest-neighbour-table": "legacy-dna-kj"},
+            note=(
+                "DNA values in kJ/mol with three stacks assigned to the wrong parameter "
+                "(defect B2), and no initiation or terminal penalty. Preserved only so older "
+                "designs can be reproduced exactly. Do not use it for new work."
             ),
         ),
     ),

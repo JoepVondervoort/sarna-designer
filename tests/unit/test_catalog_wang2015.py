@@ -97,12 +97,12 @@ class TestDefaultsMatchTable1:
     def test_the_preferred_tss_window_sits_inside_the_mandatory_one(self):
         preferred = CATALOGUE["tss-preferred-window"]
         mandatory = CATALOGUE["tss-window"]
-        start = preferred.parameter("preferred-window-start-bp").default
-        end = preferred.parameter("preferred-window-end-bp").default
+        start = float(preferred.parameter("preferred-window-start-bp").default)
+        end = float(preferred.parameter("preferred-window-end-bp").default)
         assert start == -500
         assert end == -200
-        assert mandatory.parameter("window-start-bp").default <= start
-        assert end <= mandatory.parameter("window-end-bp").default
+        assert float(mandatory.parameter("window-start-bp").default) <= start
+        assert end <= float(mandatory.parameter("window-end-bp").default)
 
 
 class TestThePositionSevenRule:

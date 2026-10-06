@@ -103,7 +103,7 @@ class TestValidatingAnOverride:
 
     def test_rejects_a_non_numeric_value_entirely(self):
         with pytest.raises(ValueError, match="numeric"):
-            gc_minimum().validated("0.5")  # type: ignore[arg-type]
+            gc_minimum().validated("0.5")
 
     def test_a_boolean_parameter_accepts_a_boolean(self):
         boolean = RuleParameter(
@@ -126,3 +126,33 @@ class TestParameterIsData:
     def test_round_trips_through_serialisation(self):
         p = gc_minimum()
         assert RuleParameter.model_validate(p.model_dump()) == p
+
+
+class TestChoiceParameters:
+    def _table_choice(self, **overrides: object) -> RuleParameter:
+        defaults: dict[str, object] = {
+            "name": "nearest-neighbour-table",
+            "default": "rna-xia-1998",
+            "choices": ("rna-xia-1998", "legacy-dna-kj"),
+            "unit": "table",
+            "description": "Which stacking energies to use.",
+        }
+        return RuleParameter(**{**defaults, **overrides})  # type: ignore[arg-type]
+
+    def test_a_choice_parameter_reports_itself_as_a_choice(self):
+        assert self._table_choice().is_choice is True
+
+    def test_a_choice_parameter_must_list_its_choices(self):
+        with pytest.raises(ValidationError, match="must list its choices"):
+            self._table_choice(choices=None)
+
+    def test_the_default_must_be_among_the_choices(self):
+        with pytest.raises(ValidationError, match="not among the choices"):
+            self._table_choice(default="not-a-table")
+
+    def test_accepts_a_listed_choice(self):
+        assert self._table_choice().validated("legacy-dna-kj") == "legacy-dna-kj"
+
+    def test_rejects_an_unlisted_choice(self):
+        with pytest.raises(ValueError, match="must be one of"):
+            self._table_choice().validated("something-else")

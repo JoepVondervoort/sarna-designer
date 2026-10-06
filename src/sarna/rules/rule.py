@@ -12,6 +12,7 @@ from typing import Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from sarna.rules.options import RuleOption
 from sarna.rules.parameters import RuleParameter
 from sarna.rules.provenance import EvidenceClass, Provenance
 
@@ -71,6 +72,28 @@ class Rule(BaseModel):
     parameters: tuple[RuleParameter, ...] = ()
     """Tunable values this rule exposes, with their defaults, bounds and units (ADR 0003)."""
 
+    options: tuple[RuleOption, ...] = ()
+    """Named alternative settings the user may choose, each with its own provenance."""
+
+    @property
+    def default_option(self) -> RuleOption | None:
+        """Return the option marked default, or ``None`` if this rule offers no options."""
+        for option in self.options:
+            if option.is_default:
+                return option
+        return None
+
+    def option(self, option_id: str) -> RuleOption:
+        """Return the option called ``option_id``.
+
+        Raises:
+            KeyError: If this rule has no such option.
+        """
+        for option in self.options:
+            if option.id == option_id:
+                return option
+        raise KeyError(f"rule {self.id!r} has no option {option_id!r}")
+
     def parameter(self, name: str) -> RuleParameter:
         """Return the parameter called ``name``.
 
@@ -102,6 +125,38 @@ class Rule(BaseModel):
         for field in ("name", "rationale", "consequence"):
             if not str(getattr(self, field)).strip():
                 raise ValueError(f"{field} must not be blank for rule {self.id!r}")
+        return self
+
+    @model_validator(mode="after")
+    def _check_options_are_coherent(self) -> Self:
+        """Require options to be unique, defaulted once, and to set real, valid parameters."""
+        if not self.options:
+            return self
+        ids = [option.id for option in self.options]
+        if len(set(ids)) != len(ids):
+            raise ValueError(f"rule {self.id!r} has duplicate option ids")
+        defaults = [option for option in self.options if option.is_default]
+        if len(defaults) != 1:
+            raise ValueError(
+                f"rule {self.id!r} offers options, so exactly one must be marked default; "
+                f"found {len(defaults)}"
+            )
+        by_name = {parameter.name: parameter for parameter in self.parameters}
+        for option in self.options:
+            for name, value in option.values.items():
+                if name not in by_name:
+                    raise ValueError(
+                        f"option {option.id!r} of rule {self.id!r} sets unknown "
+                        f"parameter {name!r}"
+                    )
+                by_name[name].validated(value)
+        for name, value in defaults[0].values.items():
+            if by_name[name].default != value:
+                raise ValueError(
+                    f"rule {self.id!r}: the default option {defaults[0].id!r} sets "
+                    f"{name}={value!r} but the parameter default is "
+                    f"{by_name[name].default!r}; these must agree"
+                )
         return self
 
     @property
