@@ -261,3 +261,20 @@ bigWigs over to GRCh38, or lifting query coordinates per-request — is an open 
 decision requiring an ADR. Whichever is chosen, the engine must **pin and assert the assembly
 explicitly at every genomic boundary** rather than relying on a service default, and must
 normalise contig naming at the bigWig adapter.
+
+### Addendum — the mitochondrion is *not* shared between Ensembl GRCh37 and UCSC hg19
+
+Validating the project's contig-length tables against the AF22 headers (2026-10-06) found all
+**24 nuclear contigs identical**, confirming GRCh37, with one discrepancy:
+
+| Contig | AF22 bigWigs (UCSC hg19) | Ensembl GRCh37 |
+|---|---|---|
+| `chrM` / `MT` | 16,571 bp (NC_001807) | 16,569 bp (rCRS) |
+
+These are **different sequences**, not the same sequence measured differently, so mitochondrial
+coordinates do not transfer between them under any liftover. The bigWig adapter therefore
+rejects `MT` explicitly rather than treating hg19 and GRCh37 as synonymous there.
+
+No scientific cost: mitochondrial DNA is not packaged into nucleosomes, so histone ChIP signal
+is not interpretable on it, and saRNA targets are nuclear promoters. The point is recorded
+because "GRCh37 ≡ hg19" is a tempting shorthand that is wrong in exactly this one place.

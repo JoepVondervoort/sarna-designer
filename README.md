@@ -4,11 +4,10 @@ An internal research application for designing promoter-targeting **small activa
 (saRNAs), taking a researcher from a gene symbol or a pasted promoter sequence through to
 ranked, annotated, exportable duplex candidates.
 
-> **Status: Phase 0 — discovery and requirements.**
-> No design engine exists yet. What is in this repository today is the legacy-script inventory,
-> the domain glossary, the architecture decisions made so far, and the preserved original
-> scripts. The architecture and technology stack are **not yet decided**. Nothing here produces
-> scientific results. Do not use it to design anything.
+> **Status: Phase 1 — foundations.**
+> The stack is now decided ([ADR 0005](docs/adr/0005-python-core-with-thin-web-ui.md)) and the
+> genome-coordinate layer exists. **No design engine, no rules and no scoring exist yet.**
+> Nothing here produces scientific results. Do not use it to design anything.
 
 ## What problem this solves
 
@@ -64,13 +63,15 @@ prioritisation aid, not a prediction of activity.
 sarna-designer/
 ├── GLOSSARY.md              Canonical project vocabulary — read this first
 ├── legacy/                  Original scripts, preserved verbatim. Never edited.
+├── src/sarna/               The engine. No HTTP, no UI, no web framework (ADR 0005).
+│   └── genome/              Assembly-tagged coordinates and reference contig data
 ├── docs/
 │   ├── adr/                 Architecture decision records
 │   ├── scientific/          Legacy inventory, rule provenance, validation records
 │   ├── architecture/        Component and data-flow documentation
 │   └── development/         Environment and workflow notes
 ├── tests/                   Unit, regression, strand and integration tests
-└── pyproject.toml           Tooling config (no package metadata until stack is decided)
+└── pyproject.toml           Package metadata and tooling configuration
 ```
 
 ## Setup (WSL)
@@ -79,8 +80,29 @@ Prerequisites, verified versions and the rationale for keeping this repository o
 filesystem rather than `/mnt/c` are in
 [`docs/development/environment.md`](docs/development/environment.md).
 
-Installation, development, test, build and run commands will be documented here once the stack
-is chosen. Documenting them now would mean inventing them.
+Python 3.11 in an isolated virtualenv, so the miniconda base environment is never mutated:
+
+```bash
+python3.11 -m venv .venv
+.venv/bin/python -m pip install -e ".[dev,genomics]"
+```
+
+The `genomics` extra pulls in `pyBigWig`, `httpx` and `pyliftover`. The engine itself installs
+without it, which is what keeps the rules testable with no network and no 890 MB of tracks
+present.
+
+```bash
+.venv/bin/python -m pytest                      # full suite; network tests excluded by default
+.venv/bin/python -m pytest -m strand            # the coordinate-correctness gate
+.venv/bin/python -m pytest --cov --cov-report=term-missing
+.venv/bin/python -m mypy src tests              # strict
+.venv/bin/python -m ruff check .
+```
+
+Tests that need the AF22 bigWigs skip cleanly when the files are absent; point
+`SARNA_AF22_DIR` at them if they live somewhere other than `~/af22_data`.
+
+Build and run commands will be added with the API and frontend layers, which do not exist yet.
 
 ## Licence
 
