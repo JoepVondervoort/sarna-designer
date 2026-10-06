@@ -161,6 +161,20 @@ ASYMMETRY_MARGIN = Rule(
         "Affects ordering only. It never changes the score, never excludes a candidate, and "
         "is reported as a tie-break rather than folded into the number."
     ),
+    parameters=(
+        RuleParameter(
+            name="nearest-neighbour-table",
+            default="rna-xia-1998",
+            choices=("rna-xia-1998", "dna-santalucia-1998", "legacy-dna-kj"),
+            unit="table",
+            description=(
+                "Which stacking energies to order by. Should normally match the table the "
+                "mandatory asymmetry rule uses, since ordering candidates by one parameter "
+                "set after admitting them with another is incoherent. It is stated here "
+                "rather than inherited so that the value a run used is recorded."
+            ),
+        ),
+    ),
 )
 
 PREFERENCE_RULES: tuple[Rule, ...] = (

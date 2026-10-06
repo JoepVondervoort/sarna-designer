@@ -249,3 +249,29 @@ class TestDisagreementIsSurfaced:
         # silent resolution ADR 0009 forbids.
         comparison = compare_asymmetry(TARGET, (RNA_XIA_1998, LEGACY_DNA_KJ), end_length=4)
         assert not hasattr(comparison, "predicted_guide")
+
+
+class TestThresholdUnitGuards:
+    """The asymmetry evaluator's unit handling, tested at its boundaries."""
+
+    def test_an_unknown_table_id_is_rejected_by_name(self) -> None:
+        from sarna.design.evaluators.thermodynamic_rules import _selected_table
+        from sarna.rules.catalog.mandatory import THERMODYNAMIC_ASYMMETRY
+        from sarna.rules.resolved import ResolvedRule
+
+        resolved = ResolvedRule(THERMODYNAMIC_ASYMMETRY)
+        # Bypasses the parameter's own `choices`, which is the only way this can happen: it
+        # means the parameter and the shipped tables have drifted apart.
+        object.__setattr__(
+            resolved, "values", {**resolved.values, "nearest-neighbour-table": "rna-turner-2004"}
+        )
+        with pytest.raises(KeyError, match="rna-turner-2004"):
+            _selected_table(resolved)
+
+    def test_an_unconvertible_unit_is_refused_rather_than_compared(self) -> None:
+        from sarna.design.evaluators.thermodynamic_rules import _threshold_in
+
+        assert _threshold_in("kcal/mol", 2.0) == pytest.approx(2.0)
+        assert _threshold_in("kJ/mol", 2.0) == pytest.approx(8.368)
+        with pytest.raises(ValueError, match="joules"):
+            _threshold_in("joules", 2.0)

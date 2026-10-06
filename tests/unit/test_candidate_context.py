@@ -12,6 +12,7 @@ from sarna.design.context import CandidateContext
 from sarna.genome.coordinates import Assembly, GenomicInterval, Strand
 from sarna.genome.promoter import Promoter
 from sarna.genome.tss import TssPosition
+from sarna.sequence.cpg import GARDINER_GARDEN_FROMMER_1987, find_cpg_islands
 from sarna.sequence.nucleic import NucleicSequence
 
 # 30 bp, so a 19 nt target at offset 0 has a full 4 nt flank and room to slide.
@@ -188,6 +189,42 @@ class TestGenomicInterval:
     def test_has_coordinates_reports_whether_annotation_can_run(self) -> None:
         assert CandidateContext.at(anchored(), offset=0, length=19).has_coordinates is True
         assert CandidateContext.at(unanchored(), offset=0, length=19).has_coordinates is False
+
+
+class TestCpGIslands:
+    """Islands are detected once for the promoter and shared across candidates."""
+
+    def test_not_running_detection_is_distinct_from_finding_none(self) -> None:
+        # The distinction the whole not-applicable mechanism rests on: None means nobody looked,
+        # an empty tuple means somebody looked and found nothing.
+        not_run = CandidateContext.at(unanchored(), offset=0, length=19)
+        assert not_run.cpg_islands is None
+        assert not_run.overlaps_cpg_island is None
+
+        looked_and_found_none = CandidateContext.at(
+            unanchored(), offset=0, length=19, cpg_islands=()
+        )
+        assert looked_and_found_none.overlaps_cpg_island is False
+
+    def test_a_target_inside_an_island_reports_the_overlap(self) -> None:
+        islands = find_cpg_islands(
+            NucleicSequence.parse("CG" * 300), GARDINER_GARDEN_FROMMER_1987
+        )
+        promoter = Promoter(sequence=NucleicSequence.parse("CG" * 300))
+        context = CandidateContext.at(promoter, offset=0, length=19, cpg_islands=islands)
+        assert context.overlaps_cpg_island is True
+
+    def test_a_target_outside_every_island_reports_no_overlap(self) -> None:
+        # Island over [0, 600) only; the promoter continues past it with no island.
+        bases = "CG" * 300 + "AT" * 300
+        islands = find_cpg_islands(
+            NucleicSequence.parse(bases), GARDINER_GARDEN_FROMMER_1987
+        )
+        promoter = Promoter(sequence=NucleicSequence.parse(bases))
+        context = CandidateContext.at(
+            promoter, offset=1000, length=19, cpg_islands=islands
+        )
+        assert context.overlaps_cpg_island is False
 
 
 class TestValueSemantics:

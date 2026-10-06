@@ -18,10 +18,15 @@ promoter has none, and :meth:`CandidateContext.tss_window_contains` returns ``No
 ``False``. A rule reading ``None`` must report ``not-applicable`` (ADR 0007); returning ``False``
 here would let a sequence-only run reject every candidate for a check that never ran.
 
-Not yet present, deliberately: CpG-island spans and the thermodynamic duplex features. Both need
-work of their own — the Takai & Jones island detector, and a decision on the legacy
-nearest-neighbour table's defect B2 — and the rules that depend on them are not implemented
-until the context can answer them honestly.
+CpG islands are passed **in** rather than computed here. They are a property of the whole
+promoter, so detecting them once per promoter and sharing the result across every candidate keeps
+the scan linear; computing them per candidate would make it quadratic. Passing ``None`` means
+they were not computed, which is distinct from an empty tuple meaning none were found — a rule
+reading ``None`` reports not-applicable rather than passing.
+
+Not yet present, deliberately: the thermodynamic duplex features. Those are assessed per
+nearest-neighbour table (ADR 0009) rather than being a single value, so they belong with the
+candidate rather than its context.
 """
 
 from dataclasses import dataclass
@@ -29,6 +34,7 @@ from dataclasses import dataclass
 from sarna.genome.coordinates import GenomicInterval
 from sarna.genome.promoter import Promoter
 from sarna.genome.tss import TssPosition
+from sarna.sequence.cpg import CpGIsland, overlaps_any_island
 from sarna.sequence.nucleic import NucleicSequence
 
 FLANK_LENGTH = 4
@@ -61,6 +67,9 @@ class CandidateContext:
     interval: GenomicInterval | None
     """The target's genomic span on the transcript's strand, if the promoter is anchored."""
 
+    cpg_islands: tuple[CpGIsland, ...] | None
+    """Islands in the whole promoter, or ``None`` if island detection was not run."""
+
     @classmethod
     def at(
         cls,
@@ -68,6 +77,7 @@ class CandidateContext:
         offset: int,
         length: int,
         flank_length: int = FLANK_LENGTH,
+        cpg_islands: tuple[CpGIsland, ...] | None = None,
     ) -> "CandidateContext":
         """Build the context for the window of ``length`` at ``offset`` in ``promoter``.
 
@@ -78,6 +88,9 @@ class CandidateContext:
             flank_length: How many bases 3' of the target to carry. Truncated silently where the
                 promoter is too short, because a short flank is a fact about the promoter rather
                 than an error; the affected preferences then report not-applicable.
+            cpg_islands: Islands detected across the whole promoter, computed once by the
+                caller. ``None`` means detection was not run, which the island rule reports as
+                not-applicable rather than as a pass.
 
         Returns:
             The context for that window.
@@ -101,6 +114,7 @@ class CandidateContext:
             flank=flank,
             tss_span=promoter.tss_span(offset=offset, length=length),
             interval=promoter.genomic_interval(offset=offset, length=length),
+            cpg_islands=cpg_islands,
         )
 
     @property
@@ -189,3 +203,16 @@ class CandidateContext:
         window_start = TssPosition(start_bp)
         window_end = TssPosition(end_bp)
         return window_start <= first and last <= window_end
+
+    @property
+    def overlaps_cpg_island(self) -> bool | None:
+        """Return whether the target touches a CpG island, or ``None`` if none were detected.
+
+        Any overlap counts, not containment: see
+        :func:`sarna.sequence.cpg.overlaps_any_island` for why the two directions differ.
+        """
+        if self.cpg_islands is None:
+            return None
+        return overlaps_any_island(
+            self.cpg_islands, start=self.offset, end=self.offset + self.length
+        )

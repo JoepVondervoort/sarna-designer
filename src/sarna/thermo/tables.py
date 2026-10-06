@@ -22,8 +22,13 @@ from collections.abc import Mapping
 from sarna.rules.provenance import Provenance
 from sarna.thermo.model import NearestNeighbourTable, Nucleic
 
-KCAL_PER_KJ = 4.184
-"""Thermochemical calorie conversion, used to show how the legacy values were derived."""
+KJ_PER_KCAL = 4.184
+"""Thermochemical conversion: one kcal is 4.184 kJ.
+
+Named for the direction it converts in. It was previously called ``KCAL_PER_KJ``, which read as
+the reciprocal (0.239) and would have silently scaled a threshold by 17x if anyone had used it
+that way. Nothing did.
+"""
 
 
 def _expand(unique: Mapping[str, float], alphabet: Nucleic) -> dict[str, float]:
@@ -173,7 +178,7 @@ TABLES: Mapping[str, NearestNeighbourTable] = {
 
 __all__ = [
     "DNA_SANTALUCIA_1998",
-    "KCAL_PER_KJ",
+    "KJ_PER_KCAL",
     "LEGACY_DNA_KJ",
     "RNA_XIA_1998",
     "TABLES",
