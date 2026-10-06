@@ -34,7 +34,10 @@ dev = [
 packages = ["src/sarna"]
 # Reference datasets are part of the library, not test scaffolding: the validation harness
 # must find them in an installed wheel, not only in a source checkout.
-artifacts = ["src/sarna/validation/data/*.csv"]
+artifacts = [
+    "src/sarna/validation/data/*.csv",
+    "src/sarna/regulatory/data/*.json",
+]
 
 [tool.ruff]
 line-length = 100

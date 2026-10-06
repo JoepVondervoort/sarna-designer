@@ -577,3 +577,57 @@ class TestTheRealTransportPath:
         with pytest.raises(EnsemblUnavailableError):
             client.gene("SCN1A")
         assert slept == [1.0, 2.0, 4.0, 8.0, 16.0]
+
+
+class TestOverlapQueries:
+    """The endpoint the regulatory layer is built on."""
+
+    REGULATORY: ClassVar[list[dict[str, object]]] = [
+        {"id": "ENSR1", "description": "promoter", "seq_region_name": "2",
+         "start": 166128005, "end": 166128231},
+    ]
+
+    def test_records_are_returned_unparsed(self) -> None:
+        # Interpreting a regulatory feature is the regulatory layer's job; this client's job is
+        # to be the only place that knows how to talk to Ensembl.
+        client = client_for({"/overlap/region/": self.REGULATORY})
+        interval = GenomicInterval(Assembly.GRCH38, "2", 166127500, 166129000)
+        records = client.overlap(interval, "regulatory")
+        assert records == self.REGULATORY
+
+    def test_the_query_converts_to_1_based_inclusive(self) -> None:
+        client = client_for({"/overlap/region/": self.REGULATORY})
+        interval = GenomicInterval(Assembly.GRCH38, "2", 1000, 2000)
+        client.overlap(interval, "regulatory")
+        assert any("2:1001-2000" in url for url in requests_made(client))
+
+    def test_an_empty_result_is_returned_rather_than_an_error(self) -> None:
+        # "Nothing annotated" is an answer, and the regulatory layer attaches the caveat.
+        client = client_for({"/overlap/region/": []})
+        interval = GenomicInterval(Assembly.GRCH38, "2", 1000, 2000)
+        assert client.overlap(interval, "regulatory") == []
+
+    def test_an_interval_on_another_assembly_is_refused(self) -> None:
+        client = client_for({"/overlap/region/": []})
+        interval = GenomicInterval(Assembly.GRCH37, "2", 1000, 2000)
+        with pytest.raises(ValueError, match="this client serves GRCh38"):
+            client.overlap(interval, "regulatory")
+
+    def test_an_object_where_an_array_was_expected_is_an_error(self) -> None:
+        client = client_for({"/overlap/region/": {"error": "unexpected"}})
+        interval = GenomicInterval(Assembly.GRCH38, "2", 1000, 2000)
+        with pytest.raises(EnsemblUnavailableError, match="expected a JSON array"):
+            client.overlap(interval, "regulatory")
+
+    def test_an_array_where_an_object_was_expected_is_an_error(self) -> None:
+        client = client_for({"/lookup/symbol": [{"unexpected": True}]})
+        with pytest.raises(EnsemblUnavailableError, match="expected a JSON object"):
+            client.gene("SCN1A")
+
+    def test_overlap_results_are_cached(self, tmp_path: Path) -> None:
+        client = client_for({"/overlap/region/": self.REGULATORY}, cache_dir=tmp_path)
+        interval = GenomicInterval(Assembly.GRCH38, "2", 1000, 2000)
+        client.overlap(interval, "regulatory")
+        before = len(requests_made(client))
+        assert client.overlap(interval, "regulatory") == self.REGULATORY
+        assert len(requests_made(client)) == before

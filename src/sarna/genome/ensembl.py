@@ -40,7 +40,13 @@ from sarna.sequence.alphabet import Nucleic
 from sarna.sequence.nucleic import NucleicSequence
 
 JsonObject = dict[str, Any]
-"""A decoded Ensembl JSON object. Every endpoint used here returns an object, never an array."""
+"""A decoded Ensembl JSON object, as the lookup and sequence endpoints return."""
+
+JsonArray = list[dict[str, Any]]
+"""A decoded Ensembl JSON array, as the overlap endpoints return."""
+
+JsonPayload = JsonObject | JsonArray
+"""Either shape. Ensembl returns an object from lookups and an array from overlaps."""
 
 HOSTS: Mapping[Assembly, str] = {
     Assembly.GRCH38: "https://rest.ensembl.org",
@@ -253,11 +259,15 @@ class EnsemblClient:
 
         url = f"{self.base_url}{path}"
         payload = self._get_with_retries(url, path)
+        if not isinstance(payload, dict):
+            raise EnsemblUnavailableError(
+                f"expected a JSON object from {url} but got {type(payload).__name__}"
+            )
         if cached is not None:
             cached.write_text(json.dumps(payload))
         return payload
 
-    def _get_with_retries(self, url: str, path: str) -> JsonObject:
+    def _get_with_retries(self, url: str, path: str) -> JsonPayload:
         """Perform the request, retrying what is worth retrying."""
         headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
         last_problem = "no attempt was made"
@@ -282,7 +292,7 @@ class EnsemblClient:
                     break
                 continue
             try:
-                decoded: JsonObject = response.json()
+                decoded: JsonPayload = response.json()
                 return decoded
             except ValueError as error:
                 # A 200 carrying HTML. Seen from Ensembl's error pages under load.
@@ -307,6 +317,49 @@ class EnsemblClient:
         """Wait between retries. Skipped entirely at a zero backoff."""
         if seconds > 0:
             time.sleep(seconds)
+
+    def overlap(self, interval: GenomicInterval, feature: str) -> JsonArray:
+        """Return Ensembl features of type ``feature`` overlapping ``interval``, as raw records.
+
+        Deliberately returns unparsed records. Interpreting a regulatory feature is the
+        regulatory layer's job, and this client's job is to be the only place that knows how to
+        talk to Ensembl; keeping the two apart stops the genome adapter from depending on the
+        annotation model it feeds.
+
+        Args:
+            interval: The region to query, on this client's assembly.
+            feature: An Ensembl feature type, e.g. ``"regulatory"`` or ``"motif"``.
+
+        Returns:
+            The records, which may be empty. Empty means "nothing annotated", which is not the
+            same as "nothing there".
+
+        Raises:
+            ValueError: If the interval is on another assembly.
+            EnsemblUnavailableError: If Ensembl cannot be reached.
+        """
+        if interval.assembly is not self.assembly:
+            raise ValueError(
+                f"interval is on {interval.assembly} but this client serves {self.assembly}"
+            )
+        # Ensembl is 1-based inclusive. The overlap endpoint ignores strand, so none is sent.
+        region = f"{interval.contig}:{interval.start + 1}-{interval.end}"
+        return self._get_array(f"/overlap/region/homo_sapiens/{region}?feature={feature}")
+
+    def _get_array(self, path: str) -> JsonArray:
+        """Fetch ``path``, which returns a JSON array rather than an object."""
+        cached = self._cache_path(path)
+        if cached is not None and cached.exists():
+            from_cache: JsonArray = json.loads(cached.read_text())
+            return from_cache
+        payload = self._get_with_retries(f"{self.base_url}{path}", path)
+        if not isinstance(payload, list):
+            raise EnsemblUnavailableError(
+                f"expected a JSON array from {path} but got {type(payload).__name__}"
+            )
+        if cached is not None:
+            cached.write_text(json.dumps(payload))
+        return payload
 
     def _check_assembly(self, reported: str | None, what: str) -> None:
         """Verify Ensembl's reported assembly matches this client's.
