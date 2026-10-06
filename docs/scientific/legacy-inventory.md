@@ -306,3 +306,30 @@ corrected RNA table, admits both.
 
 This is the clearest statement available of what reproducing the legacy script costs, and it is
 why `legacy-scanner` is documented as "for re-deriving historical designs, not for new work".
+
+
+### Addendum — B15 is closed: coordinates are converted per request, and the conversion is checked
+
+Implemented 2026-10-06 in `sarna.regulatory.chromatin`, taking the third of ADR 0004's three
+options: query coordinates are converted GRCh38 to hg19 per request, the bigWigs are not rewritten,
+and no GRCh37 Ensembl endpoint is pinned.
+
+The size of the defect, measured at SCN1A's MANE Select TSS: GRCh38 chr2:166,128,019 is hg19
+chr2:166,984,529, **856,510 bp apart**. Reading a GRCh38 coordinate out of these tracks does not
+return noisy data; it returns a different gene's data.
+
+Five ways the conversion can fail are refused rather than papered over, each returning a stated
+reason instead of a number:
+
+| Problem | Why refusing matters |
+|---|---|
+| mitochondrial | hg19 holds NC_001807 (16,571 bp), GRCh37 holds rCRS (16,569 bp) — different sequences, so no liftover reconciles them |
+| unmapped | the region is absent from the other assembly |
+| ambiguous | a coordinate mapping to several places; taking the first is how a pipeline reads a paralogue |
+| contig changed | the interval spans a rearrangement |
+| strand flipped | silently catastrophic |
+| length drift over 2% | the two spans no longer describe the same locus, so signal averaged over the second answers a different question |
+
+Validated by positive control rather than by inspection: GAPDH reads H3K4me3 at 87.8x background
+and ACTB at 146.7x. Without that, a null result at a target promoter would be indistinguishable from
+the adapter reading the wrong place. See `docs/scientific/af22-chromatin.md`.

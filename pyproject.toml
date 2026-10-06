@@ -84,6 +84,7 @@ markers = [
     "strand: plus/minus strand and coordinate-conversion correctness",
     "regression: pins legacy-scanner preset output against legacy/sarna_promoter_scanner.py",
     "network: requires live external APIs; excluded from the default run",
+    "tracks: needs the 890 MB AF22 histone bigWigs; skips cleanly when absent",
 ]
 addopts = "-m 'not network'"
 
