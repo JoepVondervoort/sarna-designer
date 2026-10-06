@@ -103,8 +103,12 @@ class Promoter:
         """Return whether this promoter's position relative to a TSS is known."""
         return self.tss_start is not None
 
-    def _check_window(self, offset: int, length: int) -> None:
-        """Validate that a window of ``length`` at ``offset`` lies inside this promoter.
+    def validate_window(self, offset: int, length: int) -> None:
+        """Check that a window of ``length`` at ``offset`` lies inside this promoter.
+
+        Public because a caller building a candidate needs to reject a bad window before slicing
+        the sequence, so that the error names the promoter rather than surfacing as a raw index
+        error from deeper down.
 
         Raises:
             ValueError: If the length is not positive or the window runs outside the promoter.
@@ -134,7 +138,7 @@ class Promoter:
         Raises:
             ValueError: If the window does not fit inside the promoter.
         """
-        self._check_window(offset, length)
+        self.validate_window(offset, length)
         if self.tss_start is None:
             return None
         first = self.tss_start.shifted_by(offset)
@@ -157,7 +161,7 @@ class Promoter:
         Raises:
             ValueError: If the window does not fit inside the promoter.
         """
-        self._check_window(offset, length)
+        self.validate_window(offset, length)
         if self.interval is None:
             return None
         if self.interval.strand.sign > 0:
