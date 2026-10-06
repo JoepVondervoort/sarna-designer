@@ -122,6 +122,23 @@ GC_CONTENT = _gate(
                 "existing design, not to make a new one."
             ),
         ),
+        RuleOption(
+            id="reynolds-2004",
+            label="30-52 % (Reynolds et al. 2004)",
+            provenance=Provenance.citation(
+                "Reynolds et al. 2004",
+                "Nat Biotechnol 22(3):326-330, criterion 1 of the rational design set",
+            ),
+            values={"minimum-gc-fraction": 0.30, "maximum-gc-fraction": 0.52},
+            note=(
+                "The band derived from 180 siRNA duplexes, and shifted distinctly lower than "
+                "Wang's. It admits AT-rich candidates Wang excludes and rejects the whole "
+                "52-60 % range Wang allows, so it is not a tightening of the default but a "
+                "different band. Derived for knockdown rather than activation; worth trying if "
+                "a promoter is AT-rich enough that the 40 % floor leaves you few candidates, "
+                "but it is the least Wang-conformant choice here."
+            ),
+        ),
     ),
 )
 

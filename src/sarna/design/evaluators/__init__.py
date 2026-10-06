@@ -14,6 +14,7 @@ from collections.abc import Callable, Mapping
 from sarna.design.context import CandidateContext
 from sarna.design.evaluators import (
     location_rules,
+    optional_rules,
     position_rules,
     sequence_rules,
     thermodynamic_rules,
@@ -42,6 +43,15 @@ EVALUATORS: Mapping[str, Evaluator] = {
     "flank-21-au": position_rules.flank_au(21),
     "flank-22-au": position_rules.flank_au(22),
     "flank-23-au": position_rules.flank_au(23),
+    # Optional criteria from the siRNA design literature and thesis chapter 4, all off by
+    # default. Positions are stated on the sense/target strand, as the source papers state them.
+    "pos3-a": position_rules.requires_base(3, "A", "A"),
+    "pos10-u": position_rules.requires_base(10, "T", "T (U on the duplex)"),
+    "pos10-g": position_rules.requires_base(10, "G", "G"),
+    "no-g-at-13": position_rules.requires_base(13, "ACT", "A, C or T rather than G"),
+    "au-rich-guide-5-prime": optional_rules.au_rich_guide_5_prime,
+    "no-gc-stretch": optional_rules.no_gc_stretch,
+    "central-stability": optional_rules.central_stability,
     # Location, which a sequence-only run cannot answer.
     "tss-window": location_rules.tss_window,
     "tss-preferred-window": location_rules.tss_preferred_window,

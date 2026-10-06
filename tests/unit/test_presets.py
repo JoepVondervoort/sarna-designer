@@ -8,13 +8,34 @@ exceptions are present and visible rather than quietly absent.
 import pytest
 
 from sarna.design.config import DesignConfig
-from sarna.design.presets import LEGACY_SCANNER, PRESETS, WANG_2015, preset
+from sarna.design.presets import (
+    EXPLORATORY,
+    LEGACY_SCANNER,
+    PRESETS,
+    STRICT,
+    WANG_2015,
+    preset,
+)
+from sarna.rules.catalog import CATALOGUE
+from sarna.rules.catalog.optional import (
+    AU_RICH_GUIDE_5_PRIME,
+    CENTRAL_STABILITY,
+    NO_G_AT_13,
+    OPTIONAL_RULES,
+    POS3_A,
+    POS10_G,
+    POS10_U,
+)
+from sarna.rules.provenance import ProvenanceKind
 from sarna.rules.rule import RuleKind
 
 
 class TestPresetRegistry:
-    def test_both_presets_ship(self) -> None:
-        assert set(PRESETS) == {"wang-2015", "legacy-scanner"}
+    def test_the_four_presets_ship(self) -> None:
+        assert set(PRESETS) == {"wang-2015", "strict", "exploratory", "legacy-scanner"}
+
+    def test_exactly_one_preset_is_the_default(self) -> None:
+        assert sum(1 for p in PRESETS.values() if p.is_default) == 1
 
     def test_the_default_is_the_paper(self) -> None:
         assert WANG_2015.is_default is True
@@ -277,3 +298,153 @@ class TestIteration:
         # Used by the design pipeline to walk the gates and preferences in order.
         config = DesignConfig.of(["gc-content", "pos19-a"])
         assert [resolved.rule.id for resolved in config] == ["gc-content", "pos19-a"]
+
+
+class TestStrictPreset:
+    """Strict promotes Wang's softer statements to requirements, and says that it has."""
+
+    CONFIG = STRICT.resolve()
+
+    def test_it_admits_on_the_region_the_paper_reports_activity_in(self) -> None:
+        window = self.CONFIG.rule("tss-window")
+        assert window.number("window-start-bp") == -500
+        assert window.number("window-end-bp") == -200
+
+    def test_it_tolerates_no_cpg(self) -> None:
+        assert self.CONFIG.rule("cpg-count").integer("maximum-cpg-count") == 0
+
+    def test_it_requires_a_positive_asymmetry_margin(self) -> None:
+        # The default admits a difference of exactly zero, where strand selection is undetermined.
+        asymmetry = self.CONFIG.rule("thermodynamic-asymmetry")
+        assert asymmetry.number("minimum-asymmetry-kcal") == pytest.approx(0.5)
+
+    def test_it_adds_no_preferences_so_its_score_stays_comparable_with_the_default(self) -> None:
+        assert self.CONFIG.max_preference_points == WANG_2015.resolve().max_preference_points
+
+    def test_it_declares_that_it_is_stricter_than_the_paper(self) -> None:
+        # Being stricter than the source is a divergence from it, and must be stated as one.
+        joined = " ".join(STRICT.divergences).lower()
+        assert "stricter than the paper" in joined
+        assert "narrative text" in joined
+
+    def test_it_declares_that_the_asymmetry_threshold_is_unpublished(self) -> None:
+        joined = " ".join(STRICT.divergences).lower()
+        assert "not a published" in joined
+
+
+class TestExploratoryPreset:
+    CONFIG = EXPLORATORY.resolve()
+
+    def test_it_selects_the_best_supported_optional_rule(self) -> None:
+        assert "au-rich-guide-5-prime" in self.CONFIG
+
+    def test_it_selects_the_chapter_four_hypotheses(self) -> None:
+        assert "pos10-g" in self.CONFIG
+        assert "central-stability" in self.CONFIG
+
+    def test_it_omits_the_rule_that_contradicts_one_it_selects(self) -> None:
+        # pos10-u (Reynolds, U at position 10) and pos10-g (chapter 4, G at position 10) cannot
+        # both be met. Shipping both in one preset would guarantee every candidate loses a point.
+        assert "pos10-u" not in self.CONFIG
+        assert "pos10-g" in self.CONFIG
+
+    def test_it_adds_no_gates_so_the_candidate_set_is_unchanged(self) -> None:
+        # Every added rule is a preference, so this preset reorders rather than filters.
+        assert len(self.CONFIG.mandatory) == len(WANG_2015.resolve().mandatory)
+
+    def test_its_denominator_differs_from_the_default(self) -> None:
+        assert self.CONFIG.max_preference_points == 13
+        assert WANG_2015.resolve().max_preference_points == 7
+
+    def test_it_warns_that_its_scores_are_not_comparable(self) -> None:
+        joined = " ".join(EXPLORATORY.divergences).lower()
+        assert "not comparable" in joined
+
+    def test_it_warns_that_the_hypotheses_do_not_survive_correction(self) -> None:
+        joined = " ".join(EXPLORATORY.divergences).lower()
+        assert "multiple comparisons" in joined
+
+    def test_it_warns_about_overlap_with_the_asymmetry_gate(self) -> None:
+        joined = " ".join(EXPLORATORY.divergences).lower()
+        assert "overlap" in joined
+
+
+class TestTheDefaultIsUnaffectedByTheNewRules:
+    """Adding optional rules to the catalogue must not change what wang-2015 does (ADR 0011)."""
+
+    def test_the_default_still_has_seven_preferences(self) -> None:
+        assert WANG_2015.resolve().max_preference_points == 7
+
+    def test_the_default_selects_no_optional_rule(self) -> None:
+        config = WANG_2015.resolve()
+        for rule_id in (
+            "au-rich-guide-5-prime",
+            "no-gc-stretch",
+            "pos3-a",
+            "pos10-u",
+            "pos10-g",
+            "no-g-at-13",
+            "central-stability",
+        ):
+            assert rule_id not in config
+
+    def test_every_optional_rule_is_off_by_default_in_the_catalogue(self) -> None:
+        for rule in OPTIONAL_RULES:
+            assert rule.enabled_by_default is False
+
+    def test_every_optional_rule_is_a_preference_and_never_a_gate(self) -> None:
+        # So selecting any of them can only reorder, never exclude.
+        for rule in OPTIONAL_RULES:
+            assert rule.kind is RuleKind.PREFERENCE
+            assert not rule.is_gate
+
+
+class TestOptionalRuleProvenance:
+    """These rules exist to be judged, so each must publish enough to judge it by."""
+
+    def test_every_optional_rule_cites_a_source(self) -> None:
+        for rule in OPTIONAL_RULES:
+            assert rule.provenance.kind is ProvenanceKind.CITATION
+            assert rule.provenance.source
+            assert rule.provenance.locator
+
+    def test_the_knockdown_derived_rules_say_so(self) -> None:
+        # The single most important caveat: these were derived for knockdown, not activation.
+        for rule in (POS3_A, POS10_U, NO_G_AT_13):
+            assert "knockdown" in rule.consequence.lower()
+
+    def test_the_chapter_four_rules_state_that_they_fail_correction(self) -> None:
+        for rule in (POS10_G, CENTRAL_STABILITY):
+            assert "does not survive correction" in rule.consequence
+
+    def test_the_contradiction_between_position_10_rules_is_stated_on_both(self) -> None:
+        assert "pos10-g" in POS10_U.consequence
+        assert "pos10-u" in POS10_G.consequence
+
+    def test_the_best_supported_rule_names_its_three_agreeing_sources(self) -> None:
+        rationale = AU_RICH_GUIDE_5_PRIME.rationale
+        assert "Ui-Tei" in rationale
+        assert "Reynolds" in rationale
+        assert "Chapter 4" in rationale or "chapter 4" in rationale
+
+    def test_the_overlap_with_the_asymmetry_rule_is_disclosed(self) -> None:
+        # A preference that re-scores what a gate already measured must say so, or a reader
+        # will read two independent lines of evidence where there is one.
+        assert "asymmetry" in AU_RICH_GUIDE_5_PRIME.consequence
+        assert "double-count" in CENTRAL_STABILITY.consequence
+
+
+class TestTheReynoldsGcOption:
+    def test_the_gc_rule_offers_the_reynolds_band(self) -> None:
+        option = CATALOGUE["gc-content"].option("reynolds-2004")
+        assert option.values == {"minimum-gc-fraction": 0.30, "maximum-gc-fraction": 0.52}
+
+    def test_it_explains_that_it_is_a_different_band_not_a_tighter_one(self) -> None:
+        # It is lower at both ends than Wang's, so "stricter" would be the wrong mental model.
+        note = CATALOGUE["gc-content"].option("reynolds-2004").note.lower()
+        assert "not a tightening" in note
+
+    def test_the_wang_band_remains_the_default(self) -> None:
+        default = CATALOGUE["gc-content"].default_option
+        assert default is not None
+        assert default.id == "wang-2015"

@@ -8,6 +8,7 @@ the scored preferences, then the tie-break, then anything exploratory and off by
 """
 
 from sarna.rules.catalog.mandatory import MANDATORY_RULES
+from sarna.rules.catalog.optional import OPTIONAL_RULES
 from sarna.rules.catalog.preferences import (
     EXPLORATORY_RULES,
     PREFERENCE_RULES,
@@ -21,6 +22,7 @@ CATALOGUE = RuleRegistry(
         *PREFERENCE_RULES,
         *TIEBREAK_RULES,
         *EXPLORATORY_RULES,
+        *OPTIONAL_RULES,
     ]
 )
 

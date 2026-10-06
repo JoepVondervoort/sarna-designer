@@ -8,6 +8,15 @@ of it.
     The default. Every rule enabled by default in the catalogue, with default parameters.
     ``pos7-u`` is excluded, being unsourced.
 
+``strict``
+    Wang et al. 2015 with its softer statements promoted to requirements. Fewer candidates,
+    all conformant on every count the paper makes.
+
+``exploratory``
+    Wang et al. 2015 plus optional criteria from the siRNA literature and thesis chapter 4.
+    Same candidate set as the default, reordered. Its score denominator differs, so its
+    numbers are not comparable with any other preset's.
+
 ``legacy-scanner``
     Reproduces the original Promoter Scanner's filtering closely, including its defects.
     **Not bit-for-bit**, and the two exceptions are declared on the preset itself — in
@@ -139,8 +148,77 @@ LEGACY_SCANNER = Preset(
 )
 
 
+STRICT = Preset(
+    id="strict",
+    name="Strict (high-confidence subset)",
+    description=(
+        "Wang et al. 2015 with its own softer statements promoted to requirements: the region "
+        "the paper reports activity in becomes the admission window, no CpG is tolerated, and "
+        "asymmetry must be positive rather than merely non-negative. Produces far fewer "
+        "candidates, all of them conformant on every count the paper makes. Use it when you can "
+        "only afford to synthesise a handful."
+    ),
+    rule_ids=_DEFAULT_RULE_IDS,
+    overrides={
+        # The paper permits -1000 to -100 but reports activity concentrated in -500 to -200.
+        # Strict gates on the reported region instead of merely preferring it.
+        "tss-window": {"window-start-bp": -500, "window-end-bp": -200},
+        "cpg-count": {"maximum-cpg-count": 0},
+        # A difference of exactly zero means the two ends are equally stable, so strand
+        # selection is undetermined. The default admits that; strict does not.
+        "thermodynamic-asymmetry": {"minimum-asymmetry-kcal": 0.5},
+    },
+    divergences=(
+        "The -500 to -200 bp admission window comes from the paper's narrative text, not from "
+        "Table 1, which permits -1000 to -100. Candidates Wang et al. would admit are excluded "
+        "here, so this preset is stricter than the paper rather than conformant with it.",
+        "Requiring an asymmetry margin of 0.5 kcal/mol is this project's choice, not a published "
+        "threshold. No source states how large the difference between duplex ends must be.",
+    ),
+)
+
+_EXPLORATORY_ADDED = (
+    # Best supported of the optional rules: strand-selection mechanism, three agreeing sources.
+    "au-rich-guide-5-prime",
+    "no-gc-stretch",
+    # Reynolds' positional set. pos10-u is excluded: it contradicts pos10-g below, and its
+    # mechanism is cleavage, which activation does not use.
+    "pos3-a",
+    "no-g-at-13",
+    # Chapter 4's hypotheses.
+    "pos10-g",
+    "central-stability",
+)
+
+EXPLORATORY = Preset(
+    id="exploratory",
+    name="Exploratory (literature and chapter 4 hypotheses)",
+    description=(
+        "Wang et al. 2015 plus optional criteria from the siRNA design literature (Reynolds et "
+        "al. 2004, Ui-Tei et al. 2004) and from thesis chapter 4's positional analysis. Admits "
+        "exactly the same candidates as the default — every added rule is a preference, so none "
+        "can exclude anything — and reorders them. Use it to see whether the hypotheses would "
+        "have changed your shortlist; do not use it to justify a design."
+    ),
+    rule_ids=(*_DEFAULT_RULE_IDS, *_EXPLORATORY_ADDED),
+    divergences=(
+        "Four of the six added rules are EXPLORATORY: pos3-a and no-g-at-13 have no established "
+        "mechanism, and pos10-g and central-stability come from an analysis that does not "
+        "survive correction for multiple comparisons "
+        "(docs/scientific/positional-motif-analysis.md). The ranking this preset produces is "
+        "a hypothesis about what matters, not a better estimate than the default's.",
+        "The preference denominator rises from 7 to 13, so scores from this preset are not "
+        "comparable with scores from any other. Compare orderings, never numbers.",
+        "central-stability and au-rich-guide-5-prime both overlap the mandatory thermodynamic "
+        "asymmetry rule, which measures the same physics continuously. A candidate can "
+        "therefore gain points for a property it was already admitted on.",
+    ),
+)
+
+
 PRESETS: Mapping[str, Preset] = {
-    preset.id: preset for preset in (WANG_2015, LEGACY_SCANNER)
+    preset.id: preset
+    for preset in (WANG_2015, STRICT, EXPLORATORY, LEGACY_SCANNER)
 }
 
 
@@ -159,4 +237,12 @@ def preset(preset_id: str) -> Preset:
         ) from None
 
 
-__all__ = ["LEGACY_SCANNER", "PRESETS", "WANG_2015", "Preset", "preset"]
+__all__ = [
+    "EXPLORATORY",
+    "LEGACY_SCANNER",
+    "PRESETS",
+    "STRICT",
+    "WANG_2015",
+    "Preset",
+    "preset",
+]

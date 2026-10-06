@@ -121,3 +121,23 @@ def flank_au(position: int) -> Evaluator:
 
     evaluate.__doc__ = f"Check flank position {position} is A or T."
     return evaluate
+
+
+def requires_base(position: int, permitted: str, description: str) -> Evaluator:
+    """Build an evaluator checking the base at ``position`` is one of ``permitted``.
+
+    The general form behind the named evaluators above, used by the optional rules from
+    Reynolds et al. 2004 and thesis chapter 4. ``description`` is the phrase that appears in the
+    verdict, so it reads as prose: "Position 13 is G, not A, C or T".
+
+    Args:
+        position: 1-based position in the target.
+        permitted: The bases that satisfy the rule, as DNA.
+        description: How to describe the requirement to a reader.
+    """
+
+    def evaluate(context: CandidateContext, resolved: ResolvedRule) -> RuleResult:
+        return _at_target_position(context, resolved, position, permitted, description)
+
+    evaluate.__doc__ = f"Check position {position} is {description}."
+    return evaluate
