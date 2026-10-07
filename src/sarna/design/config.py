@@ -178,9 +178,16 @@ class DesignConfig:
     def to_dict(self) -> dict[str, Any]:
         """Return the configuration as JSON-serialisable data, for export and provenance.
 
-        Records the resolved parameter values rather than the preset name, together with each
-        rule's provenance and evidence class, so a reader can judge the configuration without
-        this codebase to hand (ADR 0003).
+        Records the resolved parameter values rather than the preset name, because a preset's
+        meaning can change between versions. Each entry is the full rule *record* — its rationale,
+        consequence, structured provenance, every parameter's unit and legal range, and the options
+        not chosen with their own provenance — so a reader can judge the configuration without this
+        codebase to hand (ADR 0003).
+
+        Each rule appears once here, and a candidate's results reference it by ``id``. Repeating
+        the record on every result would be the same text thousands of times over: a 2.5 kb
+        promoter yields upwards of 2,400 candidates against 26 rules, and the page has to parse
+        whatever it is given.
         """
         return {
             "preset": {
@@ -188,15 +195,5 @@ class DesignConfig:
                 "name": self.preset_name,
                 "divergences": list(self.preset_divergences),
             },
-            "rules": [
-                {
-                    "id": resolved.rule.id,
-                    "name": resolved.rule.name,
-                    "kind": str(resolved.rule.kind),
-                    "evidence_class": str(resolved.rule.evidence_class),
-                    "provenance": str(resolved.rule.provenance),
-                    "parameters": dict(resolved.values),
-                }
-                for resolved in self.rules
-            ],
+            "rules": [resolved.rule.to_dict(resolved.values) for resolved in self.rules],
         }

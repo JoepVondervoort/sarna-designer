@@ -8,7 +8,7 @@ parameter with two values, not as two different programs.
 """
 
 import re
-from typing import Self
+from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -130,3 +130,30 @@ class RuleParameter(BaseModel):
             raise ValueError(f"parameter {self.name!r} is numeric; got {value!r}")
         self._check_in_bounds(value, what="value")
         return value
+
+    def to_dict(self, value: ParameterValue | None = None) -> dict[str, Any]:
+        """Return the parameter as JSON-serialisable data.
+
+        Args:
+            value: The value a run resolved this parameter to. Supplied, the export carries the
+                declaration and the value used in one object, because a reader needs both at once:
+                ``0.6`` means nothing without "of a possible 0.0 to 1.0, as a fraction". Omitted,
+                only the declaration is exported, with no ``value`` key.
+
+        Returns:
+            The parameter. With a value, ``is_default`` records whether the run left the default
+            alone, which is how a preset's divergence becomes visible without a second lookup.
+        """
+        exported: dict[str, Any] = {
+            "name": self.name,
+            "default": self.default,
+            "minimum": self.minimum,
+            "maximum": self.maximum,
+            "unit": self.unit,
+            "choices": list(self.choices) if self.choices is not None else None,
+            "description": self.description,
+        }
+        if value is not None:
+            exported["value"] = value
+            exported["is_default"] = value == self.default
+        return exported

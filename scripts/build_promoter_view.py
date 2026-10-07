@@ -150,7 +150,11 @@ def main(argv: list[str] | None = None) -> int:
     size_kb = destination.stat().st_size / 1024
     print(f"\nwrote {destination} ({size_kb:.0f} KB)")
     if args.html is not None:
-        args.html.write_text(render_html(view), encoding="utf-8")
+        # --full-rules reached the JSON and not the page, so asking for full detail silently got
+        # an abbreviated one. It is off by default here for size, not because it is unwanted.
+        args.html.write_text(
+            render_html(view, full_rules_for_rejected=args.full_rules), encoding="utf-8"
+        )
         print(f"wrote {args.html} ({args.html.stat().st_size / 1024:.0f} KB, self-contained)")
     print("  top rejection reasons:")
     for entry in payload["rejection_breakdown"][:4]:
@@ -198,9 +202,10 @@ def _parse(argv: list[str] | None) -> argparse.Namespace:
         "--full-rules",
         action="store_true",
         help=(
-            "include every rule's measurements for rejected candidates too. Much larger: about "
-            "21 MB for a 2.5 kb promoter against under 2 MB. Rejected candidates are always "
-            "present either way, with the rules that excluded them."
+            "include every rule's measurements for rejected candidates too, in both the JSON and "
+            "the HTML page. Much larger: about 21 MB for a 2.5 kb promoter against under 2 MB. "
+            "Rejected candidates are always present either way, with the rules that excluded "
+            "them; what this adds is the rules they *passed* and every measurement behind both."
         ),
     )
     parser.add_argument(

@@ -5,6 +5,8 @@ paper, that `legacy-scanner` matches the script where it is meant to, and that t
 exceptions are present and visible rather than quietly absent.
 """
 
+from typing import Any
+
 import pytest
 
 from sarna.design.config import DesignConfig
@@ -226,6 +228,15 @@ class TestConfigShape:
             self.CONFIG.preset_id = "other"  # type: ignore[misc]
 
 
+def resolved_values(entry: dict[str, Any]) -> dict[str, Any]:
+    """Return a rule export entry's resolved parameter values, keyed by name.
+
+    The export carries each parameter as a self-describing object — value beside its unit, legal
+    range and description — so a value lookup is derived rather than the shape on the wire.
+    """
+    return {p["name"]: p["value"] for p in entry["parameters"]}
+
+
 class TestExport:
     def test_the_configuration_serialises_to_the_rules_that_ran(self) -> None:
         # ADR 0010: a preset name is not a reproducible record, because its meaning can change
@@ -233,7 +244,7 @@ class TestExport:
         exported = WANG_2015.resolve().to_dict()
         assert exported["preset"]["id"] == "wang-2015"
         by_id = {entry["id"]: entry for entry in exported["rules"]}
-        assert by_id["gc-content"]["parameters"]["maximum-gc-fraction"] == 0.60
+        assert resolved_values(by_id["gc-content"])["maximum-gc-fraction"] == 0.60
 
     def test_each_exported_rule_carries_its_provenance_and_evidence_class(self) -> None:
         exported = WANG_2015.resolve().to_dict()
@@ -254,11 +265,11 @@ class TestExport:
 
     def test_two_presets_can_be_diffed_by_their_exports(self) -> None:
         wang = {
-            entry["id"]: entry["parameters"]
+            entry["id"]: resolved_values(entry)
             for entry in WANG_2015.resolve().to_dict()["rules"]
         }
         legacy = {
-            entry["id"]: entry["parameters"]
+            entry["id"]: resolved_values(entry)
             for entry in LEGACY_SCANNER.resolve().to_dict()["rules"]
         }
         differing = {

@@ -86,6 +86,56 @@ class TestTheRecordIsSelfContained:
         assert not any(c.get("abbreviated") for c in data["candidates"])
 
 
+class TestThePageCarriesEnoughToExplainItself:
+    """What the page must hold for a reader to see why each verdict was reached.
+
+    The footer used to claim every rule carried its citation and evidence class. The data did not:
+    provenance arrived as one display string, and the rationale, the consequence, every parameter's
+    unit and legal range, and every option not chosen were absent from the export entirely. These
+    tests pin the contract the page renders against, so the claim and the data cannot drift apart
+    again.
+    """
+
+    def rules(self) -> dict[str, dict[str, Any]]:
+        data = embedded(render(view()))
+        return {entry["id"]: entry for entry in data["configuration"]["rules"]}
+
+    def test_each_rule_carries_the_reason_it_exists(self) -> None:
+        for rule_id, entry in self.rules().items():
+            assert entry["rationale"].strip(), rule_id
+            assert entry["consequence"].strip(), rule_id
+
+    def test_each_rule_carries_structured_provenance(self) -> None:
+        for rule_id, entry in self.rules().items():
+            assert entry["provenance"]["kind"], rule_id
+            assert entry["provenance"]["display"].strip(), rule_id
+            assert entry["provenance"]["is_warning"] in (True, False), rule_id
+
+    def test_a_threshold_arrives_with_its_unit_and_range(self) -> None:
+        # "0.6" on a screen is not a threshold a reader can check. "0.6 of a possible 0.0 to 1.0,
+        # as a fraction, default 0.6" is.
+        parameters = {p["name"]: p for p in self.rules()["gc-content"]["parameters"]}
+        ceiling = parameters["maximum-gc-fraction"]
+        assert ceiling["value"] == 0.60
+        assert ceiling["unit"] == "fraction"
+        assert ceiling["minimum"] is not None and ceiling["maximum"] is not None
+        assert ceiling["is_default"] is True
+
+    def test_the_alternatives_reach_the_page(self) -> None:
+        options = {o["id"]: o for o in self.rules()["gc-content"]["options"]}
+        assert options["reynolds-2004"]["note"].strip()
+        assert options["reynolds-2004"]["provenance"]["source"] == "Reynolds et al. 2004"
+
+    def test_a_rule_result_can_be_joined_to_its_record_by_id(self) -> None:
+        # The record appears once per run and results reference it by id. Repeating it on every
+        # result would be the same text thousands of times over.
+        data = embedded(render(view(), full_rules_for_rejected=True))
+        declared = {entry["id"] for entry in data["configuration"]["rules"]}
+        for candidate in data["candidates"]:
+            for result in candidate["rules"]:
+                assert result["id"] in declared
+
+
 class TestTheDataCannotBreakOut:
     def test_no_closing_script_tag_appears_in_the_data_block(self) -> None:
         # A literal </script inside the block would close it early and the page would render

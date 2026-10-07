@@ -8,7 +8,7 @@ one thing that is not permitted is silence.
 """
 
 from enum import Enum
-from typing import Self
+from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -124,3 +124,21 @@ class Provenance(BaseModel):
         if self.kind is ProvenanceKind.LEGACY_SCRIPT:
             return f"inherited from the legacy script ({self.locator})"
         return f"unsourced — {self.note}"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the provenance as JSON-serialisable data.
+
+        Structured rather than flattened to one string, because a consumer that receives only the
+        display line cannot tell a citation from an unsourced rule without parsing English — and
+        marking the unsourced ones is the whole point of recording the kind. ``display`` is kept
+        beside the parts so a caller wanting one line gets the same line the rest of the project
+        renders, rather than reassembling its own.
+        """
+        return {
+            "kind": self.kind.value,
+            "source": self.source,
+            "locator": self.locator,
+            "note": self.note,
+            "is_warning": self.is_warning,
+            "display": str(self),
+        }

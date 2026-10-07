@@ -7,13 +7,14 @@ one opaque number (ADR 0006).
 """
 
 import re
+from collections.abc import Mapping
 from enum import Enum
-from typing import Annotated, Self
+from typing import Annotated, Any, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from sarna.rules.options import RuleOption
-from sarna.rules.parameters import RuleParameter
+from sarna.rules.parameters import ParameterValue, RuleParameter
 from sarna.rules.provenance import EvidenceClass, Provenance
 
 _KEBAB_CASE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
@@ -177,3 +178,40 @@ class Rule(BaseModel):
     def needs_warning(self) -> bool:
         """Return whether the UI must show a provenance warning beside this rule."""
         return self.provenance.is_warning
+
+    def to_dict(
+        self, values: Mapping[str, ParameterValue] | None = None
+    ) -> dict[str, Any]:
+        """Return the rule record as JSON-serialisable data.
+
+        ADR 0003 commits to exports that carry the rule records rather than only the values a run
+        resolved. ``rationale`` and ``consequence`` are the largest body of "why this choice" text
+        in the project, and without them an export states a threshold while withholding the reason
+        for it.
+
+        Args:
+            values: The parameter values a run resolved, keyed by parameter name. Supplied, each
+                parameter is exported with its value and whether that value is the default, so a
+                preset's divergence is visible without a second lookup.
+
+        Returns:
+            The record, with ``parameters`` and ``options`` as lists of objects. A list rather
+            than a mapping because each entry is self-describing, and a renderer that wants a
+            lookup can build one in a line.
+        """
+        return {
+            "id": self.id,
+            "name": self.name,
+            "kind": str(self.kind),
+            "evidence_class": str(self.evidence_class),
+            "provenance": self.provenance.to_dict(),
+            "rationale": self.rationale,
+            "consequence": self.consequence,
+            "enabled_by_default": self.enabled_by_default,
+            "group": self.group,
+            "parameters": [
+                parameter.to_dict(None if values is None else values.get(parameter.name))
+                for parameter in self.parameters
+            ],
+            "options": [option.to_dict() for option in self.options],
+        }

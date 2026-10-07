@@ -12,7 +12,7 @@ costs you".
 
 import re
 from collections.abc import Mapping
-from typing import Self
+from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -60,3 +60,18 @@ class RuleOption(BaseModel):
         if not self.values:
             raise ValueError(f"option {self.id!r} sets no parameter values")
         return self
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the option as JSON-serialisable data.
+
+        Exported even when it was not chosen: a reader judging a threshold needs to know what else
+        was on offer and what the alternative costs, which is what ``note`` carries.
+        """
+        return {
+            "id": self.id,
+            "label": self.label,
+            "provenance": self.provenance.to_dict(),
+            "values": dict(self.values),
+            "note": self.note,
+            "is_default": self.is_default,
+        }
