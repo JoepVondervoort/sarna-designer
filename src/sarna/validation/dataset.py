@@ -204,7 +204,7 @@ def load_chapter4_dataset() -> ValidationDataset:
         The dataset, with its provenance and the caveats that bound what it can show.
     """
     source = resources.files(DATA_PACKAGE).joinpath(CHAPTER4_FILENAME)
-    with resources.as_file(source) as path, path.open(newline="") as handle:
+    with resources.as_file(source) as path, path.open(newline="", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
     return ValidationDataset(
         id="vondervoort-2026-chapter4",
@@ -347,7 +347,7 @@ def load_chapter4_locations() -> dict[str, DesignLocation]:
         rather than present with a guess.
     """
     source = resources.files(DATA_PACKAGE).joinpath(COORDINATES_FILENAME)
-    with resources.as_file(source) as path, path.open(newline="") as handle:
+    with resources.as_file(source) as path, path.open(newline="", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
     return {row["name"]: _location_from(row) for row in rows}
 

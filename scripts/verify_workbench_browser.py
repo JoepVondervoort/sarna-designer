@@ -165,6 +165,25 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     browser.evaluate("document.querySelector('#promoter-map [data-tip]').dispatchEvent("
                      "new FocusEvent('focusin',{bubbles:true}))")
     assert browser.evaluate("!document.getElementById('tooltip').hidden") is True
+    # Every candidate the map draws must be inside the clip region. A clip ending above the
+    # excluded-target track once hid 1,643 of 2,468 rejected candidates completely and left the
+    # rest a 2px sliver, while the legend still invited the reader to hover them. The promise
+    # that a rejection is never silently dropped is only kept if it is actually on screen.
+    clipped = browser.evaluate("""(()=>{
+      const clip=document.querySelector('#map-clip rect');
+      const top=+clip.getAttribute('y'), bottom=top + +clip.getAttribute('height');
+      return [...document.querySelectorAll('#promoter-map rect[data-candidate]')]
+        .filter(r => +r.getAttribute('y') < top
+                  || +r.getAttribute('y') + +r.getAttribute('height') > bottom).length;
+    })()""")
+    assert clipped == 0, f"{clipped} candidate marks fall outside the promoter map's clip region"
+    drawn = browser.evaluate(
+        "document.querySelectorAll('#promoter-map rect[data-candidate]').length")
+    assert isinstance(drawn, int) and drawn > 0
+    # The measured ranking performance is shown, not left to the footer.
+    assert browser.evaluate("!document.getElementById('ranking-performance').hidden") is True
+    assert "does not beat chance" in str(browser.evaluate(
+        "document.getElementById('ranking-performance').textContent"))
     # The live order export goes to Python over HTTP. Fetch it the way the button does and read
     # what a researcher would actually paste into a vendor form.
     live_order = str(browser.evaluate(
@@ -274,7 +293,7 @@ def main() -> None:
                 if process.poll() is not None or time.monotonic() > deadline:
                     raise RuntimeError("Chromium did not start its local DevTools endpoint")
                 time.sleep(0.1)
-            port = int(active_port.read_text().splitlines()[0])
+            port = int(active_port.read_text(encoding="utf-8").splitlines()[0])
             with urlopen(f"http://127.0.0.1:{port}/json/list") as response:
                 pages = json.load(response)
             browser = Browser(pages[0]["webSocketDebuggerUrl"])

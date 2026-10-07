@@ -146,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     payload = view.to_dict(full_rules_for_rejected=args.full_rules)
     destination = args.out or Path(f"{gene.symbol.lower()}_promoter_view.json")
-    destination.write_text(json.dumps(payload, indent=1))
+    destination.write_text(json.dumps(payload, indent=1), encoding="utf-8")
     size_kb = destination.stat().st_size / 1024
     print(f"\nwrote {destination} ({size_kb:.0f} KB)")
     if args.html is not None:

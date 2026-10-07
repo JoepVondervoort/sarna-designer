@@ -37,6 +37,7 @@ from sarna.rules.catalog import CATALOGUE
 from sarna.rules.resolved import ResolvedRule
 from sarna.rules.results import RuleOutcome
 from sarna.sequence.nucleic import NucleicSequence
+from sarna.validation.ranking_performance import performance_summary
 from sarna.view.promoter_view import PromoterView, alternative_tss_spans, cell_panels_for
 
 LOGGER = logging.getLogger(__name__)
@@ -193,6 +194,26 @@ class DesignService:
         payload["candidates"] = [
             candidate_record(c, model, end_length) for c in view.ranked_candidates()
         ]
+        # What this ranking was measured to achieve, computed from the bundled chapter 4 data
+        # rather than transcribed. It belongs in the record so an archived run carries the same
+        # caveat the live page shows. `applies` is false once a researcher adjusts the rules:
+        # the measurement describes the preset, not whatever they changed it into.
+        measured = performance_summary(request.preset_id)
+        payload["ranking_performance"] = (
+            None
+            if measured is None
+            else {
+                **measured,
+                "applies": not config.is_custom,
+                "custom_note": (
+                    "This run departs from the preset baseline, so the measurement below "
+                    "describes the unmodified preset and not the configuration you ran. No "
+                    "measurement exists for a custom configuration."
+                    if config.is_custom
+                    else ""
+                ),
+            }
+        )
         # Order-ready duplexes are computed here, in Python, and carried in the record, so a
         # frozen archive can hand over the exact molecules without JavaScript re-deriving the
         # chemistry (accepted constraint 11). Passing candidates only, in rank order: a duplex

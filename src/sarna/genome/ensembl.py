@@ -277,7 +277,7 @@ class EnsemblClient:
         """
         cached = self._cache_path(path)
         if cached is not None and cached.exists():
-            from_cache: JsonObject = json.loads(cached.read_text())
+            from_cache: JsonObject = json.loads(cached.read_text(encoding="utf-8"))
             return from_cache
         if self.offline:
             self._refuse_offline(path)
@@ -289,7 +289,7 @@ class EnsemblClient:
                 f"expected a JSON object from {url} but got {type(payload).__name__}"
             )
         if cached is not None:
-            cached.write_text(json.dumps(payload))
+            cached.write_text(json.dumps(payload), encoding="utf-8")
         return payload
 
     def _get_with_retries(self, url: str, path: str) -> JsonPayload:
@@ -397,7 +397,7 @@ class EnsemblClient:
         """Fetch ``path``, which returns a JSON array rather than an object."""
         cached = self._cache_path(path)
         if cached is not None and cached.exists():
-            from_cache: JsonArray = json.loads(cached.read_text())
+            from_cache: JsonArray = json.loads(cached.read_text(encoding="utf-8"))
             return from_cache
         if self.offline:
             self._refuse_offline(path)
@@ -407,7 +407,7 @@ class EnsemblClient:
                 f"expected a JSON array from {path} but got {type(payload).__name__}"
             )
         if cached is not None:
-            cached.write_text(json.dumps(payload))
+            cached.write_text(json.dumps(payload), encoding="utf-8")
         return payload
 
     def _check_assembly(self, reported: str | None, what: str) -> None:

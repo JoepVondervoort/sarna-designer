@@ -288,7 +288,7 @@ def _in_window(offset: int | None) -> bool:
 def _write(located: Sequence[Located], destination: Path) -> None:
     """Write the coordinate table."""
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with destination.open("w", newline="") as handle:
+    with destination.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(
             [

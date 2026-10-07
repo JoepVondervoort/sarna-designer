@@ -1,0 +1,80 @@
+saRNA Designer
+Copyright 2026 Joep Vondervoort
+
+This product includes software developed by Joep Vondervoort, licensed under the
+Apache License, Version 2.0. See LICENSE.
+
+================================================================================
+Bundled third-party data
+================================================================================
+
+The following datasets are redistributed inside this package. Each keeps its own
+licence; the Apache-2.0 licence above covers the software, not these data.
+
+--------------------------------------------------------------------------------
+JASPAR CORE (vertebrates) transcription factor binding profiles
+  Files:    src/sarna/regulatory/data/jaspar_core_selection.json
+  Source:   JASPAR, https://jaspar.elixir.no/
+  Retrieved: 2026-10-06
+  Licence:  Creative Commons Attribution 4.0 International (CC BY 4.0)
+            https://creativecommons.org/licenses/by/4.0/
+  Note:     A curated subset of the CORE collection, not the whole of it. Each
+            entry records why it is included.
+
+  Verified 2026-10-07 against https://jaspar.elixir.no/about/, which states that
+  JASPAR "is licensed under the Creative Commons Attribution 4.0 International
+  License". An earlier version of this repository labelled these matrices
+  CC BY-NC-SA 4.0. That was incorrect and more restrictive than the actual terms;
+  it is corrected here. CC BY 4.0 permits redistribution and commercial use with
+  attribution, and imposes no share-alike obligation.
+
+  Cite JASPAR when publishing work that uses these matrices. See
+  https://jaspar.elixir.no/ for the current citation.
+
+--------------------------------------------------------------------------------
+Chapter 4 saRNA screening dataset
+  Files:    src/sarna/validation/data/vondervoort_2026_chapter4.csv
+            src/sarna/validation/data/vondervoort_2026_chapter4_coordinates.csv
+  Source:   J. Vondervoort, "Evaluating saRNA-Mediated Promoter Activation Beyond
+            SCN1A", doctoral thesis, chapter 4. Publicly defended thesis.
+  Licence:  Copyright 2026 Joep Vondervoort, redistributed here under the
+            Apache-2.0 licence above as part of this package.
+  Note:     125 assayed target sequences, 14 of which activated their gene, plus
+            recovered GRCh38 coordinates for 123 of them. This is the only data
+            in the package that can show a design rule to be wrong rather than
+            merely unconventional. It is range-restricted: every sequence was
+            built to pass Wang's gate, so it can show a gate too strict but not
+            one too permissive. See CHAPTER4_CAVEATS in
+            src/sarna/validation/dataset.py.
+
+--------------------------------------------------------------------------------
+Promoter anchors and cell-line registry
+  Files:    src/sarna/genome/data/promoter_anchors.toml
+            src/sarna/regulatory/data/cell_lines.toml
+  Source:   Compiled for this project from the cited literature. Each entry
+            records its own source and, where the reference point is inferred
+            rather than measured, says so.
+  Licence:  Apache-2.0, as part of this package.
+
+================================================================================
+External services used at runtime (not redistributed)
+================================================================================
+
+These are queried over the network when you use the tool. No data from them is
+bundled in this package; cached responses are stored locally on your machine.
+
+  Ensembl REST API  -- https://rest.ensembl.org/
+    Gene, transcript and genomic sequence retrieval (human, GRCh38).
+    Ensembl data are available without restriction; see
+    https://www.ensembl.org/info/about/legal/disclaimer.html
+    Please cite Ensembl in publications that rely on its annotation.
+
+  NCBI BLAST URL API -- https://blast.ncbi.nlm.nih.gov/
+    Optional, opt-in off-target screening. Queries are 19 nt sequences drawn
+    from the public human genome; running a search tells NCBI which gene you
+    are working on. NCBI usage policy limits request rates and asks that large
+    jobs run outside US business hours.
+
+Datasets that an optional adapter can read from your own disk (AF22 histone
+tracks, and any future local track source) are not redistributed here and keep
+whatever terms you obtained them under.

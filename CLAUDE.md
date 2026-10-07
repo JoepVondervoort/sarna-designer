@@ -139,6 +139,7 @@ Read the ADR before reopening its question; each records the alternatives and wh
 | Local Python jobs, and one UI for live and frozen results | 0015 |
 | Several promoter references per gene, each its own design context | 0016 |
 | The order-ready duplex: separate export, Python-computed, caveats in the row | 0017 |
+| Apache-2.0, and the bundled data's actual terms | 0018 |
 
 `docs/scientific/`:
 
@@ -236,10 +237,11 @@ Headline results:
   same thing. `CELL_TYPE_OBSERVATION` for a transcription factor is still unproduced; ENCODE would
   populate HeLa, and AF22 has no public TF ChIP-seq at all. The asymmetry is permanent-ish: the
   tool will always know more about HeLa than about the disease-relevant line.
-- **Licence audit.** Official JASPAR documentation states CC BY 4.0, contradicting the repository's
-  CC BY-NC-SA label. Audit the exact bundled assets and correct metadata/attribution before
-  distribution; do not assume unbundling is legally required. The precise MIT/Apache code licence
-  form still needs recording; `LICENSE` remains undecided.
+- ~~Licence audit.~~ **Done 2026-10-07.** Code is Apache-2.0; the bundled JASPAR subset is
+  CC BY 4.0, verified against JASPAR's about page — the repository's CC BY-NC-SA label was wrong
+  and more restrictive than the real terms. `NOTICE` lists every bundled asset and ships in the
+  wheel. The unused `api` extra (fastapi/uvicorn) is removed.
+  [ADR 0018](docs/adr/0018-apache-2-and-bundled-data-licensing.md).
 
 ## Next
 

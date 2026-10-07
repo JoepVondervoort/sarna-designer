@@ -421,6 +421,7 @@ function showResult(result) {
   const first = result.candidates.find(c => c.rank===1);
   $("metric-best").textContent = first ? `${first.rating.met}/${first.rating.evaluated}` : "—";
   $("metric-length").textContent = `${fmt(result.promoter.length)} bp`;
+  renderRankingPerformance(result.ranking_performance);
   const cell = result.cell_types.find(c => [c.id,c.name.toLowerCase()].includes(result.app.cell_line.toLowerCase()));
   const chromatin = cell?.chromatin;
   $("context-banner").innerHTML = `<strong>Cell context · ${escapeHTML(result.app.cell_line)}</strong><p>${chromatin?escapeHTML(chromatin.summary || "Local histone measurements loaded; inspect sources below."):"Promoter activity is unknown in this run. No cell-specific expression or histone measurement establishes that this locus is active."}</p><details><summary>Evidence gaps &amp; source notes</summary><ul>${result.app.notices.map(n => `<li>${escapeHTML(n)}</li>`).join("")}${result.app.anchor?.caveat?`<li>${escapeHTML(result.app.anchor.caveat)}</li>`:""}</ul></details>`;
@@ -491,7 +492,7 @@ function renderMap() {
   const scale = offset => left+(offset-state.start)/(state.end-state.start)*width;
   const inView = (start,end) => end>state.start && start<state.end;
   const tip = text => `data-tip="${escapeHTML(text)}" tabindex="0" aria-label="${escapeHTML(text)}"`;
-  const parts = ['<defs><clipPath id="map-clip"><rect x="133" y="20" width="832" height="246"/></clipPath></defs>'];
+  const parts = ['<defs><clipPath id="map-clip"><rect x="133" y="20" width="832" height="265"/></clipPath></defs>'];
   const label = (text,y,help) => parts.push(`<text class="track-label" x="12" y="${y}" ${tip(help)}>${escapeHTML(text)}</text>`);
   const rect = (start,end,y,height,color,help,attrs="") => {
     if (!inView(start,end)) return;
@@ -583,6 +584,24 @@ async function exportRun(type) {
     if (!response.ok) throw new Error(`Export failed (${response.status})`);
     downloadBlob(await response.blob(),name);
   } catch(e) { error(e.message); }
+}
+function renderRankingPerformance(measured) {
+  // Shows the engine's own measured performance beside the rating it produces. Python computes
+  // this from the bundled chapter 4 dataset; nothing here derives or softens the number.
+  const box = $("ranking-performance");
+  if (!measured) { box.hidden = true; return; }
+  box.hidden = false;
+  box.className = "performance-banner" + (measured.beats_chance ? "" : " at-chance");
+  const dataset = measured.dataset;
+  const parts = [
+    `<strong>${measured.beats_chance ? "Ranking beat chance when measured" : "This ranking has not been shown to predict activity"}</strong>`,
+    `<p>${escapeHTML(measured.headline)}</p>`,
+    `<p class="hint">Measured against ${dataset.assayed} assayed sequences, ${dataset.activating} of which activated their gene (${escapeHTML(dataset.name)}). ${escapeHTML(measured.caveat)}</p>`,
+  ];
+  if (!measured.applies) parts.push(`<p class="hint warn">${escapeHTML(measured.custom_note)}</p>`);
+  if (measured.circular) parts.push(`<p class="hint warn">${escapeHTML(measured.circularity_note)}</p>`);
+  parts.push(`<p class="hint">Source: ${escapeHTML(measured.source)} · AUC ${measured.auc} against ${measured.chance_auc} for a coin flip, p = ${measured.auc_p_value}</p>`);
+  box.innerHTML = parts.join("");
 }
 function tooltip(target,event) {
   const text=target?.closest("[data-tip]")?.dataset.tip;

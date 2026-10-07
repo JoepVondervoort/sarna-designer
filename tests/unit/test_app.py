@@ -373,6 +373,31 @@ def test_the_order_csv_writes_the_dtdt_duplex_and_its_caveats(tmp_path: Path):
         router.close()
 
 
+def test_every_run_carries_the_rankings_measured_performance(tmp_path: Path):
+    # A reader takes a rank for a prediction unless told otherwise. The run record therefore
+    # carries the engine's own measurement, so an archived run shows the same caveat the live
+    # page does rather than the caveat living only in the UI.
+    saved = run_request(service_for(tmp_path))
+    measured = saved["ranking_performance"]
+    assert measured["preset"] == "wang-2015"
+    assert measured["beats_chance"] is False
+    assert measured["dataset"]["assayed"] == 125
+    assert measured["applies"] is True
+    assert "chance" in measured["headline"].lower()
+    assert "range-restricted" in measured["caveat"].lower()
+
+
+def test_a_custom_configuration_does_not_inherit_the_presets_measurement(tmp_path: Path):
+    # The AUC describes the unmodified preset. Once a researcher changes a rule they are not
+    # running what was measured, and claiming the number for their configuration would attach
+    # evidence to something nobody assessed.
+    saved = run_request(service_for(tmp_path), roles={"tss-window": "preference"})
+    measured = saved["ranking_performance"]
+    assert saved["configuration"]["is_custom"] is True
+    assert measured["applies"] is False
+    assert "custom configuration" in measured["custom_note"].lower()
+
+
 def test_the_record_carries_the_same_order_rows_the_route_serves(tmp_path: Path):
     # The frozen archive has no backend, so the duplexes it hands over are the ones stored here
     # by Python. If these two ever diverge, an archived run and a live run would name different

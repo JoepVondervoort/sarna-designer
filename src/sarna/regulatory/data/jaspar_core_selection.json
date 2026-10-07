@@ -1,1339 +1,1341 @@
 {
- "source": "JASPAR CORE vertebrates (jaspar.elixir.no), retrieved 2026-10-06",
- "licence": "JASPAR matrices are distributed under CC BY-NC-SA 4.0; see https://jaspar.elixir.no/about/",
- "note": "A curated subset, not the whole CORE collection. Each entry states why it is here.",
- "matrices": {
-  "MA0079.5": {
-   "matrix_id": "MA0079.5",
-   "name": "SP1",
-   "collection": "CORE",
-   "tf_class": [
-    "C2H2 zinc finger factors"
-   ],
-   "tf_family": [
-    "Three-zinc finger Kruppel-related"
-   ],
-   "uniprot_ids": [
-    "P08047"
-   ],
-   "pubmed_ids": [
-    "22021377"
-   ],
-   "data_type": "ChIP-seq",
-   "length": 9,
-   "pfm": {
-    "A": [
-     1,
-     1,
-     1,
-     1,
-     267,
-     1,
-     1,
-     254,
-     161
-    ],
-    "C": [
-     1,
-     1,
-     1,
-     1,
-     731,
-     1,
-     85,
-     52,
-     1
-    ],
-    "G": [
-     950,
-     997,
-     997,
-     997,
-     1,
-     997,
-     912,
-     659,
-     836
-    ],
-    "T": [
-     47,
-     1,
-     1,
-     1,
-     1,
-     1,
-     1,
-     35,
-     1
-    ]
-   },
-   "relevance": "SP1: GC-box factor. Li et al. 2006 name SP1 sites in the p21 promoter beside the dsP21-322 target site, the field's founding saRNA experiment."
-  },
-  "MA0506.1": {
-   "matrix_id": "MA0506.1",
-   "name": "NRF1",
-   "collection": "CORE",
-   "tf_class": [
-    "Uncharacterized"
-   ],
-   "tf_family": [
-    "NRF"
-   ],
-   "uniprot_ids": [
-    "Q16656"
-   ],
-   "pubmed_ids": [
-    "12533512"
-   ],
-   "data_type": "ChIP-seq",
-   "length": 11,
-   "pfm": {
-    "A": [
-     602,
-     623,
-     196,
-     0,
-     1514,
-     0,
-     0,
-     0,
-     0,
-     74,
-     2245
-    ],
-    "C": [
-     375,
-     4001,
-     189,
-     4016,
-     1862,
-     403,
-     0,
-     4338,
-     349,
-     4550,
-     804
-    ],
-    "G": [
-     3647,
-     0,
-     4239,
-     468,
-     935,
-     528,
-     4624,
-     0,
-     4275,
-     0,
-     1575
-    ],
-    "T": [
-     0,
-     0,
-     0,
-     140,
-     313,
-     3693,
-     0,
-     286,
-     0,
-     0,
-     0
-    ]
-   },
-   "relevance": "NRF1: binds CpG-island promoters, which is where saRNA targets sit by construction."
-  },
-  "MA0139.1": {
-   "matrix_id": "MA0139.1",
-   "name": "CTCF",
-   "collection": "CORE",
-   "tf_class": [
-    "C2H2 zinc finger factors"
-   ],
-   "tf_family": [
-    "More than 3 adjacent zinc fingers"
-   ],
-   "uniprot_ids": [
-    "P49711"
-   ],
-   "pubmed_ids": [
-    "17512414"
-   ],
-   "data_type": "ChIP-seq",
-   "length": 19,
-   "pfm": {
-    "A": [
-     87,
-     167,
-     281,
-     56,
-     8,
-     744,
-     40,
-     107,
-     851,
-     5,
-     333,
-     54,
-     12,
-     56,
-     104,
-     372,
-     82,
-     117,
-     402
-    ],
-    "C": [
-     291,
-     145,
-     49,
-     800,
-     903,
-     13,
-     528,
-     433,
-     11,
-     0,
-     3,
-     12,
-     0,
-     8,
-     733,
-     13,
-     482,
-     322,
-     181
-    ],
-    "G": [
-     76,
-     414,
-     449,
-     21,
-     0,
-     65,
-     334,
-     48,
-     32,
-     903,
-     566,
-     504,
-     890,
-     775,
-     5,
-     507,
-     307,
-     73,
-     266
-    ],
-    "T": [
-     459,
-     187,
-     134,
-     36,
-     2,
-     91,
-     11,
-     324,
-     18,
-     3,
-     9,
-     341,
-     8,
-     71,
-     67,
-     17,
-     37,
-     396,
-     59
-    ]
-   },
-   "relevance": "CTCF: insulator and architectural factor; Ensembl annotates CTCF sites at the SCN1A MANE promoter."
-  },
-  "MA0138.2": {
-   "matrix_id": "MA0138.2",
-   "name": "REST",
-   "collection": "CORE",
-   "tf_class": [
-    "C2H2 zinc finger factors"
-   ],
-   "tf_family": [
-    "Factors with multiple dispersed zinc fingers"
-   ],
-   "uniprot_ids": [
-    "Q13127"
-   ],
-   "pubmed_ids": [
-    "17540862"
-   ],
-   "data_type": "ChIP-seq",
-   "length": 21,
-   "pfm": {
-    "A": [
-     211,
-     58,
-     76,
-     1452,
-     34,
-     122,
-     1575,
-     3,
-     35,
-     913,
-     219,
-     39,
-     20,
-     1406,
-     13,
-     1574,
-     42,
-     205,
-     366,
-     213,
-     179
-    ],
-    "C": [
-     174,
-     269,
-     1366,
-     30,
-     44,
-     978,
-     7,
-     1586,
-     1481,
-     201,
-     375,
-     7,
-     5,
-     112,
-     1280,
-     9,
-     13,
-     1007,
-     31,
-     933,
-     1114
-    ],
-    "G": [
-     366,
-     146,
-     50,
-     94,
-     1516,
-     323,
-     12,
-     12,
-     20,
-     162,
-     124,
-     1551,
-     1577,
-     34,
-     233,
-     7,
-     1530,
-     183,
-     688,
-     319,
-     37
-    ],
-    "T": [
-     840,
-     1124,
-     105,
-     26,
-     10,
-     182,
-     12,
-     5,
-     70,
-     329,
-     886,
-     7,
-     2,
-     51,
-     74,
-     10,
-     9,
-     198,
-     507,
-     125,
-     260
-    ]
-   },
-   "relevance": "REST (NRSF): represses neuronal genes including SCN1A in non-neuronal cells. The most likely single explanation for a HeLa-versus-AF22 difference at a neuronal locus."
-  },
-  "MA0095.2": {
-   "matrix_id": "MA0095.2",
-   "name": "YY1",
-   "collection": "CORE",
-   "tf_class": [
-    "C2H2 zinc finger factors"
-   ],
-   "tf_family": [
-    "More than 3 adjacent zinc fingers"
-   ],
-   "uniprot_ids": [
-    "P25490"
-   ],
-   "pubmed_ids": [
-    "18950698"
-   ],
-   "data_type": "ChIP-seq",
-   "length": 12,
-   "pfm": {
-    "A": [
-     1126,
-     6975,
-     6741,
-     2506,
-     7171,
-     0,
-     11,
-     13,
-     812,
-     867,
-     899,
-     1332
-    ],
-    "C": [
-     4583,
-     0,
-     99,
-     1117,
-     0,
-     12,
-     0,
-     0,
-     5637,
-     1681,
-     875,
-     4568
-    ],
-    "G": [
-     801,
-     181,
-     268,
-     3282,
-     0,
-     0,
-     7160,
-     7158,
-     38,
-     2765,
-     4655,
-     391
-    ],
-    "T": [
-     661,
-     15,
-     63,
-     266,
-     0,
-     7159,
-     0,
-     0,
-     684,
-     1858,
-     742,
-     880
-    ]
-   },
-   "relevance": "YY1: ubiquitous promoter-proximal factor acting as activator or repressor depending on cofactors, and frequently found at CpG-island promoters of the kind saRNA targets sit in."
-  },
-  "MA0024.3": {
-   "matrix_id": "MA0024.3",
-   "name": "E2F1",
-   "collection": "CORE",
-   "tf_class": [
-    "Fork head/winged helix factors"
-   ],
-   "tf_family": [
-    "E2F"
-   ],
-   "uniprot_ids": [
-    "Q01094"
-   ],
-   "pubmed_ids": [
-    "9372931"
-   ],
-   "data_type": "HT-SELEX",
-   "length": 12,
-   "pfm": {
-    "A": [
-     254,
-     241,
-     208,
-     54,
-     0,
-     0,
-     0,
-     2,
-     0,
-     524,
-     510,
-     493
-    ],
-    "C": [
-     115,
-     46,
-     36,
-     71,
-     32,
-     599,
-     1,
-     588,
-     577,
-     171,
-     80,
-     59
-    ],
-    "G": [
-     89,
-     100,
-     145,
-     888,
-     950,
-     0,
-     1009,
-     17,
-     46,
-     20,
-     58,
-     112
-    ],
-    "T": [
-     565,
-     638,
-     627,
-     1,
-     0,
-     2,
-     0,
-     0,
-     50,
-     119,
-     182,
-     219
-    ]
-   },
-   "relevance": "E2F1: proliferation-associated. HeLa divides continuously and AF22 does not, so E2F occupancy is a candidate axis for the cell-type difference chapter 4 reports."
-  },
-  "MA0060.3": {
-   "matrix_id": "MA0060.3",
-   "name": "NFYA",
-   "collection": "CORE",
-   "tf_class": [
-    "Heteromeric CCAAT-binding factors"
-   ],
-   "tf_family": [
-    "Heteromeric CCAAT-binding"
-   ],
-   "uniprot_ids": [
-    "P23511"
-   ],
-   "pubmed_ids": [
-    "9469818"
-   ],
-   "data_type": "ChIP-seq",
-   "length": 11,
-   "pfm": {
-    "A": [
-     1897,
-     1924,
-     23,
-     31,
-     4683,
-     4584,
-     37,
-     166,
-     4088,
-     611,
-     1855
-    ],
-    "C": [
-     757,
-     404,
-     4657,
-     4713,
-     29,
-     94,
-     132,
-     4215,
-     213,
-     1131,
-     1369
-    ],
-    "G": [
-     1815,
-     1858,
-     34,
-     28,
-     17,
-     124,
-     11,
-     319,
-     489,
-     2713,
-     887
-    ],
-    "T": [
-     356,
-     639,
-     111,
-     53,
-     96,
-     23,
-     4645,
-     125,
-     35,
-     370,
-     714
-    ]
-   },
-   "relevance": "NFYA: CCAAT-box factor, a core promoter element and one of the few whose motif is not GC-rich, so it discriminates where the GC-box factors do not."
-  },
-  "MA0039.4": {
-   "matrix_id": "MA0039.4",
-   "name": "KLF4",
-   "collection": "CORE",
-   "tf_class": [
-    "C2H2 zinc finger factors"
-   ],
-   "tf_family": [
-    "Three-zinc finger Kruppel-related"
-   ],
-   "uniprot_ids": [
-    "O43474"
-   ],
-   "pubmed_ids": [
-    "28473536"
-   ],
-   "data_type": "ChIP-seq",
-   "length": 12,
-   "pfm": {
-    "A": [
-     12570,
-     11487,
-     2465,
-     2105,
-     7021,
-     1173,
-     45602,
-     852,
-     1617,
-     1202,
-     16264,
-     9959
-    ],
-    "C": [
-     17520,
-     14038,
-     49209,
-     47865,
-     45405,
-     52875,
-     161,
-     52366,
-     51112,
-     51045,
-     18249,
-     19217
-    ],
-    "G": [
-     14243,
-     18473,
-     1583,
-     1214,
-     1422,
-     793,
-     6598,
-     1470,
-     1870,
-     1005,
-     6292,
-     14422
-    ],
-    "T": [
-     11484,
-     11819,
-     2560,
-     4633,
-     1969,
-     976,
-     3456,
-     1129,
-     1218,
-     2565,
-     15012,
-     12219
-    ]
-   },
-   "relevance": "KLF4: itself a saRNA target in the validation dataset (Voutila et al. 2012)."
-  },
-  "MA0018.4": {
-   "matrix_id": "MA0018.4",
-   "name": "CREB1",
-   "collection": "CORE",
-   "tf_class": [
-    "Basic leucine zipper factors (bZIP)"
-   ],
-   "tf_family": [
-    "CREB-related factors"
-   ],
-   "uniprot_ids": [
-    "P16220"
-   ],
-   "pubmed_ids": [
-    "17916232"
-   ],
-   "data_type": "ChIP-seq",
-   "length": 13,
-   "pfm": {
-    "A": [
-     21395,
-     21088,
-     28567,
-     1911,
-     1728,
-     73505,
-     2186,
-     1417,
-     8889,
-     3533,
-     75819,
-     10287,
-     22488
-    ],
-    "C": [
-     17829,
-     15046,
-     13032,
-     970,
-     2298,
-     1748,
-     14144,
-     1895,
-     1231,
-     71982,
-     1018,
-     21582,
-     21876
-    ],
-    "G": [
-     15570,
-     21104,
-     27796,
-     1109,
-     72555,
-     2012,
-     6339,
-     74401,
-     1207,
-     2177,
-     1222,
-     14802,
-     13550
-    ],
-    "T": [
-     24750,
-     22306,
-     10149,
-     75554,
-     2963,
-     2279,
-     56875,
-     1831,
-     68217,
-     1852,
-     1485,
-     32873,
-     21630
-    ]
-   },
-   "relevance": "CREB1: cAMP-response element; activity-dependent transcription in neurons."
-  },
-  "MA0162.4": {
-   "matrix_id": "MA0162.4",
-   "name": "EGR1",
-   "collection": "CORE",
-   "tf_class": [
-    "C2H2 zinc finger factors"
-   ],
-   "tf_family": [
-    "Three-zinc finger Kruppel-related"
-   ],
-   "uniprot_ids": [
-    "P18146"
-   ],
-   "pubmed_ids": [
-    "16041365"
-   ],
-   "data_type": "ChIP-seq",
-   "length": 14,
-   "pfm": {
-    "A": [
-     7087,
-     3997,
-     14508,
-     642,
-     5110,
-     227,
-     1440,
-     314,
-     22297,
-     153,
-     4696,
-     969,
-     8903,
-     3809
-    ],
-    "C": [
-     11610,
-     14749,
-     10303,
-     28403,
-     1131,
-     29338,
-     27321,
-     28958,
-     5420,
-     29507,
-     2806,
-     25196,
-     10441,
-     13686
-    ],
-    "G": [
-     6621,
-     7211,
-     3854,
-     756,
-     22237,
-     665,
-     1455,
-     698,
-     2122,
-     699,
-     20544,
-     2157,
-     6345,
-     7852
-    ],
-    "T": [
-     5280,
-     4641,
-     1933,
-     797,
-     2120,
-     368,
-     382,
-     628,
-     759,
-     239,
-     2552,
-     2276,
-     4909,
-     5251
-    ]
-   },
-   "relevance": "EGR1: immediate-early factor, GC-rich sites overlapping SP1's."
-  },
-  "MA0108.2": {
-   "matrix_id": "MA0108.2",
-   "name": "TBP",
-   "collection": "CORE",
-   "tf_class": [
-    "TATA-binding proteins"
-   ],
-   "tf_family": [
-    "TBP-related factors"
-   ],
-   "uniprot_ids": [
-    "P20226"
-   ],
-   "pubmed_ids": [
-    "2329577"
-   ],
-   "data_type": null,
-   "length": 15,
-   "pfm": {
-    "A": [
-     61,
-     16,
-     352,
-     3,
-     354,
-     268,
-     360,
-     222,
-     155,
-     56,
-     83,
-     82,
-     82,
-     68,
-     77
-    ],
-    "C": [
-     145,
-     46,
-     0,
-     10,
-     0,
-     0,
-     3,
-     2,
-     44,
-     135,
-     147,
-     127,
-     118,
-     107,
-     101
-    ],
-    "G": [
-     152,
-     18,
-     2,
-     2,
-     5,
-     0,
-     20,
-     44,
-     157,
-     150,
-     128,
-     128,
-     128,
-     139,
-     140
-    ],
-    "T": [
-     31,
-     309,
-     35,
-     374,
-     30,
-     121,
-     6,
-     121,
-     33,
-     48,
-     31,
-     52,
-     61,
-     75,
-     71
-    ]
-   },
-   "relevance": "TBP: TATA-box binding protein, marking the core promoter and therefore locating the TSS itself on the sequence, independently of the transcript annotation."
-  },
-  "MA0143.4": {
-   "matrix_id": "MA0143.4",
-   "name": "SOX2",
-   "collection": "CORE",
-   "tf_class": [
-    "High-mobility group (HMG) domain factors"
-   ],
-   "tf_family": [
-    "SOX-related factors"
-   ],
-   "uniprot_ids": [
-    "P48431"
-   ],
-   "pubmed_ids": [
-    "15863505"
-   ],
-   "data_type": "ChIP-seq",
-   "length": 11,
-   "pfm": {
-    "A": [
-     29105,
-     30279,
-     83515,
-     1307,
-     81587,
-     80825,
-     4815,
-     9926,
-     14772,
-     28860,
-     28960
-    ],
-    "C": [
-     11041,
-     15154,
-     436,
-     78356,
-     1205,
-     1742,
-     732,
-     800,
-     6264,
-     17158,
-     17475
-    ],
-    "G": [
-     21434,
-     17157,
-     418,
-     1243,
-     550,
-     2002,
-     930,
-     73372,
-     54414,
-     17765,
-     15998
-    ],
-    "T": [
-     24174,
-     23164,
-     1385,
-     4848,
-     2412,
-     1185,
-     79277,
-     1656,
-     10304,
-     21971,
-     23321
-    ]
-   },
-   "relevance": "SOX2: expressed in AF22 neuroepithelial stem cells and defines that state."
-  },
-  "MA0069.1": {
-   "matrix_id": "MA0069.1",
-   "name": "PAX6",
-   "collection": "CORE",
-   "tf_class": [
-    "Paired box factors"
-   ],
-   "tf_family": [
-    "Paired plus homeo domain"
-   ],
-   "uniprot_ids": [
-    "P26367"
-   ],
-   "pubmed_ids": [
-    "8132558"
-   ],
-   "data_type": "SELEX",
-   "length": 14,
-   "pfm": {
-    "A": [
-     2,
-     2,
-     4,
-     39,
-     3,
-     1,
-     1,
-     21,
-     1,
-     2,
-     36,
-     11,
-     1,
-     1
-    ],
-    "C": [
-     4,
-     2,
-     26,
-     2,
-     34,
-     0,
-     37,
-     2,
-     4,
-     14,
-     0,
-     11,
-     5,
-     0
-    ],
-    "G": [
-     4,
-     0,
-     1,
-     1,
-     1,
-     41,
-     4,
-     2,
-     1,
-     25,
-     6,
-     13,
-     3,
-     17
-    ],
-    "T": [
-     33,
-     39,
-     12,
-     1,
-     5,
-     1,
-     1,
-     18,
-     37,
-     2,
-     1,
-     8,
-     34,
-     25
-    ]
-   },
-   "relevance": "PAX6: neural progenitor identity; expressed in AF22, absent from HeLa."
-  },
-  "MA0497.1": {
-   "matrix_id": "MA0497.1",
-   "name": "MEF2C",
-   "collection": "CORE",
-   "tf_class": [
-    "MADS box factors"
-   ],
-   "tf_family": [
-    "Regulators of differentiation"
-   ],
-   "uniprot_ids": [
-    "Q06413"
-   ],
-   "pubmed_ids": [
-    "7559475"
-   ],
-   "data_type": "ChIP-seq",
-   "length": 15,
-   "pfm": {
-    "A": [
-     705,
-     733,
-     431,
-     382,
-     0,
-     1616,
-     1706,
-     2107,
-     2131,
-     2135,
-     56,
-     2177,
-     389,
-     975,
-     1009
-    ],
-    "C": [
-     321,
-     151,
-     196,
-     1412,
-     985,
-     256,
-     32,
-     0,
-     0,
-     0,
-     62,
-     0,
-     120,
-     836,
-     450
-    ],
-    "G": [
-     676,
-     573,
-     822,
-     78,
-     0,
-     74,
-     241,
-     87,
-     2,
-     4,
-     0,
-     32,
-     1671,
-     148,
-     126
-    ],
-    "T": [
-     507,
-     752,
-     760,
-     337,
-     1224,
-     263,
-     230,
-     15,
-     76,
-     70,
-     2091,
-     0,
-     29,
-     250,
-     624
-    ]
-   },
-   "relevance": "MEF2C: neuronal differentiation and an epilepsy gene in its own right."
-  },
-  "MA0062.3": {
-   "matrix_id": "MA0062.3",
-   "name": "GABPA",
-   "collection": "CORE",
-   "tf_class": [
-    "Tryptophan cluster factors"
-   ],
-   "tf_family": [
-    "Ets-related"
-   ],
-   "uniprot_ids": [
-    "Q06546"
-   ],
-   "pubmed_ids": [
-    "9461436"
-   ],
-   "data_type": "ChIP-seq",
-   "length": 14,
-   "pfm": {
-    "A": [
-     15887,
-     10981,
-     7639,
-     52260,
-     929,
-     3885,
-     862,
-     1398,
-     993,
-     1722,
-     2219,
-     5344,
-     11903,
-     13522
-    ],
-    "C": [
-     16922,
-     21679,
-     41398,
-     3988,
-     55664,
-     1443,
-     1230,
-     61373,
-     63107,
-     1542,
-     6328,
-     12006,
-     18154,
-     17382
-    ],
-    "G": [
-     15945,
-     13751,
-     6989,
-     4873,
-     2169,
-     965,
-     1633,
-     1150,
-     520,
-     4561,
-     51920,
-     7720,
-     15081,
-     13187
-    ],
-    "T": [
-     16725,
-     19068,
-     9453,
-     4358,
-     6717,
-     59186,
-     61754,
-     1558,
-     859,
-     57654,
-     5012,
-     40409,
-     20341,
-     21388
-    ]
-   },
-   "relevance": "GABPA: ETS-family factor occupying GC-rich housekeeping promoters, and one of the most consistently promoter-proximal factors in ChIP-seq. Included as a marker of core promoter architecture rather than of regulation specific to any target gene."
-  },
-  "MA0098.3": {
-   "matrix_id": "MA0098.3",
-   "name": "ETS1",
-   "collection": "CORE",
-   "tf_class": [
-    "Tryptophan cluster factors"
-   ],
-   "tf_family": [
-    "Ets-related"
-   ],
-   "uniprot_ids": [
-    "P14921"
-   ],
-   "pubmed_ids": [
-    "20517297"
-   ],
-   "data_type": "HT-SELEX",
-   "length": 10,
-   "pfm": {
-    "A": [
-     2683,
-     180,
-     425,
-     0,
-     0,
-     2683,
-     2683,
-     1102,
-     89,
-     803
-    ],
-    "C": [
-     210,
-     2683,
-     2683,
-     21,
-     0,
-     0,
-     9,
-     21,
-     712,
-     401
-    ],
-    "G": [
-     640,
-     297,
-     7,
-     2683,
-     2683,
-     0,
-     31,
-     1580,
-     124,
-     1083
-    ],
-    "T": [
-     241,
-     22,
-     0,
-     0,
-     12,
-     0,
-     909,
-     12,
-     1970,
-     396
-    ]
-   },
-   "relevance": "ETS1: GGA(A/T) core motif, abundant in CpG-island promoters. Included so that a GC-rich hit is not automatically attributed to SP1, whose motif overlaps it."
+  "source": "JASPAR CORE vertebrates (jaspar.elixir.no), retrieved 2026-10-06",
+  "licence": "JASPAR matrices are distributed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); see https://jaspar.elixir.no/about/. Verified 2026-10-07.",
+  "note": "A curated subset, not the whole CORE collection. Each entry states why it is here.",
+  "attribution": "JASPAR, https://jaspar.elixir.no/ . Cite JASPAR in published work that uses these matrices.",
+  "licence_correction": "This file previously recorded CC BY-NC-SA 4.0. That was wrong and more restrictive than JASPAR's actual terms, which permit redistribution and commercial use with attribution and impose no share-alike obligation. See NOTICE.",
+  "matrices": {
+    "MA0079.5": {
+      "matrix_id": "MA0079.5",
+      "name": "SP1",
+      "collection": "CORE",
+      "tf_class": [
+        "C2H2 zinc finger factors"
+      ],
+      "tf_family": [
+        "Three-zinc finger Kruppel-related"
+      ],
+      "uniprot_ids": [
+        "P08047"
+      ],
+      "pubmed_ids": [
+        "22021377"
+      ],
+      "data_type": "ChIP-seq",
+      "length": 9,
+      "pfm": {
+        "A": [
+          1,
+          1,
+          1,
+          1,
+          267,
+          1,
+          1,
+          254,
+          161
+        ],
+        "C": [
+          1,
+          1,
+          1,
+          1,
+          731,
+          1,
+          85,
+          52,
+          1
+        ],
+        "G": [
+          950,
+          997,
+          997,
+          997,
+          1,
+          997,
+          912,
+          659,
+          836
+        ],
+        "T": [
+          47,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          35,
+          1
+        ]
+      },
+      "relevance": "SP1: GC-box factor. Li et al. 2006 name SP1 sites in the p21 promoter beside the dsP21-322 target site, the field's founding saRNA experiment."
+    },
+    "MA0506.1": {
+      "matrix_id": "MA0506.1",
+      "name": "NRF1",
+      "collection": "CORE",
+      "tf_class": [
+        "Uncharacterized"
+      ],
+      "tf_family": [
+        "NRF"
+      ],
+      "uniprot_ids": [
+        "Q16656"
+      ],
+      "pubmed_ids": [
+        "12533512"
+      ],
+      "data_type": "ChIP-seq",
+      "length": 11,
+      "pfm": {
+        "A": [
+          602,
+          623,
+          196,
+          0,
+          1514,
+          0,
+          0,
+          0,
+          0,
+          74,
+          2245
+        ],
+        "C": [
+          375,
+          4001,
+          189,
+          4016,
+          1862,
+          403,
+          0,
+          4338,
+          349,
+          4550,
+          804
+        ],
+        "G": [
+          3647,
+          0,
+          4239,
+          468,
+          935,
+          528,
+          4624,
+          0,
+          4275,
+          0,
+          1575
+        ],
+        "T": [
+          0,
+          0,
+          0,
+          140,
+          313,
+          3693,
+          0,
+          286,
+          0,
+          0,
+          0
+        ]
+      },
+      "relevance": "NRF1: binds CpG-island promoters, which is where saRNA targets sit by construction."
+    },
+    "MA0139.1": {
+      "matrix_id": "MA0139.1",
+      "name": "CTCF",
+      "collection": "CORE",
+      "tf_class": [
+        "C2H2 zinc finger factors"
+      ],
+      "tf_family": [
+        "More than 3 adjacent zinc fingers"
+      ],
+      "uniprot_ids": [
+        "P49711"
+      ],
+      "pubmed_ids": [
+        "17512414"
+      ],
+      "data_type": "ChIP-seq",
+      "length": 19,
+      "pfm": {
+        "A": [
+          87,
+          167,
+          281,
+          56,
+          8,
+          744,
+          40,
+          107,
+          851,
+          5,
+          333,
+          54,
+          12,
+          56,
+          104,
+          372,
+          82,
+          117,
+          402
+        ],
+        "C": [
+          291,
+          145,
+          49,
+          800,
+          903,
+          13,
+          528,
+          433,
+          11,
+          0,
+          3,
+          12,
+          0,
+          8,
+          733,
+          13,
+          482,
+          322,
+          181
+        ],
+        "G": [
+          76,
+          414,
+          449,
+          21,
+          0,
+          65,
+          334,
+          48,
+          32,
+          903,
+          566,
+          504,
+          890,
+          775,
+          5,
+          507,
+          307,
+          73,
+          266
+        ],
+        "T": [
+          459,
+          187,
+          134,
+          36,
+          2,
+          91,
+          11,
+          324,
+          18,
+          3,
+          9,
+          341,
+          8,
+          71,
+          67,
+          17,
+          37,
+          396,
+          59
+        ]
+      },
+      "relevance": "CTCF: insulator and architectural factor; Ensembl annotates CTCF sites at the SCN1A MANE promoter."
+    },
+    "MA0138.2": {
+      "matrix_id": "MA0138.2",
+      "name": "REST",
+      "collection": "CORE",
+      "tf_class": [
+        "C2H2 zinc finger factors"
+      ],
+      "tf_family": [
+        "Factors with multiple dispersed zinc fingers"
+      ],
+      "uniprot_ids": [
+        "Q13127"
+      ],
+      "pubmed_ids": [
+        "17540862"
+      ],
+      "data_type": "ChIP-seq",
+      "length": 21,
+      "pfm": {
+        "A": [
+          211,
+          58,
+          76,
+          1452,
+          34,
+          122,
+          1575,
+          3,
+          35,
+          913,
+          219,
+          39,
+          20,
+          1406,
+          13,
+          1574,
+          42,
+          205,
+          366,
+          213,
+          179
+        ],
+        "C": [
+          174,
+          269,
+          1366,
+          30,
+          44,
+          978,
+          7,
+          1586,
+          1481,
+          201,
+          375,
+          7,
+          5,
+          112,
+          1280,
+          9,
+          13,
+          1007,
+          31,
+          933,
+          1114
+        ],
+        "G": [
+          366,
+          146,
+          50,
+          94,
+          1516,
+          323,
+          12,
+          12,
+          20,
+          162,
+          124,
+          1551,
+          1577,
+          34,
+          233,
+          7,
+          1530,
+          183,
+          688,
+          319,
+          37
+        ],
+        "T": [
+          840,
+          1124,
+          105,
+          26,
+          10,
+          182,
+          12,
+          5,
+          70,
+          329,
+          886,
+          7,
+          2,
+          51,
+          74,
+          10,
+          9,
+          198,
+          507,
+          125,
+          260
+        ]
+      },
+      "relevance": "REST (NRSF): represses neuronal genes including SCN1A in non-neuronal cells. The most likely single explanation for a HeLa-versus-AF22 difference at a neuronal locus."
+    },
+    "MA0095.2": {
+      "matrix_id": "MA0095.2",
+      "name": "YY1",
+      "collection": "CORE",
+      "tf_class": [
+        "C2H2 zinc finger factors"
+      ],
+      "tf_family": [
+        "More than 3 adjacent zinc fingers"
+      ],
+      "uniprot_ids": [
+        "P25490"
+      ],
+      "pubmed_ids": [
+        "18950698"
+      ],
+      "data_type": "ChIP-seq",
+      "length": 12,
+      "pfm": {
+        "A": [
+          1126,
+          6975,
+          6741,
+          2506,
+          7171,
+          0,
+          11,
+          13,
+          812,
+          867,
+          899,
+          1332
+        ],
+        "C": [
+          4583,
+          0,
+          99,
+          1117,
+          0,
+          12,
+          0,
+          0,
+          5637,
+          1681,
+          875,
+          4568
+        ],
+        "G": [
+          801,
+          181,
+          268,
+          3282,
+          0,
+          0,
+          7160,
+          7158,
+          38,
+          2765,
+          4655,
+          391
+        ],
+        "T": [
+          661,
+          15,
+          63,
+          266,
+          0,
+          7159,
+          0,
+          0,
+          684,
+          1858,
+          742,
+          880
+        ]
+      },
+      "relevance": "YY1: ubiquitous promoter-proximal factor acting as activator or repressor depending on cofactors, and frequently found at CpG-island promoters of the kind saRNA targets sit in."
+    },
+    "MA0024.3": {
+      "matrix_id": "MA0024.3",
+      "name": "E2F1",
+      "collection": "CORE",
+      "tf_class": [
+        "Fork head/winged helix factors"
+      ],
+      "tf_family": [
+        "E2F"
+      ],
+      "uniprot_ids": [
+        "Q01094"
+      ],
+      "pubmed_ids": [
+        "9372931"
+      ],
+      "data_type": "HT-SELEX",
+      "length": 12,
+      "pfm": {
+        "A": [
+          254,
+          241,
+          208,
+          54,
+          0,
+          0,
+          0,
+          2,
+          0,
+          524,
+          510,
+          493
+        ],
+        "C": [
+          115,
+          46,
+          36,
+          71,
+          32,
+          599,
+          1,
+          588,
+          577,
+          171,
+          80,
+          59
+        ],
+        "G": [
+          89,
+          100,
+          145,
+          888,
+          950,
+          0,
+          1009,
+          17,
+          46,
+          20,
+          58,
+          112
+        ],
+        "T": [
+          565,
+          638,
+          627,
+          1,
+          0,
+          2,
+          0,
+          0,
+          50,
+          119,
+          182,
+          219
+        ]
+      },
+      "relevance": "E2F1: proliferation-associated. HeLa divides continuously and AF22 does not, so E2F occupancy is a candidate axis for the cell-type difference chapter 4 reports."
+    },
+    "MA0060.3": {
+      "matrix_id": "MA0060.3",
+      "name": "NFYA",
+      "collection": "CORE",
+      "tf_class": [
+        "Heteromeric CCAAT-binding factors"
+      ],
+      "tf_family": [
+        "Heteromeric CCAAT-binding"
+      ],
+      "uniprot_ids": [
+        "P23511"
+      ],
+      "pubmed_ids": [
+        "9469818"
+      ],
+      "data_type": "ChIP-seq",
+      "length": 11,
+      "pfm": {
+        "A": [
+          1897,
+          1924,
+          23,
+          31,
+          4683,
+          4584,
+          37,
+          166,
+          4088,
+          611,
+          1855
+        ],
+        "C": [
+          757,
+          404,
+          4657,
+          4713,
+          29,
+          94,
+          132,
+          4215,
+          213,
+          1131,
+          1369
+        ],
+        "G": [
+          1815,
+          1858,
+          34,
+          28,
+          17,
+          124,
+          11,
+          319,
+          489,
+          2713,
+          887
+        ],
+        "T": [
+          356,
+          639,
+          111,
+          53,
+          96,
+          23,
+          4645,
+          125,
+          35,
+          370,
+          714
+        ]
+      },
+      "relevance": "NFYA: CCAAT-box factor, a core promoter element and one of the few whose motif is not GC-rich, so it discriminates where the GC-box factors do not."
+    },
+    "MA0039.4": {
+      "matrix_id": "MA0039.4",
+      "name": "KLF4",
+      "collection": "CORE",
+      "tf_class": [
+        "C2H2 zinc finger factors"
+      ],
+      "tf_family": [
+        "Three-zinc finger Kruppel-related"
+      ],
+      "uniprot_ids": [
+        "O43474"
+      ],
+      "pubmed_ids": [
+        "28473536"
+      ],
+      "data_type": "ChIP-seq",
+      "length": 12,
+      "pfm": {
+        "A": [
+          12570,
+          11487,
+          2465,
+          2105,
+          7021,
+          1173,
+          45602,
+          852,
+          1617,
+          1202,
+          16264,
+          9959
+        ],
+        "C": [
+          17520,
+          14038,
+          49209,
+          47865,
+          45405,
+          52875,
+          161,
+          52366,
+          51112,
+          51045,
+          18249,
+          19217
+        ],
+        "G": [
+          14243,
+          18473,
+          1583,
+          1214,
+          1422,
+          793,
+          6598,
+          1470,
+          1870,
+          1005,
+          6292,
+          14422
+        ],
+        "T": [
+          11484,
+          11819,
+          2560,
+          4633,
+          1969,
+          976,
+          3456,
+          1129,
+          1218,
+          2565,
+          15012,
+          12219
+        ]
+      },
+      "relevance": "KLF4: itself a saRNA target in the validation dataset (Voutila et al. 2012)."
+    },
+    "MA0018.4": {
+      "matrix_id": "MA0018.4",
+      "name": "CREB1",
+      "collection": "CORE",
+      "tf_class": [
+        "Basic leucine zipper factors (bZIP)"
+      ],
+      "tf_family": [
+        "CREB-related factors"
+      ],
+      "uniprot_ids": [
+        "P16220"
+      ],
+      "pubmed_ids": [
+        "17916232"
+      ],
+      "data_type": "ChIP-seq",
+      "length": 13,
+      "pfm": {
+        "A": [
+          21395,
+          21088,
+          28567,
+          1911,
+          1728,
+          73505,
+          2186,
+          1417,
+          8889,
+          3533,
+          75819,
+          10287,
+          22488
+        ],
+        "C": [
+          17829,
+          15046,
+          13032,
+          970,
+          2298,
+          1748,
+          14144,
+          1895,
+          1231,
+          71982,
+          1018,
+          21582,
+          21876
+        ],
+        "G": [
+          15570,
+          21104,
+          27796,
+          1109,
+          72555,
+          2012,
+          6339,
+          74401,
+          1207,
+          2177,
+          1222,
+          14802,
+          13550
+        ],
+        "T": [
+          24750,
+          22306,
+          10149,
+          75554,
+          2963,
+          2279,
+          56875,
+          1831,
+          68217,
+          1852,
+          1485,
+          32873,
+          21630
+        ]
+      },
+      "relevance": "CREB1: cAMP-response element; activity-dependent transcription in neurons."
+    },
+    "MA0162.4": {
+      "matrix_id": "MA0162.4",
+      "name": "EGR1",
+      "collection": "CORE",
+      "tf_class": [
+        "C2H2 zinc finger factors"
+      ],
+      "tf_family": [
+        "Three-zinc finger Kruppel-related"
+      ],
+      "uniprot_ids": [
+        "P18146"
+      ],
+      "pubmed_ids": [
+        "16041365"
+      ],
+      "data_type": "ChIP-seq",
+      "length": 14,
+      "pfm": {
+        "A": [
+          7087,
+          3997,
+          14508,
+          642,
+          5110,
+          227,
+          1440,
+          314,
+          22297,
+          153,
+          4696,
+          969,
+          8903,
+          3809
+        ],
+        "C": [
+          11610,
+          14749,
+          10303,
+          28403,
+          1131,
+          29338,
+          27321,
+          28958,
+          5420,
+          29507,
+          2806,
+          25196,
+          10441,
+          13686
+        ],
+        "G": [
+          6621,
+          7211,
+          3854,
+          756,
+          22237,
+          665,
+          1455,
+          698,
+          2122,
+          699,
+          20544,
+          2157,
+          6345,
+          7852
+        ],
+        "T": [
+          5280,
+          4641,
+          1933,
+          797,
+          2120,
+          368,
+          382,
+          628,
+          759,
+          239,
+          2552,
+          2276,
+          4909,
+          5251
+        ]
+      },
+      "relevance": "EGR1: immediate-early factor, GC-rich sites overlapping SP1's."
+    },
+    "MA0108.2": {
+      "matrix_id": "MA0108.2",
+      "name": "TBP",
+      "collection": "CORE",
+      "tf_class": [
+        "TATA-binding proteins"
+      ],
+      "tf_family": [
+        "TBP-related factors"
+      ],
+      "uniprot_ids": [
+        "P20226"
+      ],
+      "pubmed_ids": [
+        "2329577"
+      ],
+      "data_type": null,
+      "length": 15,
+      "pfm": {
+        "A": [
+          61,
+          16,
+          352,
+          3,
+          354,
+          268,
+          360,
+          222,
+          155,
+          56,
+          83,
+          82,
+          82,
+          68,
+          77
+        ],
+        "C": [
+          145,
+          46,
+          0,
+          10,
+          0,
+          0,
+          3,
+          2,
+          44,
+          135,
+          147,
+          127,
+          118,
+          107,
+          101
+        ],
+        "G": [
+          152,
+          18,
+          2,
+          2,
+          5,
+          0,
+          20,
+          44,
+          157,
+          150,
+          128,
+          128,
+          128,
+          139,
+          140
+        ],
+        "T": [
+          31,
+          309,
+          35,
+          374,
+          30,
+          121,
+          6,
+          121,
+          33,
+          48,
+          31,
+          52,
+          61,
+          75,
+          71
+        ]
+      },
+      "relevance": "TBP: TATA-box binding protein, marking the core promoter and therefore locating the TSS itself on the sequence, independently of the transcript annotation."
+    },
+    "MA0143.4": {
+      "matrix_id": "MA0143.4",
+      "name": "SOX2",
+      "collection": "CORE",
+      "tf_class": [
+        "High-mobility group (HMG) domain factors"
+      ],
+      "tf_family": [
+        "SOX-related factors"
+      ],
+      "uniprot_ids": [
+        "P48431"
+      ],
+      "pubmed_ids": [
+        "15863505"
+      ],
+      "data_type": "ChIP-seq",
+      "length": 11,
+      "pfm": {
+        "A": [
+          29105,
+          30279,
+          83515,
+          1307,
+          81587,
+          80825,
+          4815,
+          9926,
+          14772,
+          28860,
+          28960
+        ],
+        "C": [
+          11041,
+          15154,
+          436,
+          78356,
+          1205,
+          1742,
+          732,
+          800,
+          6264,
+          17158,
+          17475
+        ],
+        "G": [
+          21434,
+          17157,
+          418,
+          1243,
+          550,
+          2002,
+          930,
+          73372,
+          54414,
+          17765,
+          15998
+        ],
+        "T": [
+          24174,
+          23164,
+          1385,
+          4848,
+          2412,
+          1185,
+          79277,
+          1656,
+          10304,
+          21971,
+          23321
+        ]
+      },
+      "relevance": "SOX2: expressed in AF22 neuroepithelial stem cells and defines that state."
+    },
+    "MA0069.1": {
+      "matrix_id": "MA0069.1",
+      "name": "PAX6",
+      "collection": "CORE",
+      "tf_class": [
+        "Paired box factors"
+      ],
+      "tf_family": [
+        "Paired plus homeo domain"
+      ],
+      "uniprot_ids": [
+        "P26367"
+      ],
+      "pubmed_ids": [
+        "8132558"
+      ],
+      "data_type": "SELEX",
+      "length": 14,
+      "pfm": {
+        "A": [
+          2,
+          2,
+          4,
+          39,
+          3,
+          1,
+          1,
+          21,
+          1,
+          2,
+          36,
+          11,
+          1,
+          1
+        ],
+        "C": [
+          4,
+          2,
+          26,
+          2,
+          34,
+          0,
+          37,
+          2,
+          4,
+          14,
+          0,
+          11,
+          5,
+          0
+        ],
+        "G": [
+          4,
+          0,
+          1,
+          1,
+          1,
+          41,
+          4,
+          2,
+          1,
+          25,
+          6,
+          13,
+          3,
+          17
+        ],
+        "T": [
+          33,
+          39,
+          12,
+          1,
+          5,
+          1,
+          1,
+          18,
+          37,
+          2,
+          1,
+          8,
+          34,
+          25
+        ]
+      },
+      "relevance": "PAX6: neural progenitor identity; expressed in AF22, absent from HeLa."
+    },
+    "MA0497.1": {
+      "matrix_id": "MA0497.1",
+      "name": "MEF2C",
+      "collection": "CORE",
+      "tf_class": [
+        "MADS box factors"
+      ],
+      "tf_family": [
+        "Regulators of differentiation"
+      ],
+      "uniprot_ids": [
+        "Q06413"
+      ],
+      "pubmed_ids": [
+        "7559475"
+      ],
+      "data_type": "ChIP-seq",
+      "length": 15,
+      "pfm": {
+        "A": [
+          705,
+          733,
+          431,
+          382,
+          0,
+          1616,
+          1706,
+          2107,
+          2131,
+          2135,
+          56,
+          2177,
+          389,
+          975,
+          1009
+        ],
+        "C": [
+          321,
+          151,
+          196,
+          1412,
+          985,
+          256,
+          32,
+          0,
+          0,
+          0,
+          62,
+          0,
+          120,
+          836,
+          450
+        ],
+        "G": [
+          676,
+          573,
+          822,
+          78,
+          0,
+          74,
+          241,
+          87,
+          2,
+          4,
+          0,
+          32,
+          1671,
+          148,
+          126
+        ],
+        "T": [
+          507,
+          752,
+          760,
+          337,
+          1224,
+          263,
+          230,
+          15,
+          76,
+          70,
+          2091,
+          0,
+          29,
+          250,
+          624
+        ]
+      },
+      "relevance": "MEF2C: neuronal differentiation and an epilepsy gene in its own right."
+    },
+    "MA0062.3": {
+      "matrix_id": "MA0062.3",
+      "name": "GABPA",
+      "collection": "CORE",
+      "tf_class": [
+        "Tryptophan cluster factors"
+      ],
+      "tf_family": [
+        "Ets-related"
+      ],
+      "uniprot_ids": [
+        "Q06546"
+      ],
+      "pubmed_ids": [
+        "9461436"
+      ],
+      "data_type": "ChIP-seq",
+      "length": 14,
+      "pfm": {
+        "A": [
+          15887,
+          10981,
+          7639,
+          52260,
+          929,
+          3885,
+          862,
+          1398,
+          993,
+          1722,
+          2219,
+          5344,
+          11903,
+          13522
+        ],
+        "C": [
+          16922,
+          21679,
+          41398,
+          3988,
+          55664,
+          1443,
+          1230,
+          61373,
+          63107,
+          1542,
+          6328,
+          12006,
+          18154,
+          17382
+        ],
+        "G": [
+          15945,
+          13751,
+          6989,
+          4873,
+          2169,
+          965,
+          1633,
+          1150,
+          520,
+          4561,
+          51920,
+          7720,
+          15081,
+          13187
+        ],
+        "T": [
+          16725,
+          19068,
+          9453,
+          4358,
+          6717,
+          59186,
+          61754,
+          1558,
+          859,
+          57654,
+          5012,
+          40409,
+          20341,
+          21388
+        ]
+      },
+      "relevance": "GABPA: ETS-family factor occupying GC-rich housekeeping promoters, and one of the most consistently promoter-proximal factors in ChIP-seq. Included as a marker of core promoter architecture rather than of regulation specific to any target gene."
+    },
+    "MA0098.3": {
+      "matrix_id": "MA0098.3",
+      "name": "ETS1",
+      "collection": "CORE",
+      "tf_class": [
+        "Tryptophan cluster factors"
+      ],
+      "tf_family": [
+        "Ets-related"
+      ],
+      "uniprot_ids": [
+        "P14921"
+      ],
+      "pubmed_ids": [
+        "20517297"
+      ],
+      "data_type": "HT-SELEX",
+      "length": 10,
+      "pfm": {
+        "A": [
+          2683,
+          180,
+          425,
+          0,
+          0,
+          2683,
+          2683,
+          1102,
+          89,
+          803
+        ],
+        "C": [
+          210,
+          2683,
+          2683,
+          21,
+          0,
+          0,
+          9,
+          21,
+          712,
+          401
+        ],
+        "G": [
+          640,
+          297,
+          7,
+          2683,
+          2683,
+          0,
+          31,
+          1580,
+          124,
+          1083
+        ],
+        "T": [
+          241,
+          22,
+          0,
+          0,
+          12,
+          0,
+          909,
+          12,
+          1970,
+          396
+        ]
+      },
+      "relevance": "ETS1: GGA(A/T) core motif, abundant in CpG-island promoters. Included so that a GC-rich hit is not automatically attributed to SP1, whose motif overlaps it."
+    }
   }
- }
 }

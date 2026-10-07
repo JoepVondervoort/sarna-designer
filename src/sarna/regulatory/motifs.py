@@ -289,7 +289,7 @@ def load_motifs() -> tuple[Motif, ...]:
     """
     source = resources.files(DATA_PACKAGE).joinpath(MATRIX_FILENAME)
     with resources.as_file(source) as path:
-        payload = json.loads(path.read_text())
+        payload = json.loads(path.read_text(encoding="utf-8"))
     return tuple(
         Motif(
             matrix_id=entry["matrix_id"],

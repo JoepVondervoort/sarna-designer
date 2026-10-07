@@ -12,6 +12,10 @@ ranked, annotated, exportable duplex candidates.
 > saved runs, and exports. Launch with `.venv/bin/python -m sarna.app`; open
 > **http://localhost:8001/**. The earlier `http.server` previews serve static files.
 >
+> **Installing it on another machine?** [`INSTALL.md`](INSTALL.md) is written for a colleague
+> with no programming experience: one command on Windows, macOS or Linux, then
+> `sarna-designer-check` to confirm it works.
+>
 > The engine is now validated against measured activity for the first time — 125 assayed
 > sequences, 14 of them activators. The position-19 gate excludes CEBPA, a known activator;
 > the default window excludes 10 of 14 when recovered locations are used.
@@ -182,10 +186,11 @@ for lost in report.rejected_activators:        # duplexes that worked and the ga
   insufficient for the default 500 bp CpG-island definition. Ranking remains unvalidated.
 - **No cell-type binding data.** Motif predictions are sequence-only and say nothing about any
   cell type. TF-occupancy adapters remain absent; AF22 histone ChIP-seq is a separate evidence axis.
-- **Licensing metadata needs correction before distribution.** Official
-  [JASPAR documentation](https://jaspar.elixir.no/about/) states CC BY 4.0, contradicting the
-  repository's non-commercial label. Audit the exact bundled assets and attribution; the precise
-  MIT/Apache code licensing form remains to be recorded.
+- ~~Licensing metadata needs correction before distribution.~~ **Resolved 2026-10-07.** The code
+  is Apache-2.0 and the bundled JASPAR subset is CC BY 4.0, verified against
+  [JASPAR's own about page](https://jaspar.elixir.no/about/). The repository's previous
+  CC BY-NC-SA label was wrong and *more* restrictive than the real terms. See [`NOTICE`](NOTICE)
+  and [ADR 0018](docs/adr/0018-apache-2-and-bundled-data-licensing.md).
 - Promoter fixtures must be CpG-depleted or real sequence. Uniform random sequence is called as
   one large CpG island by any correct detector, which rejects nearly every candidate — see
   [`docs/scientific/synthetic-promoter-fixtures.md`](docs/scientific/synthetic-promoter-fixtures.md).
@@ -281,4 +286,16 @@ and never silently replace a shipped entry.
 
 ## Licence
 
-**Undecided.** Default copyright applies — see [`LICENSE`](LICENSE).
+**Apache License 2.0** — see [`LICENSE`](LICENSE). Copyright 2026 Joep Vondervoort.
+
+Bundled data keep their own terms, listed in [`NOTICE`](NOTICE):
+
+| Bundled asset | Terms |
+|---|---|
+| JASPAR CORE subset | CC BY 4.0 — redistribution and commercial use permitted with attribution |
+| Chapter 4 screening dataset | From a publicly defended thesis; redistributed here under Apache-2.0 |
+| Promoter anchors, cell-line registry | Compiled for this project; Apache-2.0 |
+
+Ensembl and NCBI BLAST are queried at runtime and redistribute nothing; cite Ensembl in work
+that relies on its annotation. [ADR 0018](docs/adr/0018-apache-2-and-bundled-data-licensing.md)
+records why Apache-2.0 rather than MIT, and how the JASPAR mislabelling was found and corrected.
