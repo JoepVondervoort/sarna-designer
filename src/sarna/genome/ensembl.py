@@ -25,6 +25,8 @@ testable with no external dependency.
 """
 
 import json
+import logging
+import os
 import re
 import time
 from collections.abc import Mapping
@@ -72,6 +74,9 @@ DEFAULT_DOWNSTREAM_BP = 500
 
 MAX_REGION_BP = 10_000_000
 """Ensembl's sequence endpoint refuses larger spans; checked here for a clearer message."""
+
+
+LOGGER = logging.getLogger(__name__)
 
 MAX_ATTEMPTS = 6
 """Attempts per request.
@@ -254,6 +259,42 @@ class EnsemblClient:
         if cache_dir is not None:
             cache_dir.mkdir(parents=True, exist_ok=True)
 
+    def _read_cache(self, cached: Path | None) -> JsonPayload | None:
+        """Return a cached payload, or ``None`` if there is none or it is unusable.
+
+        A damaged entry is a miss, not a failure. Interrupt the app mid-write -- Ctrl-C, a
+        closed laptop, a full disk -- and the file is left truncated; a bare ``json.loads``
+        then raised out of the client on every later lookup of that gene, for ever, and nothing
+        told a colleague to go and delete it. Refetching replaces it.
+        """
+        if cached is None or not cached.exists():
+            return None
+        try:
+            payload: JsonPayload = json.loads(cached.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            LOGGER.warning("discarding an unreadable cache entry: %s", cached.name)
+            return None
+        return payload
+
+    @staticmethod
+    def _write_cache(cached: Path | None, payload: JsonPayload) -> None:
+        """Write a cache entry so a reader never sees half of it.
+
+        Written beside the target and renamed, which is atomic within a directory. That is what
+        makes an interrupted write harmless, and what would make a cache directory shared
+        between colleagues safe to read while somebody else is filling it.
+        """
+        if cached is None:
+            return
+        temporary = cached.with_name(f"{cached.name}.{os.getpid()}.part")
+        try:
+            temporary.write_text(json.dumps(payload), encoding="utf-8")
+            os.replace(temporary, cached)
+        except OSError as error:
+            # A cache that cannot be written makes the tool slower, not broken.
+            LOGGER.warning("could not cache %s: %s", cached.name, error)
+            temporary.unlink(missing_ok=True)
+
     def _cache_path(self, path: str) -> Path | None:
         """Return the cache file for ``path``, or ``None`` if caching is off."""
         if self.cache_dir is None:
@@ -276,8 +317,8 @@ class EnsemblClient:
             EnsemblUnavailableError: If every attempt failed.
         """
         cached = self._cache_path(path)
-        if cached is not None and cached.exists():
-            from_cache: JsonObject = json.loads(cached.read_text(encoding="utf-8"))
+        from_cache = self._read_cache(cached)
+        if isinstance(from_cache, dict):
             return from_cache
         if self.offline:
             self._refuse_offline(path)
@@ -288,8 +329,7 @@ class EnsemblClient:
             raise EnsemblUnavailableError(
                 f"expected a JSON object from {url} but got {type(payload).__name__}"
             )
-        if cached is not None:
-            cached.write_text(json.dumps(payload), encoding="utf-8")
+        self._write_cache(cached, payload)
         return payload
 
     def _get_with_retries(self, url: str, path: str) -> JsonPayload:
@@ -396,8 +436,8 @@ class EnsemblClient:
     def _get_array(self, path: str) -> JsonArray:
         """Fetch ``path``, which returns a JSON array rather than an object."""
         cached = self._cache_path(path)
-        if cached is not None and cached.exists():
-            from_cache: JsonArray = json.loads(cached.read_text(encoding="utf-8"))
+        from_cache = self._read_cache(cached)
+        if isinstance(from_cache, list):
             return from_cache
         if self.offline:
             self._refuse_offline(path)
@@ -406,8 +446,7 @@ class EnsemblClient:
             raise EnsemblUnavailableError(
                 f"expected a JSON array from {path} but got {type(payload).__name__}"
             )
-        if cached is not None:
-            cached.write_text(json.dumps(payload), encoding="utf-8")
+        self._write_cache(cached, payload)
         return payload
 
     def _check_assembly(self, reported: str | None, what: str) -> None:

@@ -9,6 +9,7 @@ and the one the project's primary target happens to be.
 A live-network counterpart lives in `tests/network/test_ensembl_live.py`, excluded by default.
 """
 
+import json
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, ClassVar, cast
@@ -447,6 +448,40 @@ class TestCaching:
         first = len(requests_made(client))
         client.gene("SCN1A")
         assert len(requests_made(client)) == first
+
+    def test_a_truncated_cache_file_is_refetched_rather_than_poisoning_the_gene(
+        self, tmp_path: Path
+    ) -> None:
+        """A half-written cache file must not make a gene permanently unusable.
+
+        The cache was written with a plain ``write_text`` and read with a bare ``json.loads``.
+        Interrupt the app mid-write -- Ctrl-C, a closed laptop, a full disk -- and the file is
+        left truncated. Every later lookup of that gene then raised ``JSONDecodeError`` out of
+        the client, on every run, until someone found and deleted the file by hand. There is no
+        message anywhere telling a non-computational colleague to do that.
+        """
+        client = client_for(DEFAULT_ROUTES, cache_dir=tmp_path)
+        client.gene("SCN1A")
+        cached = next(f for f in tmp_path.iterdir() if f.suffix == ".json")
+        whole = cached.read_text(encoding="utf-8")
+        cached.write_text(whole[: len(whole) // 2], encoding="utf-8")
+
+        recovered = client_for(DEFAULT_ROUTES, cache_dir=tmp_path).gene("SCN1A")
+        assert recovered.symbol == "SCN1A"
+        # And the damaged file has been replaced, so the next call is a cache hit again.
+        assert json.loads(cached.read_text(encoding="utf-8"))
+
+    def test_an_interrupted_write_never_leaves_a_partial_cache_file(
+        self, tmp_path: Path
+    ) -> None:
+        # Written to a temporary name and renamed, so a reader sees the old file or the new
+        # one and never half of either. This is also what makes a cache directory shared
+        # between colleagues safe to read while somebody else is writing it.
+        client = client_for(DEFAULT_ROUTES, cache_dir=tmp_path)
+        client.gene("SCN1A")
+        for path in tmp_path.iterdir():
+            assert path.suffix == ".json", f"{path.name} was left behind by the cache write"
+            assert json.loads(path.read_text(encoding="utf-8"))
 
     def test_the_cache_file_names_the_assembly(self, tmp_path: Path) -> None:
         # So a GRCh37 and a GRCh38 response for the same query cannot collide.
