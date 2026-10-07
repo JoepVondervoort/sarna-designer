@@ -53,29 +53,38 @@ This is the part that matters, because it bears on the mechanism rather than on 
 | SCN1A-15 | −5,523 | no |
 
 Two of the project's three SCN1A activators are ~5.5 kb upstream of the nearest annotated TSS. The
-third, SCN1A-10, is at −124 bp of a different TSS. So the SCN1A activators do not share a promoter,
-and two of them are not in one.
+third, SCN1A-10, is at −124 bp of a different TSS. So the SCN1A activators do not share a promoter.
 
-Four readings, and this document does not choose between them:
+**Resolved by chapter 2.** The question was open only until chapter 2's supplementary material was
+read. These designs are not mysterious and not misplaced: they target **experimentally mapped
+promoters from the literature**, which chapter 2 names explicitly.
 
-1. **An unannotated or cell-type-specific TSS sits near 166,079,200.** Plausible — annotation is
-   incomplete, and AF22 and HeLa were not among the cell types used to build it — but Ensembl's
-   regulatory build annotates nothing in chr2:166,078,000-166,081,000, so there is no independent
-   support for it in that source.
-2. **The designs were made against an older annotation** whose TSS has since moved. Checkable
-   against an archived Ensembl release; not yet done, and the most likely explanation.
-3. **They act as enhancer-targeting RNAs rather than promoter-targeting ones.** RNAa at enhancers
-   is reported in the literature, and it would be a different mechanistic claim from the one
-   chapters 2-3 make.
-4. **They act by some route other than promoter-associated RNAa**, for instance on a natural
-   antisense transcript. SCN1A has a well-documented antisense transcript, and the thesis's own
-   introduction lists NAT blockade as a separate modality.
+| Block | Chapter 2's attribution | Span | Nearest Ensembl TSS | Activators |
+|---|---|---|---|---|
+| SCN1A-1 to -5 | "promoter region described by **Dong (2014)**" | chr2:166,073,893-166,074,447 | 166,073,669, −778…−224 | none |
+| SCN1A-6 to -10 | "promoter region described by **Long (2008)**" | chr2:166,149,337-166,149,957 | 166,149,213, −744…−124 | SCN1A-10 |
+| SCN1A-11 to -15 | "promoter region by **Dong (2014)**" | chr2:166,079,192-166,079,679 | 166,073,669, **5.5 kb away** | SCN1A-12, SCN1A-14 |
 
-Reading 2 would be reassuring and is cheap to test. Readings 3 and 4 would change what the chapters
-can claim about mechanism. Either way, **the engine as it stands would not have proposed
-SCN1A-12 or SCN1A-14**: `tss-window` excludes anything beyond −1000 bp, so the two designs would
-have been rejected before scoring. That is the strongest single argument in this repository for
-making the TSS window a visible, adjustable setting rather than a fixed gate — which it already is.
+Chapter 2 states that "the most proximal and distal promoters were selected as target regions of
+the SCN1A gene", citing Dong et al. 2014 (*Mol Neurobiol* 50:438-448, SCN1A transcription repressed
+by RACK1), Long et al. 2008 (*J Neurosci Res* 86:3375-3381, identification of the SCN1A promoter
+region and 5′-untranslated exons) and Nakayama et al. 2010 (*Hum Mutat* 31:820-829, 5′ genomic
+deletions with promoter activity).
+
+Two of the three blocks line up with an Ensembl TSS. **The third does not, and it produced two of
+the three SCN1A activators.** The most productive SCN1A promoter in this project is one Ensembl
+annotates no transcript for.
+
+That is the finding with the most bearing on the tool, and it generalises well past SCN1A: **a
+promoter worth targeting is not always one the annotation knows about.** A tool that can only design
+relative to Ensembl TSSs could not have produced SCN1A-12 or SCN1A-14 — two of this project's three
+SCN1A hits — because `tss-window` excludes anything beyond −1000 bp of an annotated TSS. Supporting
+literature-defined promoter regions as first-class design anchors is a requirement, not a
+convenience.
+
+One narrower question stays open: whether the Dong 2014 distal region acts as a promoter in the
+cells used, as an enhancer, or through the SCN1A natural antisense transcript. Chapter 2's Figure 1
+presents it as a promoter on the strength of the cited mapping studies.
 
 ## Ensembl's regulatory build annotates the MANE promoter and nothing else nearby
 
@@ -96,6 +105,10 @@ What the table does establish is that no *independent* source consulted here sup
 the thesis designed against, while one does support the TSS it did not.
 
 ## Consequences for the tool
+
+**Also established from chapter 2's supplementary material:** both duplex strands carry a **dTdT**
+overhang, written `[dT][dT]`, not a ribo-UU. That settles the open question about overhang
+chemistry in this project's own practice, and it is what an order-ready export should emit.
 
 **Acted on:**
 

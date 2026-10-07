@@ -150,16 +150,22 @@ Headline results:
 
 ## Open decisions
 
+- **Promoters can only be anchored to an Ensembl TSS.** The hardest requirement found so far:
+  chapter 2 designed SCN1A against promoters mapped by Dong 2014 and Long 2008, and the Dong distal
+  region — which produced 2 of the 3 SCN1A activators — has no Ensembl TSS within 5.5 kb. A tool
+  that can only design relative to annotated TSSs could not reproduce this project's own hits.
+  Literature-defined promoter regions need to be first-class design anchors. See
+  `docs/scientific/scn1a-design-coordinates.md`.
 - **No HTTP API or hosted UI.** `sarna.view.html.render` produces a self-contained page, which
   covers the "show me the promoter" need without a server. Whether a FastAPI layer is still wanted
   (ADR 0005 anticipated one) is undecided.
 - **Position 18/19 when target length ≠ 19.** Evaluators use the literal Table 1 position and
   report `not-applicable` if the target is shorter. For a 21-mer, position 19 stops being the 3'
   terminal base and `pos19-a`'s mechanism no longer holds. Undecided; keep length at 19.
-- **3' overhangs are not modelled.** Candidates carry 19 nt cores. Wang's geometry adds a 3' UU
-  overhang to both strands, and what a researcher orders is the 21-mer. Whether the overhang is
-  synthetic (`UU`) or taken from flanking genomic sequence is a design decision for the export
-  step, not yet made. This is the largest gap before the tool is usable at the bench.
+- **3' overhangs are not modelled.** Candidates carry 19 nt cores; what gets ordered is a 21-mer.
+  The chemistry question is *settled* — chapter 2's supplementary material shows **dTdT** on both
+  strands, not ribo-UU — so what remains is building the order-ready export, not deciding what it
+  should say. Largest gap before bench use.
 - **Should `tss-window` be a gate at all?** The biggest open question in the engine. As a gate at
   Wang's −1000…−100 it rejects 64% of candidates on a real promoter and 10 of the 14 known
   activators, including KLF4 at −45 and CEBPA (in human trials) at −1088. As a preference it would
