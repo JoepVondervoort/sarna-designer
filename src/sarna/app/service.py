@@ -16,6 +16,7 @@ from sarna.app.references import (
 )
 from sarna.app.store import RunStore
 from sarna.design.candidate import Candidate
+from sarna.design.order import CSV_COLUMNS, csv_row, order_for
 from sarna.design.pipeline import design_sarnas
 from sarna.genome.anchors import PromoterAnchor, load_anchors
 from sarna.genome.ensembl import (
@@ -192,6 +193,20 @@ class DesignService:
         payload["candidates"] = [
             candidate_record(c, model, end_length) for c in view.ranked_candidates()
         ]
+        # Order-ready duplexes are computed here, in Python, and carried in the record, so a
+        # frozen archive can hand over the exact molecules without JavaScript re-deriving the
+        # chemistry (accepted constraint 11). Passing candidates only, in rank order: a duplex
+        # that failed a gate is not something to order.
+        payload["order"] = {
+            "columns": list(CSV_COLUMNS),
+            "rows": [
+                csv_row(order_for(c, model), run_id)
+                for c in sorted(
+                    (c for c in view.ranked_candidates() if c.rank is not None),
+                    key=lambda c: c.rank or 0,
+                )
+            ],
+        }
         if payload["promoter"]["tss_offset"] is None and promoter.tss_start is not None:
             # Relative-only pasted DNA has an offset but no genomic coordinate to invert.
             offset = promoter.tss_start.distance_to(TssPosition(1))

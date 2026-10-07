@@ -121,36 +121,133 @@ runs interrupted by a restart. `DesignRequest` validates input and resolves the 
 through the same Python path as the library, so an invalid custom configuration is rejected before
 a job is queued. The server binds loopback only and checks `Host` and `Origin`.
 
-**What is missing is the evidence that any of it is right.** The five Python modules have no tests
-— 399 statements at 0% coverage, the whole of the project's coverage shortfall — and `app.js`,
-`app.css` and `index.html` have none either. Nobody has opened the interface in a browser;
-Playwright has no Chromium in this environment, so that check is manual and has not been done.
+*Superseded — the paragraph that stood here said the five modules had no tests, that nobody had
+opened the interface, and that no Chromium existed to do it with. All three are now false. See
+the measured re-check below.*
 
-A second agent also changed `src/sarna/design/pipeline.py`: `_compare` now reads the selected
-asymmetry rule's `end-length-nt` instead of hard-coding 4, on the stated reasoning that comparing
-four bases while a run evaluates a different end length could report the opposite strand. The
-reasoning is sound and `end_length` is well covered at the thermodynamic level, but **no test
-names this pipeline path**, so a regression in it would be silent. It is a scientific output
-path and needs a test that fails when the wiring is removed.
+### Measured re-check — 7 October 2026, 15:40
+
+The claims above were re-measured rather than re-read, and the environment itself had changed.
+
+- **`src/sarna/app/` is tested.** `tests/unit/test_app.py`, `test_app_batches.py` and
+  `test_app_references.py` cover it at **82%** (589 statements, 94 uncovered). What remains
+  uncovered is the socket layer and the launcher: `web.py` at 75% — its `make_server` request
+  handlers, lines 263–302 — and `__main__.py` at **0%**, 27 statements. Both are exercised by the
+  browser and launcher checks instead, which `pytest --cov` cannot see. Neither is a scientific
+  path; `models.py` (90%), `references.py` (100%), `service.py` (89%) and `store.py` (99%) are the
+  ones that decide anything.
+- **Chromium is installed**, at `~/.cache/ms-playwright/chromium-1229/chrome-linux64/chrome`
+  (1200 and 1228 are also present). `scripts/verify_workbench_browser.py` needs no browser Python
+  package, only `--chrome`. The plan's premise that this check could only ever be manual was
+  wrong.
+- **The interface has been opened, twice, and both runs pass.** Cached `--gene SCN1A`: 14 passing,
+  draft retained across a Python rerun with its diff, history, hover, offline rejected verdicts and
+  the mobile layout. Live `--gene KCNQ2 --online` against an **empty cache**: the offline lookup is
+  refused with 409 *without fetching*, the visible retry then retrieves gene, transcripts and
+  promoter, a lowercase symbol resolves, an uncached-window retry completes without discarding
+  earlier results, and the run yields **9 passing** — the same number
+  [local-workbench.md](local-workbench.md) records for KCNQ2. No uncaught browser exceptions in
+  either run. **This is the gene-to-candidates path for an arbitrary gene, working end to end.**
+- **`ruff check .` had one real failure** — `ANN202` on an untyped `factory` in
+  `test_app_batches.py`. Fixed; the gate is clean again. The status section above recorded ruff as
+  clean at 13:32, so this arrived with the app commit.
+
+Totals after this slice: **1,383 passed**, 8 deselected; strict mypy clean over 113 files;
+`ruff check .` clean.
+
+### The `end-length-nt` wiring: the plan was wrong about what was unpinned
+
+`_compare` reads the selected asymmetry rule's `end-length-nt` rather than hard-coding 4. The
+status above said **no test names this pipeline path**. That was not true, and the error was found
+the only way it could be — by planting the defect and running the suite:
+
+| Defect planted in `_compare` | Caught without the new tests? |
+|---|---|
+| `end_length=4` hard-coded again | **Yes** — `test_app.py::test_custom_end_length_controls_displayed_guide_and_all_model_comparisons`, on its hand-calculated +2.49 kcal/mol |
+| Tiebreak consulted *before* the gate | **Yes** — same test, incidentally, via the same value |
+| No-rule fallback changed from 4 to 6 | **No. All 1,378 tests passed.** |
+
+So the wiring was pinned and the plan's D3 was stale — but the **fallback default was entirely
+unpinned**, and the documented default could have been changed from 4 to 6 with a green suite.
+[ADR 0015](../adr/0015-local-workbench-and-frozen-ui.md) states that default as part of the
+accepted contract, so nothing pinned a decision the ADR records.
+
+`TestTheStrandPredictionHonoursTheConfiguredEndLength` in `tests/unit/test_design_pipeline.py`
+now covers all four branches of `_compare`'s selection, at the pipeline level where the existing
+test works through the app. Its fixture is the part worth keeping: `GGGTAATTTTGACAGGTCA`, found by
+enumerating random 19-mers until one had **all three tables agreeing on antisense at the default
+four-base end and all three agreeing on sense at six**. Both verdicts are unanimous, so the test
+demonstrates the *consequence* the wiring exists to prevent — the opposite strand reported with
+full confidence, which is the wrong duplex to order — rather than only pinning an energy value.
+Each of the five tests was confirmed against a planted defect.
 
 ### Defect list with dispositions
 
 Milestone 1 requires an explicit current defect list. These are confirmed by running the code,
 not inferred.
 
+**Dispositions re-measured 15:40 on 7 October.** Six of the nine are closed; the rows keep their
+original wording so what was claimed stays visible beside what was found.
+
 | # | Defect | Evidence | Disposition |
 |---|---|---|---|
-| D1 | `src/sarna/app/` has no tests — 399 uncovered statements across five modules, plus untested `app.js` | `pytest --cov`: every app module 0% | Fix first. `AppRouter.dispatch` takes a method and a target and needs no socket, which is what it is for |
-| D2 | The interface has never been opened in a browser | No Chromium for Playwright here; no manual check recorded | Open it against cached SCN1A and read what it shows, including rejected candidates and the rating |
-| D3 | `_compare` reading `end-length-nt` from the configuration has no test | `grep end_length tests/` finds thermodynamic coverage only | Add a pipeline test that fails if the wiring is reverted |
-| D4 | The generated viewer and the app's interface are now two separate renderers of the same run | `src/sarna/view/template.html` (1,074 lines) and `src/sarna/app/static/app.js` (38 KB); `export.html` inlines the latter | Needs a decision, not a fix — see the open question below |
-| D5 | The frozen `export.html` is 18.9 MB for SCN1A against 2.1 MB for the same gene from `template.html`; it embeds every rule verdict for all 2,482 candidates with no abbreviation | Measured 7 October | Apply the same abbreviation the view payload uses, or state why an archive should carry everything |
-| D6 | `export.html` still references `/favicon.svg` and links to `/`, both of which break once the file is archived away from a running app | Measured 7 October: those are the only two external references left | Inline the favicon and drop or neutralise the back-link |
-| D7 | `app.css` sets `font-family:Inter` with no `@font-face` and no stylesheet link, so Inter never loads and the page silently falls back to the system UI font | `grep -c "@font-face\|fonts.googleapis" app.css` → 0 | Bundle the font locally, which also keeps the frozen export dependency-free, or choose a system stack deliberately |
-| D8 | `tss-window` offers an option labelled "−2000 to +500 bp" whose effective `window-end-bp` is 0 | Recorded earlier in this plan; still open | Display the implemented range and explain the restriction |
+| D1 | `src/sarna/app/` has no tests — 399 uncovered statements across five modules, plus untested `app.js` | `pytest --cov`: every app module 0% | **Closed for the modules that decide anything.** Now 82%: `references.py` 100%, `store.py` 99%, `models.py` 90%, `service.py` 89%, `web.py` 75%, `__main__.py` 0%. The remainder is the socket layer and the launcher, covered by the browser and launcher checks instead. `app.js` still has no unit tests; it is exercised through the browser check |
+| D2 | The interface has never been opened in a browser | No Chromium for Playwright here; no manual check recorded | **Closed.** The premise was wrong: Chromium 1229 is installed. `verify_workbench_browser.py` passes for cached SCN1A (14 passing) and for live uncached KCNQ2 (9 passing), with no uncaught exceptions |
+| D3 | `_compare` reading `end-length-nt` from the configuration has no test | `grep end_length tests/` finds thermodynamic coverage only | **Stale as written** — the evidence was a grep that missed `test_app.py`, which does pin the wiring. The real gap was the **no-rule fallback default**, which a green 1,378-test suite tolerated being changed from 4 to 6. Now closed, with all four selection branches covered |
+| D4 | The generated viewer and the app's interface are now two separate renderers of the same run | `src/sarna/view/template.html` (1,074 lines) and `src/sarna/app/static/app.js` (38 KB); `export.html` inlines the latter | **Already decided, not open.** [ADR 0015](../adr/0015-local-workbench-and-frozen-ui.md) keeps `sarna.view` for existing scripts and historical reports, explicitly not as a second settings editor, and requires a separate compatibility review before migrating its output. The open question below predates that ADR |
+| D5 | The frozen `export.html` is 18.9 MB for SCN1A against 2.1 MB for the same gene from `template.html`; it embeds every rule verdict for all 2,482 candidates with no abbreviation | Measured 7 October | **Accepted cost, not a defect.** Re-measured at **19.25 MB**, of which 19.15 MB is the embedded payload and 18.92 MB is the 2,482 candidates (~8.0 KB each: `rules` 4.2 KB over 18 records, `guide_prediction` 2.2 KB). ADR 0015 accepts this in as many words — "complete rejected-candidate verdicts make HTML large, but preserve every explanation offline". The `_compact` abbreviation in `promoter_view.py` remains available if the cost is later judged too high; applying it would be a **change to the ADR**, so it needs the user, not a fix |
+| D6 | `export.html` still references `/favicon.svg` and links to `/`, both of which break once the file is archived away from a running app | Measured 7 October: those are the only two external references left | **Closed.** `web.py:53-55` base64-inlines the favicon and rewrites the brand link to `#` |
+| D7 | `app.css` sets `font-family:Inter` with no `@font-face` and no stylesheet link, so Inter never loads and the page silently falls back to the system UI font | `grep -c "@font-face\|fonts.googleapis" app.css` → 0 | **Closed** by taking the second option: a deliberate `ui-sans-serif, system-ui, …` stack. Inter is gone, so nothing promises a font it cannot load, and the frozen export stays dependency-free |
+| D8 | `tss-window` offers an option labelled "−2000 to +500 bp" whose effective `window-end-bp` is 0 | Recorded earlier in this plan; still open | **Closed.** The option is now labelled "-2000 to -1 bp (upstream part of thesis chapter 4 window)" and its description states that it implements only the upstream portion and does not reproduce the full thesis window |
 | D9 | `GLOSSARY.md` defined the duplex overhang as `UU`, contradicting the settled dTdT chemistry | Glossary versus constraint 4 and `docs/scientific/` | Fixed 7 October alongside this status update |
 
-### Open question this status raises
+Remaining open: `app.js` has no unit tests (D1's tail). The user's interface item 4 — rebuilding
+the promoter visualisation with hover explanations — turned out to be **already implemented**:
+`app.js` draws seven labelled tracks (reference/TSS, design windows, CpG islands, regulatory
+build, motif matches, passing and excluded targets), each label carrying a tooltip that says what
+the element is *and* what it does not establish, with candidates clickable and zoom/pan working.
+A screenshot was inspected. If it still is not what was wanted, that needs saying concretely;
+nothing further is obviously missing from the description in the feedback.
+
+### Order-ready duplex export — 7 October 2026, 16:10
+
+The gap `CLAUDE.md` called "largest before bench use" is closed, except for the screening half.
+
+`sarna.design.order` builds the two 21-mers and their sanity report;
+[ADR 0017](../adr/0017-order-ready-duplex-export.md) records the decisions and their costs. The
+workbench serves them at `GET /api/runs/{id}/export.order.csv` and the browser has an
+**Order CSV · 21-mers** button; a frozen archive downloads the same rows, which Python stored in
+the record so that JavaScript never re-derives chemistry (accepted constraint 11). A test asserts
+the stored rows and the live route's output are byte-identical.
+
+What the slice found while building it:
+
+- **Both CSV exports were in position order, not rank order.** Measured on cached SCN1A,
+  `export.csv` emitted ranks `8, 3, 7, 5, 13, 4, 2, 1, …`. A researcher taking the top three rows
+  ordered the wrong three molecules. This was pre-existing, not introduced here. Both exports now
+  sort; the record keeps position order, which is correct for the map and the sortable table.
+- **`off-target-screening` reports `not-performed` on every duplex.** Accepted constraint 15 wants
+  off-target findings in this report and no off-target analysis exists, so the row states the
+  absence rather than being omitted, which would read as a clean screen.
+- The five checks were each confirmed against a planted defect: a ribo-`UU` overhang (caught by
+  three tests, after one self-referential assertion was rewritten to pin the literal), an overhang
+  on one strand only, and `not-performed` silently downgraded to `ok`.
+
+Two live `--online` browser runs failed during this slice with a 45 s timeout. The cause was
+established rather than assumed: a direct repro showed Ensembl returning `ReadTimeout` after six
+attempts on `lookup/id`, which is gene lookup, upstream of anything this slice touches. A
+clean-tree run passing in between was coincidence, not evidence. The check passes on both trees
+when Ensembl responds.
+
+### Open question this status raises — answered by ADR 0015
+
+*The question below was written before [ADR 0015](../adr/0015-local-workbench-and-frozen-ui.md)
+was read. That ADR answers it: `sarna.view` stays for existing scripts and historical reports and
+is explicitly not a second settings editor, and migrating its output requires a separate
+compatibility review. The duplication is accepted and bounded rather than open. What the ADR does
+not do is remove the underlying risk the question names — two renderers can still disagree about
+one run — so if that is to be guarded, it wants a test comparing the two payloads for the same
+run, not a new decision.*
 
 There are now two independent renderers for one run: the self-contained
 `src/sarna/view/template.html`, which carries the committed transparency work and has data-level

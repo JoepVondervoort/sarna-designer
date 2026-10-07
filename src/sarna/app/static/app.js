@@ -464,7 +464,7 @@ function renderTable() {
   $("page-previous").disabled = state.page===0; $("page-next").disabled = state.page>=pages-1;
   $("select-page").checked = page.length>0 && page.every(c=>state.checked.has(c.id));
   $("select-page").indeterminate = page.some(c=>state.checked.has(c.id)) && !$("select-page").checked;
-  $("export-note").textContent = `${state.checked.size?`${state.checked.size} selected candidates` : "All passing candidates"} in CSV · RNA cores only; dTdT order preparation and off-target screening are still pending.`;
+  $("export-note").textContent = `${state.checked.size?`${state.checked.size} selected candidates` : "All passing candidates"}. Order CSV gives the 21-mers to synthesise, 19 nt RNA cores plus dTdT; core CSV gives the cores alone. No off-target screening has been performed.`;
 }
 async function selectCandidate(id) {
   const run = state.result, candidate = run.candidates.find(c=>c.id===id);
@@ -556,6 +556,24 @@ function csvText(result) {
   const ids=state.checked, candidates=result.candidates.filter(c=>ids.size?ids.has(c.id):c.rank!==null);
   const rows=[["run_id","candidate","rank","target_dna_5to3","sense_rna_core_5to3","antisense_rna_core_5to3","predicted_guide","guide_model","preferences_met","preferences_evaluated","core_length_nt"],...candidates.map(c=>[result.app.run_id,c.id,c.rank,c.target_site_dna,c.sense_strand_rna,c.antisense_strand_rna,c.rating.guide,c.rating.guide_model,c.rating.met,c.rating.evaluated,c.target_site_dna.length])];
   return rows.map(row=>row.map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(",")).join("\r\n");
+}
+function orderCsvText(result) {
+  // Rows come from the Python record. Selection filters them by candidate id (column 2);
+  // nothing here derives a sequence, an overhang or a verdict.
+  const order=result.order, ids=state.checked;
+  if (!order || !order.rows?.length) throw new Error("This record carries no order-ready duplexes.");
+  const rows=ids.size?order.rows.filter(r=>ids.has(r[1])):order.rows;
+  if (!rows.length) throw new Error("None of the selected candidates passed the gates, so none can be ordered.");
+  return [order.columns,...rows].map(row=>row.map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(",")).join("\r\n");
+}
+async function exportOrder() {
+  try {
+    const r=state.result, name=`${r.gene?.symbol || "promoter"}-${r.app.run_id.slice(0,8)}-order.csv`;
+    if (frozen) { downloadBlob(new Blob([orderCsvText(r)],{type:"text/csv"}),name); return; }
+    const response=await fetch(`/api/runs/${r.app.run_id}/export.order.csv${state.checked.size?`?ids=${encodeURIComponent([...state.checked].join(","))}`:""}`);
+    if (!response.ok) throw new Error(`Export failed (${response.status})`);
+    downloadBlob(await response.blob(),name);
+  } catch(e) { error(e.message); }
 }
 async function exportRun(type) {
   try {
@@ -692,5 +710,6 @@ $("zoom-in").addEventListener("click",()=>viewport(.5));$("zoom-out").addEventLi
 $("candidate-detail").addEventListener("click",async e=>{const b=e.target.closest("[data-copy]");if(b){try{await navigator.clipboard.writeText(b.dataset.copy);b.textContent="Copied";}catch{error("Clipboard unavailable. Select and copy the displayed sequence.");}}});
 $("run-evidence").addEventListener("click",renderEvidence);
 for (const type of ["csv","json","html"]) $("export-"+type).addEventListener("click",()=>exportRun(type));
+$("export-order").addEventListener("click",exportOrder);
 document.addEventListener("pointermove",e=>tooltip(e.target,e));document.addEventListener("focusin",e=>tooltip(e.target));document.addEventListener("focusout",()=>{$("tooltip").hidden=true;});document.addEventListener("scroll",()=>{$("tooltip").hidden=true;},true);
 initialize();

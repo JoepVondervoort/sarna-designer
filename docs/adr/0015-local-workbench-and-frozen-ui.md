@@ -31,7 +31,10 @@ but preserve every explanation offline; SQLite compresses the underlying record.
 `sarna.view` CLI viewer remains for existing scripts/historical reports, not as another settings
 editor. Migrating its output later requires a separate compatibility review.
 
-CSV is explicitly a **core-sequence export**, not order-ready chemistry. A named model's RNA
+CSV is explicitly a **core-sequence export**, not order-ready chemistry. *Superseded in part by
+[ADR 0017](0017-order-ready-duplex-export.md), which adds a separate `export.order.csv` carrying
+the dTdT 21-mers; this file keeps its core-sequence meaning unchanged, but both exports are now
+written in rank order rather than position order.* A named model's RNA
 guide prediction is shown separately from other model predictions and genomic DNA strand.
 This does not predict the identity of a promoter-associated target RNA. Ratings count criteria,
 not activation probability.

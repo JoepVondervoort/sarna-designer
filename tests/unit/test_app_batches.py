@@ -11,6 +11,7 @@ from sarna.app.models import BatchRequest, DesignRequest
 from sarna.app.service import DesignService
 from sarna.app.store import RunStore
 from sarna.app.web import AppRouter
+from sarna.genome.ensembl import EnsemblClient
 from tests.unit.test_app import service_for
 from tests.unit.test_ensembl import (
     AUTO_SEQUENCE,
@@ -119,9 +120,9 @@ def test_partial_batch_retry_reuses_success_and_never_rewrites_previous_results(
     cache = tmp_path / "cache"
     routes = {GENE_ROUTE: GENE_PAYLOAD, TRANSCRIPTS_ROUTE: TRANSCRIPTS_PAYLOAD,
               "/sequence/region/": {"seq": AUTO_SEQUENCE}}
-    clients = []
+    clients: list[EnsemblClient] = []
 
-    def factory(offline: bool):
+    def factory(offline: bool) -> EnsemblClient:
         client = client_for(routes, cache_dir=cache, offline=offline)
         clients.append(client)
         return client

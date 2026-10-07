@@ -17,6 +17,12 @@ from pydantic import ValidationError
 from sarna import __version__, settings
 from sarna.app.models import BatchRequest, DesignRequest
 from sarna.app.service import DesignService
+from sarna.design.order import (
+    CSV_COLUMNS,
+    DEFAULT_MODEL,
+    csv_row,
+    order_from_record,
+)
 from sarna.design.presets import PRESETS
 from sarna.genome.ensembl import (
     EnsemblCacheMissError,
@@ -54,6 +60,34 @@ def frozen_page(data: dict[str, Any], snapshot: dict[str, Any] | None) -> bytes:
     page = page.replace('href="/favicon.svg"', f'href="data:image/svg+xml;base64,{icon}"')
     page = page.replace('<a class="brand" href="/"', '<a class="brand" href="#"')
     return page.encode()
+
+
+def _selected_for_export(
+    snapshot: dict[str, Any], query: dict[str, list[str]]
+) -> list[dict[str, Any]]:
+    """Return the candidates a CSV export should write, **in rank order**.
+
+    A snapshot's ``candidates`` are in *position* order carrying their ranks, which is what the
+    promoter map draws along and what the browser table sorts for itself. A CSV is neither: it is
+    a flat file read top-down and pasted into an order form, so leaving it in position order puts
+    rank 8 on the first line and makes "take the top three" select the wrong three molecules.
+
+    Explicitly selected ids are honoured as given, including rejected candidates, which have no
+    rank and sort last.
+
+    Raises:
+        ValueError: If an id does not belong to this run. Silently dropping it would hand back a
+            short file that looks complete.
+    """
+    ids = set(query.get("ids", [""])[0].split(",")) - {""}
+    selected = [c for c in snapshot["candidates"] if c["id"] in ids] if ids else [
+        c for c in snapshot["candidates"] if c["rank"] is not None
+    ]
+    if ids - {c["id"] for c in selected}:
+        raise ValueError("A selected candidate does not belong to this run.")
+    return sorted(
+        selected, key=lambda c: (c["rank"] is None, c["rank"] or 0, c["id"])
+    )
 
 
 def catalogue() -> dict[str, Any]:
@@ -216,12 +250,7 @@ class AppRouter:
             if len(parts) == 4 and parts[3] == "export.html":
                 return 200, "text/html; charset=utf-8", frozen_page({"result": snapshot}, snapshot)
             if len(parts) == 4 and parts[3] == "export.csv":
-                ids = set(query.get("ids", [""])[0].split(",")) - {""}
-                selected = [c for c in snapshot["candidates"] if c["id"] in ids] if ids else [
-                    c for c in snapshot["candidates"] if c["rank"] is not None
-                ]
-                if ids - {c["id"] for c in selected}:
-                    raise ValueError("A selected candidate does not belong to this run.")
+                selected = _selected_for_export(snapshot, query)
                 output = io.StringIO()
                 writer = csv.writer(output)
                 writer.writerow(["run_id", "candidate", "rank", "target_dna_5to3",
@@ -236,7 +265,30 @@ class AppRouter:
                                      rating["guide_model"], rating["met"], rating["evaluated"],
                                      len(candidate["target_site_dna"])])
                 return 200, "text/csv; charset=utf-8", output.getvalue().encode()
+            if len(parts) == 4 and parts[3] == "export.order.csv":
+                return self._order_csv(run_id, snapshot, query)
         return self._json(404, {"detail": "No such local app route."})
+
+    @staticmethod
+    def _order_csv(
+        run_id: str, snapshot: dict[str, Any], query: dict[str, list[str]]
+    ) -> tuple[int, str, bytes]:
+        """Write the order-ready duplexes: 19 nt RNA cores plus dTdT, with their sanity report.
+
+        Distinct from ``export.csv``, which is deliberately a core-sequence export and not order
+        chemistry (ADR 0015). Rejected candidates are never included by default: a duplex that
+        failed a gate is not something to order, and its rule verdicts remain the record of why.
+        """
+        selected = _selected_for_export(snapshot, query)
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(CSV_COLUMNS)
+        for candidate in selected:
+            # The model this run actually displayed, taken from the frozen record rather than
+            # today's default, so a reopened run reports the strand prediction it was read with.
+            model = (candidate.get("rating") or {}).get("guide_model") or DEFAULT_MODEL
+            writer.writerow(csv_row(order_from_record(candidate, model), run_id))
+        return 200, "text/csv; charset=utf-8", output.getvalue().encode()
 
     def _queue_batch(
         self, request: BatchRequest, reuse: dict[int, str] | None = None,

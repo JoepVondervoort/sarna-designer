@@ -6,10 +6,11 @@ traceability outranks clean code: every rule carries a citation, every verdict c
 **State:** gene symbol → promoter → ranked candidates → interactive page all work.
 `design_sarnas(promoter, config)` is the engine; `EnsemblClient` resolves a gene to a promoter;
 `sarna.regulatory` annotates it; `sarna.view.html.render` writes a self-contained browser.
-1,327 tests passed, eight live-network tests excluded; mypy strict and Ruff clean.
+1,383 tests passed, eight live-network tests excluded; mypy strict and Ruff clean.
 The earlier combined statement/branch coverage measurement was **97%**; socket/launcher paths
 are additionally
 exercised by separate browser checks, which are not part of that coverage measurement.
+`src/sarna/app/` sits at 82%, the remainder being `web.py`'s request handlers and `__main__.py`.
 
 **`src/sarna/app/` is now an exercised local workbench.** Gene lookup, adjustable supported
 rules, Python jobs, draft/rerun diff, SQLite snapshots and JSON/HTML/core-CSV exports work.
@@ -18,7 +19,10 @@ storage and exports. `scripts/verify_workbench_browser.py` uses a supplied Chrom
 pasted DNA and cached SCN1A checks passed, including saved reopening, tooltips, mobile layout
 and complete excluded-candidate verdicts in an offline HTML file. Desktop/mobile screenshots
 were inspected. Fresh-cache live Ensembl browser runs also passed for lowercase `chd2` and
-`kcnq2`, with 13 and 9 candidates passing Wang defaults. Cache-only mode is visible; missing
+`kcnq2`, with 13 and 9 candidates passing Wang defaults. Both checks were re-run at 15:40 on
+7 October and still pass; Chromium 1229 is installed at
+`~/.cache/ms-playwright/chromium-1229/chrome-linux64/chrome`, so this check is **not** manual —
+pass it to `--chrome`. Cache-only mode is visible; missing
 records offer an explicit online retry, while environment-forced offline remains enforced.
 Fresh Windows/macOS installations remain unverified.
 Read `docs/development/local-workbench.md` and ADR 0015. Earlier mid-session review observations
@@ -132,6 +136,9 @@ Read the ADR before reopening its question; each records the alternatives and wh
 | MANE Select or refuse to pick a transcript | 0012 |
 | Researcher-adjustable scientific rule roles and transparent custom configurations | 0013 |
 | Local delivery, tested installation paths and Wang as the default | 0014 |
+| Local Python jobs, and one UI for live and frozen results | 0015 |
+| Several promoter references per gene, each its own design context | 0016 |
+| The order-ready duplex: separate export, Python-computed, caveats in the row | 0017 |
 
 `docs/scientific/`:
 
@@ -206,10 +213,15 @@ Headline results:
   report `not-applicable` if the target is shorter. For a 21-mer, position 19 stops being the 3'
   terminal base and `pos19-a`'s mechanism no longer holds. Maximum is already 19; the library
   still supports 18 with explicit not-applicable results. Order export is fixed at 19 + dTdT.
-- **3' overhangs are not modelled.** Candidates carry 19 nt cores; what gets ordered is a 21-mer.
-  The chemistry question is *settled* — chapter 2's supplementary material shows **dTdT** on both
-  strands, not ribo-UU — so what remains is building the order-ready export, not deciding what it
-  should say. Largest gap before bench use.
+- **3' overhangs are modelled, and the order export exists.** `sarna.design.order` builds the two
+  21-mers — 19 nt RNA core plus `[dT][dT]` on both strands, per chapter 2's supplementary material —
+  and the workbench serves them at `GET /api/runs/{id}/export.order.csv`, in rank order, each row
+  carrying its own sanity report. [ADR 0017](docs/adr/0017-order-ready-duplex-export.md).
+  The ordered strand is deliberately **not** a `NucleicSequence`: a chimeric RNA/dT 21-mer fits
+  neither alphabet, so the core stays RNA and the overhang is a separate deoxy value.
+  What is still missing is the *screening*: every duplex reports `off-target-screening`
+  as `not-performed`, because no off-target analysis exists. Accepted constraint 15 wants those
+  findings here, so the order export is honest but not yet complete.
 - **Window alternatives and their costs.** As a gate at
   Wang's −1000…−100 it rejects 64% of candidates on a real promoter and 10 of the 14 known
   activators, including KLF4 at −45 and CEBPA (in human trials) at −1088. As a preference it would

@@ -165,6 +165,16 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     browser.evaluate("document.querySelector('#promoter-map [data-tip]').dispatchEvent("
                      "new FocusEvent('focusin',{bubbles:true}))")
     assert browser.evaluate("!document.getElementById('tooltip').hidden") is True
+    # The live order export goes to Python over HTTP. Fetch it the way the button does and read
+    # what a researcher would actually paste into a vendor form.
+    live_order = str(browser.evaluate(
+        f"fetch('/api/runs/{run_id}/export.order.csv').then(r=>r.text())"
+    ))
+    rows = [r for r in live_order.splitlines() if r.strip()]
+    assert "sense_order_5to3" in rows[0], rows[0]
+    assert len(rows) > 1, "the live order export returned no duplexes"
+    assert all("[dT][dT]" in row for row in rows[1:]), rows[1]
+    assert "off-target-screening [not-performed]" in rows[1]
     if screenshots:
         browser.screenshot(screenshots / "workbench.png")
     browser.evaluate(f"const history=document.getElementById('saved-runs');"
@@ -205,6 +215,17 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     browser.evaluate("document.getElementById('run-evidence').click()")
     assert browser.evaluate("document.getElementById('evidence-dialog').open") is True
     browser.evaluate("document.querySelector('#evidence-dialog .close-dialog').click()")
+    # The archive has no backend, so its order CSV must come from rows Python stored in the
+    # record. Building the text is the whole of what the button does offline.
+    order_csv = str(browser.evaluate("orderCsvText(state.result)"))
+    header, first = order_csv.splitlines()[0], order_csv.splitlines()[1]
+    assert "sense_order_5to3" in header, header
+    assert "[dT][dT]" in first, first
+    assert "off-target-screening [not-performed]" in first
+    assert browser.evaluate(
+        "state.result.order.rows.every(r=>r[4].endsWith('[dT][dT]')"
+        " && r[5].endsWith('[dT][dT]') && r[9]==='21')"
+    ) is True
     browser.call("Emulation.setDeviceMetricsOverride", width=390, height=844,
                  deviceScaleFactor=1, mobile=True)
     assert browser.evaluate("document.documentElement.scrollWidth<=innerWidth") is True

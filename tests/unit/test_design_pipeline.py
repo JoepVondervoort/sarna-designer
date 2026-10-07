@@ -13,6 +13,7 @@ from itertools import pairwise
 
 import pytest
 
+from sarna.design.config import DesignConfig
 from sarna.design.pipeline import design_sarnas
 from sarna.design.presets import LEGACY_SCANNER, WANG_2015
 from sarna.genome.coordinates import Assembly, GenomicInterval, Strand
@@ -21,6 +22,7 @@ from sarna.genome.tss import TssPosition
 from sarna.rules.catalog import CATALOGUE
 from sarna.rules.results import RuleOutcome
 from sarna.sequence.nucleic import NucleicSequence
+from sarna.thermo.guide import GuideStrand
 
 # A 300 bp synthetic promoter with varied composition, so a scan yields a mixed candidate set
 # rather than all-pass or all-fail.
@@ -415,6 +417,73 @@ class TestDeclaredParameterRangesAreReachable:
         assert parameter.minimum is not None
         assert parameter.maximum is not None
         assert float(parameter.minimum) <= float(parameter.default) <= float(parameter.maximum)
+
+
+class TestTheStrandPredictionHonoursTheConfiguredEndLength:
+    """The reported guide strand must be computed at the end length the run actually evaluates.
+
+    ``_compare`` once counted four terminal bases regardless of configuration. A run that
+    deliberately evaluated a different end length would then be shown the *opposite* strand from
+    the one its own asymmetry rule admitted the candidate on — a wrong duplex to order, reported
+    with full confidence and agreed on by every table.
+
+    ``ASYMMETRY_FLIP`` is the fixture that makes the difference observable: a 19-mer found by
+    enumerating random targets until one had all three tables agreeing on antisense at the
+    default four-base end and all three agreeing on sense at six. Both verdicts are unanimous, so
+    neither assertion rests on a near-tolerance tie.
+    """
+
+    # All three tables agree: antisense at end-length 4, sense at end-length 6.
+    ASYMMETRY_FLIP = "GGGTAATTTTGACAGGTCA"
+    BASES = (
+        "GCTTAACGGATTCAAGTTACCGATTACAGGCTAACGTTAGCCATTAAGCGTTACA"
+        + ASYMMETRY_FLIP
+        + "ATCGGTTACAGCTTAAGGCTATTACGGCATTAACGGTTACAGCTTAAGGCATTAA"
+    )
+    OFFSET = BASES.index(ASYMMETRY_FLIP)
+
+    def predictions(self, config: DesignConfig) -> frozenset[GuideStrand]:
+        """Return the strands predicted for the flipping candidate under ``config``."""
+        result = design_sarnas(
+            Promoter(sequence=NucleicSequence.parse(self.BASES)), config
+        )
+        candidate = next(c for c in result.generated if c.offset == self.OFFSET)
+        assert candidate.target.bases == self.ASYMMETRY_FLIP
+        return candidate.guide_comparison.predictions
+
+    def test_the_default_four_base_end_predicts_the_antisense_strand(self) -> None:
+        assert self.predictions(WANG_2015.resolve()) == {GuideStrand.ANTISENSE}
+
+    def test_a_configured_six_base_end_predicts_the_other_strand(self) -> None:
+        # Fails if the comparison hard-codes four: it would still answer antisense here.
+        config = WANG_2015.resolve({"thermodynamic-asymmetry": {"end-length-nt": 6}})
+        assert self.predictions(config) == {GuideStrand.SENSE}
+
+    def test_the_gate_decides_the_end_length_rather_than_the_tiebreak(self) -> None:
+        # Both rules declare end-length-nt. The gate admitted the candidate, so the strand
+        # reported beside it is the one that gate's end length implies.
+        config = WANG_2015.resolve({
+            "thermodynamic-asymmetry": {"end-length-nt": 4},
+            "asymmetry-margin": {"end-length-nt": 6},
+        })
+        assert self.predictions(config) == {GuideStrand.ANTISENSE}
+
+    def test_the_tiebreak_supplies_the_end_length_when_the_gate_is_disabled(self) -> None:
+        config = WANG_2015.resolve(
+            {"asymmetry-margin": {"end-length-nt": 6}},
+            role_overrides={"thermodynamic-asymmetry": None},
+        )
+        assert "thermodynamic-asymmetry" not in config
+        assert self.predictions(config) == {GuideStrand.SENSE}
+
+    def test_a_run_with_neither_asymmetry_rule_still_predicts_a_strand(self) -> None:
+        # Nothing configured an end length, so the documented default of four applies rather
+        # than the comparison failing or reporting nothing.
+        config = WANG_2015.resolve(role_overrides={
+            "thermodynamic-asymmetry": None, "asymmetry-margin": None,
+        })
+        assert "asymmetry-margin" not in config
+        assert self.predictions(config) == {GuideStrand.ANTISENSE}
 
 
 class TestEmptyRun:

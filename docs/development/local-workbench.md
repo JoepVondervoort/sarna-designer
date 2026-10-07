@@ -35,10 +35,20 @@ another `--port` and the matching URL.
 6. Change a setting and **Apply changes & design**. Saved results stay visible while edits are
    a draft. A fresh Python run reports admission and rank changes on the same promoter/reference.
    Both snapshots remain in **Saved runs**.
-7. Export **Core sequences CSV**, **JSON**, or **Offline HTML**. CSV contains RNA cores in
-   5′→3′ orientation, without dTdT overhangs or off-target screening; it is not order-ready.
-   HTML preserves complete candidate explanations and works without the server. Full records
-   can make HTML files large.
+7. Export **Order CSV · 21-mers**, **Core sequences CSV**, **JSON**, or **Offline HTML**.
+   - **Order CSV** is what you synthesise: both strands as 19 nt RNA cores plus a 3′ `[dT][dT]`
+     overhang, 21 nt each, in 5′→3′ orientation. Core, overhang and joined form are separate
+     columns, because vendor notation for a chimeric oligo differs between suppliers. Every row
+     carries its own sanity report, including that **no off-target screening was performed** —
+     this project implements none, so screen the sequences independently before ordering. Passing
+     candidates only, unless you select specific ones. See
+     [ADR 0017](../adr/0017-order-ready-duplex-export.md).
+   - **Core sequences CSV** is the engine's view: RNA cores alone, no overhangs. Deliberately not
+     order-ready.
+   - Both CSVs are written in **rank order**, so the first row is rank 1.
+   - **HTML** preserves complete candidate explanations and works without the server, including
+     the order download, whose rows Python stored in the record. Full records can make HTML files
+     large.
 
 ## Design against several promoters
 

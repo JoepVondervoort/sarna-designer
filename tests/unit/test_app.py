@@ -16,6 +16,7 @@ from sarna.app.service import DesignService
 from sarna.app.store import RunStore
 from sarna.app.web import AppRouter
 from sarna.genome.ensembl import EnsemblCacheMissError, EnsemblClient
+from tests.unit.test_design_pipeline import PROMOTER_BASES
 from tests.unit.test_ensembl import (
     AUTO_SEQUENCE,
     GENE_PAYLOAD,
@@ -318,6 +319,74 @@ def test_csv_exports_selected_core_sequences_even_for_rejected_candidates(tmp_pa
         assert rows[0]["antisense_rna_core_5to3"] == "UUGGAACUGAGAGUAGAGC"
         assert rows[0]["core_length_nt"] == "19"
         assert router.dispatch("GET", f"/api/runs/{run_id}/export.csv?ids=unknown")[0] == 422
+    finally:
+        router.close()
+
+
+def test_both_csv_exports_are_written_in_rank_order(tmp_path: Path):
+    # A snapshot's candidates are in *position* order carrying their ranks, which is right for
+    # the promoter map and for a table the browser sorts. A CSV is neither: it is a flat file a
+    # researcher reads top-down and pastes into an order form. Emitting rank 8 on the first row
+    # means "take the top three" orders the wrong three molecules.
+    service = service_for(tmp_path)
+    # This promoter ranks its survivors in the order 3, 4, 5, 2, 1 by position, so a CSV that
+    # follows the snapshot rather than the rank is visibly wrong. The default fixture has two
+    # passing candidates that are already in rank order and cannot show the difference.
+    saved = run_request(service, sequence=PROMOTER_BASES, tss_start=-200)
+    assert [c["rank"] for c in saved["candidates"] if c["rank"] is not None] != sorted(
+        c["rank"] for c in saved["candidates"] if c["rank"] is not None
+    ), "fixture no longer scrambles rank against position, so this test proves nothing"
+    router = AppRouter(service)
+    try:
+        run_id = saved["app"]["run_id"]
+        for route in ("export.csv", "export.order.csv"):
+            body = router.dispatch("GET", f"/api/runs/{run_id}/{route}")[2]
+            ranks = [int(r["rank"]) for r in csv.DictReader(io.StringIO(body.decode()))]
+            assert ranks, f"{route} exported no rows"
+            assert ranks == sorted(ranks), f"{route} is not in rank order: {ranks}"
+            assert ranks[0] == 1
+    finally:
+        router.close()
+
+
+def test_the_order_csv_writes_the_dtdt_duplex_and_its_caveats(tmp_path: Path):
+    # The order export is distinct from the core-sequence CSV: it carries the 21-mers that are
+    # actually synthesised, and the caveats travel in the same row as the sequences.
+    service = service_for(tmp_path)
+    saved = run_request(service, tss_start=-1500)
+    router = AppRouter(service)
+    try:
+        run_id = saved["app"]["run_id"]
+        status, media, body = router.dispatch(
+            "GET", f"/api/runs/{run_id}/export.order.csv?ids=saRNA-001"
+        )
+        assert (status, media) == (200, "text/csv; charset=utf-8")
+        rows = list(csv.DictReader(io.StringIO(body.decode())))
+        assert len(rows) == 1
+        assert rows[0]["sense_order_5to3"] == "GCUCUACUCUCAGUUCCAA[dT][dT]"
+        assert rows[0]["antisense_order_5to3"] == "UUGGAACUGAGAGUAGAGC[dT][dT]"
+        assert rows[0]["ordered_length_nt"] == "21"
+        assert rows[0]["core_length_nt"] == "19"
+        assert "off-target-screening [not-performed]" in rows[0]["sanity_report"]
+        assert router.dispatch("GET", f"/api/runs/{run_id}/export.order.csv?ids=unknown")[0] == 422
+    finally:
+        router.close()
+
+
+def test_the_record_carries_the_same_order_rows_the_route_serves(tmp_path: Path):
+    # The frozen archive has no backend, so the duplexes it hands over are the ones stored here
+    # by Python. If these two ever diverge, an archived run and a live run would name different
+    # molecules for the same candidate. JavaScript joins these strings; it never builds them.
+    service = service_for(tmp_path)
+    saved = run_request(service, sequence=PROMOTER_BASES, tss_start=-200)
+    router = AppRouter(service)
+    try:
+        run_id = saved["app"]["run_id"]
+        body = router.dispatch("GET", f"/api/runs/{run_id}/export.order.csv")[2]
+        served = list(csv.reader(io.StringIO(body.decode())))
+        assert served[0] == saved["order"]["columns"]
+        assert served[1:] == saved["order"]["rows"]
+        assert all(row[4].endswith("[dT][dT]") for row in saved["order"]["rows"])
     finally:
         router.close()
 
