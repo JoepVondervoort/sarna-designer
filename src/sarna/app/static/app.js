@@ -492,7 +492,13 @@ async function selectCandidate(id) {
 }
 function ruleVerdict(verdict,config) {
   const def = config.rules.find(r=>r.id===verdict.id);
-  return `<details class="verdict"><summary><span class="outcome ${verdict.outcome}">${verdict.outcome==="not-applicable"?"N/A":verdict.outcome.toUpperCase()}</span><span>${escapeHTML(def?.name || verdict.id)}</span><span class="muted">${roleName[verdict.kind]}</span><span class="why">why \u203a</span></summary><p>${escapeHTML(verdict.detail)}</p>${def?`<p class="source">${escapeHTML(def.provenance.display)} · ${escapeHTML(def.evidence_class)}</p><p><b>Why this rule:</b> ${escapeHTML(def.rationale)}</p><p><b>Changing it:</b> ${escapeHTML(def.consequence)}</p><p><b>Saved values:</b> ${def.parameters.map(p=>`${escapeHTML(p.name)} = ${escapeHTML(p.value)} (${escapeHTML(p.origin)})`).join("; ") || "No adjustable numeric parameters"}</p>`:""}</details>`;
+  // The group, which the engine has always carried and nothing displayed. Without it a rule
+  // named "Position 20 is A or T" sits in a candidate whose core is 19 nt long and reads as a
+  // contradiction; "3' flank A/U richness" says in three words that the position is outside
+  // the target.
+  const group = def?.group
+    ? `<span class="rule-group">${escapeHTML(def.group)}</span>` : "";
+  return `<details class="verdict"><summary><span class="outcome ${verdict.outcome}">${verdict.outcome==="not-applicable"?"N/A":verdict.outcome.toUpperCase()}</span><span>${escapeHTML(def?.name || verdict.id)}</span>${group}<span class="muted">${roleName[verdict.kind]}</span><span class="why">why \u203a</span></summary><p>${escapeHTML(verdict.detail)}</p>${def?`<p class="source">${escapeHTML(def.provenance.display)} · ${escapeHTML(def.evidence_class)}</p><p><b>Why this rule:</b> ${escapeHTML(def.rationale)}</p><p><b>Changing it:</b> ${escapeHTML(def.consequence)}</p><p><b>Saved values:</b> ${def.parameters.map(p=>`${escapeHTML(p.name)} = ${escapeHTML(p.value)} (${escapeHTML(p.origin)})`).join("; ") || "No adjustable numeric parameters"}</p>`:""}</details>`;
 }
 
 const REJECTION_COLOURS = ["#b4714a","#7a93c2","#6f9e7a","#b2608f","#8d8248"];

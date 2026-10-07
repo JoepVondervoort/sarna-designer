@@ -134,3 +134,8 @@ body.frozen .setup,body.frozen .intro-note,body.frozen .saved-label,body.frozen 
 .offtarget-actions>.hint{flex:1 1 100%;margin-top:0}
 @keyframes screen-pulse{0%,100%{opacity:.25}50%{opacity:1}}
 @media(prefers-reduced-motion:reduce){.screen-state.running:before{animation:none;opacity:.8}}
+
+/* A rule's group. "Position 20 is A or T" on a 19 nt core is only not a contradiction once you
+   know it is a flank position, and the engine has carried that word all along. */
+.rule-group{font-size:9px;letter-spacing:.3px;color:#5d6f72;background:#eef3f2;border-radius:4px;padding:3px 6px;white-space:nowrap}
+@media(max-width:760px){.rule-group{display:none}}

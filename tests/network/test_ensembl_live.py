@@ -15,8 +15,11 @@ retries. Failures here mean "check Ensembl", not "the engine is broken".
 
 import pytest
 
+from sarna.design.pipeline import DesignResult, design_sarnas
+from sarna.design.presets import WANG_2015
 from sarna.genome.coordinates import Strand
 from sarna.genome.ensembl import EnsemblClient, GeneNotFoundError
+from sarna.genome.promoter import Promoter
 
 pytestmark = pytest.mark.network
 
@@ -95,3 +98,88 @@ class TestLivePromoter:
         promoter = client.promoter_for(transcript, upstream_bp=500, downstream_bp=100)
         assert len(promoter.sequence) == 600
         assert set(promoter.sequence.bases) <= set("ACGT")
+
+
+class TestEveryDesignedTargetIsWhereItSaysItIs:
+    """The end-to-end coordinate check, against the reference rather than against ourselves.
+
+    Every other test in this project asks the engine to agree with the engine. This one takes a
+    finished design, reads the genomic interval the candidate reports, asks Ensembl separately
+    what sequence lives there, and requires it to be the target site — reverse-complemented
+    when the gene is on the minus strand.
+
+    It is the only test that can catch an off-by-one or an inverted strand in
+    ``Promoter.genomic_interval``, ``offset_of`` and ``span_of``, which CLAUDE.md names as
+    defect B1's home. A sign error there produces candidates that are internally consistent,
+    pass every rule, export cleanly, and point at the wrong piece of DNA — the exact failure
+    this project exists to prevent, and one no amount of recorded-payload testing would reveal.
+
+    SCN1A is deliberate: it is on the minus strand, so the flip is exercised rather than
+    skipped.
+    """
+
+    @staticmethod
+    def designs(client: EnsemblClient, symbol: str) -> tuple[Promoter, DesignResult]:
+        transcript = client.select_transcript(client.gene(symbol))
+        promoter = client.promoter_for(transcript, upstream_bp=2000, downstream_bp=500)
+        return promoter, design_sarnas(promoter, WANG_2015.resolve())
+
+    def test_a_minus_strand_gene_places_every_passing_candidate_correctly(
+        self, client: EnsemblClient
+    ) -> None:
+        promoter, result = self.designs(client, "SCN1A")
+        assert promoter.interval is not None
+        assert promoter.interval.strand is Strand.MINUS, "SCN1A must exercise the flip"
+        ranked = result.ranked
+        assert ranked, "no candidate passed, so nothing was verified"
+        for candidate in ranked:
+            interval = candidate.interval
+            assert interval is not None, f"{candidate.id} carries no genomic interval"
+            reference = client.sequence(interval)
+            # The reference genome holds the plus strand; the target site is read in the
+            # transcript's direction, so on the minus strand the two are reverse complements.
+            expected = (
+                reference.reverse_complement() if interval.strand is Strand.MINUS else reference
+            )
+            assert expected.bases == candidate.target.bases, (
+                f"{candidate.id} reports {interval.contig}:{interval.start}-"
+                f"{interval.end} on the {interval.strand} strand and the sequence "
+                f"{candidate.target.bases}, but GRCh38 holds {expected.bases} there"
+            )
+
+    def test_a_plus_strand_gene_places_its_candidates_correctly_too(
+        self, client: EnsemblClient
+    ) -> None:
+        # The flip must not be applied where it does not belong. CHD2 is on the plus strand.
+        promoter, result = self.designs(client, "CHD2")
+        assert promoter.interval is not None
+        assert promoter.interval.strand is Strand.PLUS, "CHD2 must exercise the unflipped path"
+        ranked = result.ranked
+        assert ranked, "no candidate passed, so nothing was verified"
+        for candidate in ranked[:10]:
+            assert candidate.interval is not None
+            assert client.sequence(candidate.interval).bases == candidate.target.bases
+
+    def test_the_tss_arithmetic_agrees_with_the_coordinates(
+        self, client: EnsemblClient
+    ) -> None:
+        """A candidate's stated distance from the TSS must match its actual coordinates.
+
+        Reported independently of each other: ``tss_span`` comes from offset arithmetic inside
+        the promoter, the interval from genomic arithmetic. They can disagree.
+        """
+        transcript = client.select_transcript(client.gene("SCN1A"))
+        _promoter, result = self.designs(client, "SCN1A")
+        tss = transcript.tss_coordinate
+        for candidate in result.ranked[:10]:
+            assert candidate.tss_span is not None
+            assert candidate.interval is not None
+            # Minus strand: upstream is toward higher coordinates, and the 5' end of the target
+            # is the interval's high end. There is no position zero, so -1 abuts +1.
+            start = candidate.tss_span[0].value
+            offset = -start if start < 0 else start - 1
+            assert candidate.interval.end - 1 == tss + offset, (
+                f"{candidate.id} says it starts at {start} relative to the TSS at "
+                f"{tss}, which is coordinate {tss + offset}, but its interval ends at "
+                f"{candidate.interval.end - 1}"
+            )
