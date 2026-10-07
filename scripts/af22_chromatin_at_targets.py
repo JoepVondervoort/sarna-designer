@@ -17,8 +17,8 @@ Written up in docs/scientific/af22-chromatin.md.
 """
 
 import sys
-from pathlib import Path
 
+from sarna import settings
 from sarna.genome.coordinates import Assembly, GenomicInterval, Strand
 from sarna.genome.ensembl import EnsemblClient, EnsemblError
 from sarna.regulatory.chromatin import (
@@ -28,7 +28,7 @@ from sarna.regulatory.chromatin import (
     open_af22_reader,
 )
 
-CACHE = Path(".cache/ensembl")
+CACHE = settings.cache_dir("ensembl")
 WINDOW_BP = 500
 """Half-width around the TSS. H3K4me3 peaks sharply there; a wider window dilutes it."""
 

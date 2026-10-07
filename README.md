@@ -221,6 +221,23 @@ To design against a real gene and open the result:
 The first run fetches from Ensembl and caches to `.cache/ensembl`; afterwards it works offline.
 The page carries its own data, so it can be mailed or committed beside a manuscript.
 
+### Configuration
+
+Everything is optional and `.env.example` documents all of it — a test asserts that file and the
+code name the same set of variables, so neither can drift from the other.
+
+| Variable | Effect |
+|---|---|
+| `SARNA_CONTACT_EMAIL` | Sent to Ensembl in the `User-Agent`, as their usage guidance asks. Unset sends the tool's name and purpose without an address; the placeholder in `.env.example` counts as unset. |
+| `SARNA_CACHE_DIR` | Cache root, default `.cache`. On WSL keep it off `/mnt/c`. |
+| `SARNA_OFFLINE` | Refuse every external lookup and serve only cached responses, so a recorded run cannot quietly re-fetch a changed annotation. A cache miss fails naming what was missing. |
+| `SARNA_ANCHORS` | Extra promoter anchors — a `.toml` file or a directory of them. |
+| `SARNA_CELL_LINES` | Extra cell lines, each declaring evidence along three axes. |
+| `SARNA_AF22_DIR` | Where the AF22 bigWigs live, default `~/af22_data`. Absence is normal; chromatin then reports unavailable. |
+
+The two registries load shipped entries first and refuse duplicate ids, so your files add to them
+and never silently replace a shipped entry.
+
 ## Licence
 
 **Undecided.** Default copyright applies — see [`LICENSE`](LICENSE).

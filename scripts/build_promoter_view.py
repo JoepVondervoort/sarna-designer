@@ -16,6 +16,7 @@ import json
 import sys
 from pathlib import Path
 
+from sarna import settings
 from sarna.design.pipeline import design_sarnas
 from sarna.design.presets import PRESETS, preset
 from sarna.genome.anchors import load_anchors
@@ -37,7 +38,7 @@ from sarna.view.promoter_view import (
     cell_panels_for,
 )
 
-CACHE = Path(".cache/ensembl")
+CACHE = settings.cache_dir("ensembl")
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -33,6 +33,7 @@ from typing import Any
 
 import httpx
 
+from sarna import settings
 from sarna.genome.anchors import DEFAULT_REGION_PADDING_BP as ANCHOR_REGION_PADDING_BP
 from sarna.genome.anchors import PromoterAnchor
 from sarna.genome.coordinates import Assembly, GenomicInterval, Strand
@@ -83,8 +84,9 @@ response means the cost is paid once per promoter rather than once per run.
 BACKOFF_SECONDS = 2.0
 """Base delay between retries, doubled each attempt: 2, 4, 8, 16, 32 seconds."""
 
-USER_AGENT = "sarna-designer/0.1 (https://github.com/; promoter-targeting saRNA design)"
-"""Sent on every request. Ensembl asks clients to identify themselves."""
+# The User-Agent is built per request from sarna.settings.user_agent(), so setting
+# SARNA_CONTACT_EMAIL extends Ensembl the courtesy their usage guidance asks for. It used to be a
+# module constant carrying a dangling "https://github.com/" and no address at all.
 
 
 class EnsemblError(RuntimeError):
@@ -203,7 +205,15 @@ class EnsemblClient:
         cache_dir: Where responses are stored, or ``None`` for no caching.
     """
 
-    __slots__ = ("_backoff", "_client", "_timeout", "assembly", "base_url", "cache_dir")
+    __slots__ = (
+        "_backoff",
+        "_client",
+        "_timeout",
+        "assembly",
+        "base_url",
+        "cache_dir",
+        "offline",
+    )
 
     def __init__(
         self,
@@ -212,6 +222,7 @@ class EnsemblClient:
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
         client: httpx.Client | None = None,
         backoff_seconds: float = BACKOFF_SECONDS,
+        offline: bool | None = None,
     ) -> None:
         """Build a client for one assembly.
 
@@ -222,10 +233,14 @@ class EnsemblClient:
             client: An ``httpx.Client`` to use instead of creating one, for testing.
             backoff_seconds: Base delay between retries, doubled each attempt. Zero in tests,
                 so a retry path can be exercised without waiting for it.
+            offline: Whether to refuse external lookups and serve only cached responses.
+                ``None`` takes the answer from :data:`sarna.settings.OFFLINE_VARIABLE`. Resolved
+                once here rather than per request, so one run cannot be half offline.
         """
         self.assembly = assembly
         self.base_url = HOSTS[assembly]
         self.cache_dir = cache_dir
+        self.offline = settings.is_offline() if offline is None else offline
         self._timeout = timeout
         self._client = client
         self._backoff = backoff_seconds
@@ -257,6 +272,8 @@ class EnsemblClient:
         if cached is not None and cached.exists():
             from_cache: JsonObject = json.loads(cached.read_text())
             return from_cache
+        if self.offline:
+            self._refuse_offline(path)
 
         url = f"{self.base_url}{path}"
         payload = self._get_with_retries(url, path)
@@ -270,7 +287,7 @@ class EnsemblClient:
 
     def _get_with_retries(self, url: str, path: str) -> JsonPayload:
         """Perform the request, retrying what is worth retrying."""
-        headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
+        headers = {"Accept": "application/json", "User-Agent": settings.user_agent()}
         last_problem = "no attempt was made"
         attempts = 0
         for attempt in range(MAX_ATTEMPTS):
@@ -347,12 +364,30 @@ class EnsemblClient:
         region = f"{interval.contig}:{interval.start + 1}-{interval.end}"
         return self._get_array(f"/overlap/region/homo_sapiens/{region}?feature={feature}")
 
+    def _refuse_offline(self, path: str) -> None:
+        """Raise rather than reach the network, naming what was missing.
+
+        Raises:
+            EnsemblUnavailableError: Always. Only called once a cache miss is established.
+        """
+        where = (
+            "no cache is configured, so nothing can be served"
+            if self.cache_dir is None
+            else f"it is not in the cache at {self.cache_dir}"
+        )
+        raise EnsemblUnavailableError(
+            f"{settings.OFFLINE_VARIABLE} is set, so {path} was not requested, and {where}. "
+            f"Either unset it to fetch, or run the query once online to populate the cache."
+        )
+
     def _get_array(self, path: str) -> JsonArray:
         """Fetch ``path``, which returns a JSON array rather than an object."""
         cached = self._cache_path(path)
         if cached is not None and cached.exists():
             from_cache: JsonArray = json.loads(cached.read_text())
             return from_cache
+        if self.offline:
+            self._refuse_offline(path)
         payload = self._get_with_retries(f"{self.base_url}{path}", path)
         if not isinstance(payload, list):
             raise EnsemblUnavailableError(

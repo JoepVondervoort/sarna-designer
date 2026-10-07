@@ -16,6 +16,7 @@ from typing import Any, ClassVar, cast
 import httpx
 import pytest
 
+from sarna import settings
 from sarna.genome.anchors import PromoterAnchor, ReferenceKind
 from sarna.genome.coordinates import Assembly, GenomicInterval, Strand
 from sarna.genome.ensembl import (
@@ -144,13 +145,16 @@ class FixedTransport:
 
 
 def client_for(
-    routes: Mapping[str, object], cache_dir: Path | None = None
+    routes: Mapping[str, object],
+    cache_dir: Path | None = None,
+    offline: bool | None = None,
 ) -> EnsemblClient:
     """Build a client backed by a stub, with retries made instant."""
     return EnsemblClient(
         client=StubTransport(routes),  # type: ignore[arg-type]
         backoff_seconds=0.0,
         cache_dir=cache_dir,
+        offline=offline,
     )
 
 
@@ -458,6 +462,73 @@ class TestCaching:
         client.gene("SCN1A")
         client.gene("SCN1A")
         assert len(requests_made(client)) == 2
+
+
+class TestOfflineMode:
+    """``SARNA_OFFLINE`` makes a recorded run reproducible by refusing to reach the network.
+
+    The point is not convenience. A design run that silently re-fetches can silently get a
+    different answer when Ensembl's annotation changes, and nothing in the output would say so.
+    Offline turns that into a loud failure naming what was missing.
+    """
+
+    def test_a_cached_response_is_served_without_a_request(self, tmp_path: Path) -> None:
+        warm = client_for(DEFAULT_ROUTES, cache_dir=tmp_path)
+        warm.gene("SCN1A")
+        offline = client_for(DEFAULT_ROUTES, cache_dir=tmp_path, offline=True)
+        assert offline.gene("SCN1A").symbol == "SCN1A"
+        assert requests_made(offline) == []
+
+    def test_a_cache_miss_refuses_rather_than_fetching(self, tmp_path: Path) -> None:
+        offline = client_for(DEFAULT_ROUTES, cache_dir=tmp_path, offline=True)
+        with pytest.raises(EnsemblUnavailableError, match="SARNA_OFFLINE"):
+            offline.gene("SCN1A")
+        assert requests_made(offline) == []
+
+    def test_the_refusal_names_what_was_missing(self, tmp_path: Path) -> None:
+        offline = client_for(DEFAULT_ROUTES, cache_dir=tmp_path, offline=True)
+        with pytest.raises(EnsemblUnavailableError, match="lookup/symbol"):
+            offline.gene("SCN1A")
+
+    def test_offline_without_a_cache_refuses_everything(self) -> None:
+        # No cache and no network is not a usable configuration, and saying so beats an
+        # empty result that looks like a gene with no transcripts.
+        offline = client_for(DEFAULT_ROUTES, offline=True)
+        with pytest.raises(EnsemblUnavailableError, match="no cache"):
+            offline.gene("SCN1A")
+
+    def test_the_environment_supplies_the_default(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(settings.OFFLINE_VARIABLE, "1")
+        client = client_for(DEFAULT_ROUTES, cache_dir=tmp_path)
+        with pytest.raises(EnsemblUnavailableError, match="SARNA_OFFLINE"):
+            client.gene("SCN1A")
+
+    def test_an_explicit_argument_overrides_the_environment(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A caller who says False means it, whatever the ambient environment says.
+        monkeypatch.setenv(settings.OFFLINE_VARIABLE, "1")
+        client = client_for(DEFAULT_ROUTES, cache_dir=tmp_path, offline=False)
+        assert client.gene("SCN1A").symbol == "SCN1A"
+
+    def test_the_mode_is_fixed_when_the_client_is_built(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Re-reading the variable mid-run would let one run be half offline.
+        client = client_for(DEFAULT_ROUTES, cache_dir=tmp_path)
+        monkeypatch.setenv(settings.OFFLINE_VARIABLE, "1")
+        assert client.gene("SCN1A").symbol == "SCN1A"
+
+    def test_array_endpoints_refuse_too(self, tmp_path: Path) -> None:
+        # Regulatory features and motifs come back as arrays through a separate fetch path.
+        # Guarding only the object path would leave annotation quietly reaching the network.
+        interval = GenomicInterval(Assembly.GRCH38, "2", 166_127_500, 166_129_000)
+        offline = client_for(DEFAULT_ROUTES, cache_dir=tmp_path, offline=True)
+        with pytest.raises(EnsemblUnavailableError, match=settings.OFFLINE_VARIABLE):
+            offline.overlap(interval, "regulatory")
+        assert requests_made(offline) == []
 
 
 class TestMissingRecordsVersusOutages:

@@ -12,13 +12,13 @@ Needs the network (Ensembl). Run with::
 Written up in docs/scientific/scn1a-design-coordinates.md.
 """
 
-from pathlib import Path
 
+from sarna import settings
 from sarna.genome.coordinates import GenomicInterval
 from sarna.genome.ensembl import EnsemblClient
 from sarna.validation.dataset import ValidationSequence, load_chapter4_dataset
 
-CACHE = Path(".cache/ensembl")
+CACHE = settings.cache_dir("ensembl")
 LOCUS_PADDING_BP = 25_000
 WANG_WINDOW = (-1000, -100)
 """The admission window from Wang et al. 2015 Table 1, as TSS-relative positions."""

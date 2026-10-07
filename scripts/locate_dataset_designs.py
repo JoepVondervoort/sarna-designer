@@ -22,6 +22,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from sarna import settings
 from sarna.genome.coordinates import Assembly, GenomicInterval, Strand
 from sarna.genome.ensembl import (
     EnsemblClient,
@@ -32,7 +33,7 @@ from sarna.genome.ensembl import (
 from sarna.sequence.nucleic import NucleicSequence
 from sarna.validation.dataset import ValidationSequence, load_chapter4_dataset
 
-CACHE = Path(".cache/ensembl")
+CACHE = settings.cache_dir("ensembl")
 OUTPUT = Path("src/sarna/validation/data/vondervoort_2026_chapter4_coordinates.csv")
 CONTEXT_FLANK_BP = 250
 """Genomic context stored either side of each target, in transcript orientation.
