@@ -117,6 +117,16 @@ class SearchParameters:
 
     scope: SearchScope
     database: str
+    organism: str = "txid9606[ORGN]"
+    """Restricts the search to human.
+
+    Not a refinement: ``refseq_rna`` and ``refseq_genomic`` span every species RefSeq holds, and
+    an unrestricted search of a 19-mer returns hundreds of alignments in plants, fish and frogs.
+    They are real alignments and entirely irrelevant — they swamp the measures and would make a
+    specific duplex look promiscuous. Measured on a live search before this was added: 500
+    alignments returned, 230 of them "near-perfect", none of them human.
+    """
+
     program: str = "blastn"
     task: str = "blastn-short"
     word_size: int = 7
@@ -129,6 +139,7 @@ class SearchParameters:
         return {
             "scope": self.scope,
             "database": self.database,
+            "organism": self.organism,
             "program": self.program,
             "task": self.task,
             "word_size": self.word_size,

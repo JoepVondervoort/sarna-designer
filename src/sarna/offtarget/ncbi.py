@@ -60,7 +60,13 @@ _RID = re.compile(r"^\s*RID\s*=\s*(\S+)", re.MULTILINE)
 _RTOE = re.compile(r"^\s*RTOE\s*=\s*(\d+)", re.MULTILINE)
 _STATUS = re.compile(r"^\s*Status\s*=\s*(\S+)", re.MULTILINE)
 _THERE_ARE_HITS = re.compile(r"^\s*ThereAreHits\s*=\s*(\S+)", re.MULTILINE)
-_DANGEROUS_XML = re.compile(rb"<!DOCTYPE|<!ENTITY", re.IGNORECASE)
+_ENTITY_DECLARATION = re.compile(rb"<!ENTITY", re.IGNORECASE)
+"""The actual attack vector, and the only one worth refusing.
+
+NCBI's real replies open with a ``<!DOCTYPE BlastOutput PUBLIC ... NCBI_BlastOutput.dtd>``, so
+refusing every DOCTYPE — as an earlier version of this guard did — rejects every genuine report.
+What makes "billion laughs" and quadratic blowup possible is an *internal entity declaration*;
+``xml.etree`` never fetches an external DTD, so a bare DOCTYPE expands nothing."""
 
 
 class BlastError(RuntimeError):
@@ -153,7 +159,7 @@ class BlastClient:
             ValueError: If the scope or the sequences are unusable.
         """
         parameters = parameters_for(scope)
-        payload = {
+        payload: dict[str, str] = {
             "CMD": "Put",
             "PROGRAM": parameters.program,
             "DATABASE": parameters.database,
@@ -166,6 +172,10 @@ class BlastClient:
             "HITLIST_SIZE": str(parameters.max_hits),
             "QUERY": as_fasta(sequences),
         }
+        if parameters.organism:
+            # This project designs against the human genome only, so a hit in another species
+            # is noise that would swamp every measure.
+            payload["ENTREZ_QUERY"] = parameters.organism
         text = self._request(payload)
         rid = _RID.search(text)
         if rid is None:
@@ -260,7 +270,8 @@ def parse_hits(raw: bytes, max_hits: int = 500) -> tuple[OffTargetHit, ...]:
     """Parse BLAST XML into hits, attributing each to the candidate that produced it.
 
     Args:
-        raw: The XML body, treated as untrusted input.
+        raw: The XML body, treated as untrusted input. A DOCTYPE is accepted — every
+            genuine NCBI report has one — but an entity declaration is not.
         max_hits: Stop after this many alignments, so one pathological query cannot produce an
             unbounded result.
 
@@ -269,12 +280,13 @@ def parse_hits(raw: bytes, max_hits: int = 500) -> tuple[OffTargetHit, ...]:
         places the duplex could bind.
 
     Raises:
-        BlastError: If the document declares a DTD or entities, or is not parseable. `xml.etree`
-            expands entities, so a crafted reply could otherwise exhaust memory.
+        BlastError: If the document declares entities, or is not parseable. `xml.etree`
+            expands internal entities, so a crafted reply could otherwise exhaust memory.
     """
-    if _DANGEROUS_XML.search(raw[:4096]):
+    if _ENTITY_DECLARATION.search(raw):
         raise BlastError(
-            "the BLAST reply declares a DTD or entities, which this client refuses to parse"
+            "the BLAST reply declares XML entities, which this client refuses to parse because "
+            "expanding them can exhaust memory"
         )
     try:
         root = ElementTree.fromstring(raw)

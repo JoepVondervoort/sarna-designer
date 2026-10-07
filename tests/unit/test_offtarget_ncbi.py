@@ -141,6 +141,10 @@ class TestWhatIsSent:
         assert float(sent["EXPECT"]) >= 1000
         # Low-complexity filtering would mask much of a 19-mer.
         assert sent["FILTER"] == "F"
+        # Human only. Measured before this was added: a live search of one 19-mer returned 500
+        # alignments, 230 of them "near-perfect", in sawfish, plants, grasses and frogs. Real
+        # alignments, entirely irrelevant, and enough to swamp every specificity measure.
+        assert sent["ENTREZ_QUERY"] == "txid9606[ORGN]"
 
     def test_the_two_scopes_search_different_databases(self) -> None:
         assert parameters_for(TRANSCRIPT_SCOPE).database == "refseq_rna"
@@ -271,10 +275,21 @@ class TestParsingTheReport:
         assert len(parse_hits(REPORT, max_hits=1)) == 1
 
     def test_a_document_declaring_entities_is_refused(self) -> None:
-        # xml.etree expands entities, so a crafted reply could exhaust memory.
+        # xml.etree expands internal entities, so a crafted reply could exhaust memory.
         bomb = b'<?xml version="1.0"?><!DOCTYPE x [<!ENTITY a "aaaa">]><BlastOutput/>'
-        with pytest.raises(BlastError, match="DTD or entities"):
+        with pytest.raises(BlastError, match="entities"):
             parse_hits(bomb)
+
+    def test_ncbis_own_doctype_is_accepted(self) -> None:
+        # Every genuine reply opens with one. An earlier guard refused all DOCTYPEs and so
+        # rejected every real NCBI report -- found only by running a live search.
+        real = REPORT.replace(
+            b'<?xml version="1.0"?>',
+            b'<?xml version="1.0"?>\n<!DOCTYPE BlastOutput PUBLIC '
+            b'"-//NCBI//NCBI BlastOutput/EN" '
+            b'"http://www.ncbi.nlm.nih.gov/dtd/NCBI_BlastOutput.dtd">',
+        )
+        assert len(parse_hits(real)) == 2
 
     def test_unparseable_xml_is_an_error_rather_than_an_empty_result(self) -> None:
         with pytest.raises(BlastError, match="could not parse"):

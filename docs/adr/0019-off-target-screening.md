@@ -84,6 +84,31 @@ an experiment, while the genomic scope depends on Ensembl annotation being reach
 hit. The constraint's intent — that the saRNA-specific promoter risk not be ignored — is met;
 its ordering is not. Recorded here rather than quietly departed from.
 
+## What a live search changed
+
+Two defects survived a green suite and a stub-backed browser test, and were found only by
+running one real search against NCBI. Both are the kind this project keeps warning about: they
+fail quietly, in the reassuring direction.
+
+**The XML guard rejected every genuine reply.** It refused any document declaring a DTD, and
+every real NCBI report opens with `<!DOCTYPE BlastOutput PUBLIC ... NCBI_BlastOutput.dtd>`. The
+guard now refuses `<!ENTITY` only, which is the actual billion-laughs vector; `xml.etree` never
+fetches an external DTD, so a bare DOCTYPE expands nothing. A test now parses a report carrying
+NCBI's real doctype.
+
+**The search was not restricted to human.** `refseq_rna` and `refseq_genomic` span every species
+RefSeq holds. One 19-mer returned **500 alignments, 230 of them "near-perfect"** — in a sawfish,
+a plant, a grass and a frog. Every one a real alignment, every one irrelevant, and together
+enough to make a perfectly specific duplex look promiscuous. Searches now send
+`ENTREZ_QUERY=txid9606[ORGN]`, recorded as a declared parameter so the restriction is visible in
+the screening record rather than buried in a request.
+
+**Live searches are slow.** The first completed somewhere between 7 and 15 minutes; a second, at
+a stricter `EXPECT`, had not finished after 4. The bottleneck is NCBI's queue rather than the
+parameters. This vindicates the asynchronous design — a researcher reads their candidates while
+it runs — and the 30-minute ceiling is set accordingly. It also means screening is not something
+to run casually, which is another reason it is a button rather than part of every design.
+
 ## Costs and limits
 
 Screening needs internet; the designs do not, and a failed screening leaves the run untouched.
