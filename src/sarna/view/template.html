@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>__VIEW_TITLE__</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@500;600&display=swap">
@@ -191,6 +192,23 @@ dl.kv dd { margin: 0; overflow-wrap: anywhere; }
 .rule-row:last-child { border-bottom: 0; }
 .rule-row .what { font-weight: 500; }
 .rule-row .why { color: var(--ink-soft); font-size: 0.76rem; }
+.rule-row .src { color: var(--ink-soft); font-size: 0.72rem; margin-top: 3px; font-style: italic; }
+.rule-row details { margin-top: 5px; }
+.rule-row summary { cursor: pointer; font-size: 0.72rem; color: var(--ink-soft); }
+.rule-row summary:hover { color: var(--ink); }
+.rule-row details > p { font-size: 0.76rem; color: var(--ink-soft); }
+.rule-row details > p b { color: var(--ink); }
+.tag {
+  display: inline-block; font-size: 0.64rem; letter-spacing: 0.04em; text-transform: uppercase;
+  padding: 0 4px; border: 1px solid currentColor; border-radius: 3px; vertical-align: 1px;
+  color: var(--ink-soft); font-weight: 400;
+}
+.tag.established { color: var(--pass); }
+.tag.exploratory { color: var(--warn); }
+.tag.unsourced { color: var(--fail); }
+.measure { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 10px; margin: 5px 0 0; }
+.measure dt { color: var(--ink-soft); font-size: 0.74rem; font-family: var(--font-mono); }
+.measure dd { margin: 0; font-size: 0.74rem; font-variant-numeric: tabular-nums; }
 .bar { height: 9px; background: var(--band-strong); border-radius: 2px; overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--fail); }
 .empty { color: var(--ink-soft); font-size: 0.82rem; }
@@ -254,7 +272,9 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
     if (p.assembly) facts.push(["Assembly", p.assembly]);
     facts.push(["Promoter", `${p.length.toLocaleString()} bp, ${p.gc_percent}% GC`]);
     if (t) facts.push(["Transcript", `${t.ensembl_id}${t.refseq_match ? " / " + t.refseq_match : ""}${t.is_mane_select ? " (MANE Select)" : ""}`]);
-    facts.push(["Rules", c.preset.name || c.preset.id || "custom"]);
+    const presetLabel = c.preset.name || c.preset.id;
+    facts.push(["Rules", c.is_custom && presetLabel
+      ? `Custom, based on ${presetLabel}` : presetLabel || "custom"]);
 
     let html = `<header class="top">
       <div class="locus">
@@ -299,8 +319,39 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
     </div>`;
   }
 
+  /* ---------------- the rules this run applied ----------------
+     Rule records appear once in the configuration and each candidate's results reference them by
+     id, so everything that explains a verdict — the citation, the evidence class, the reasoning,
+     every threshold with its unit and legal range, and the options not chosen — is one lookup
+     away rather than repeated on every result. */
+  const RULES = Object.fromEntries((DATA.configuration.rules || []).map((r) => [r.id, r]));
+
+  function parameterOf(ruleId, name) {
+    const rule = RULES[ruleId];
+    if (!rule) return null;
+    return (rule.parameters || []).find((p) => p.name === name) || null;
+  }
+
+  function valueOf(ruleId, name) {
+    const p = parameterOf(ruleId, name);
+    return p == null ? null : p.value;
+  }
+
+  /* Read from the configuration that produced these candidates, never assumed. These bounds used
+     to be hardcoded to Wang's -1000..-100, so a run using the thesis's -2000..0 option or the
+     strict preset's -500..-200 drew a band contradicting its own rules — and captioned it as
+     "the window the rules admit". A rule the run did not apply yields null and draws nothing. */
+  function windowOf(ruleId, startName, endName) {
+    const start = valueOf(ruleId, startName), end = valueOf(ruleId, endName);
+    return start == null || end == null ? null : [start, end];
+  }
+
+  const ADMITTED = windowOf("tss-window", "window-start-bp", "window-end-bp");
+  const PREFERRED = windowOf(
+    "tss-preferred-window", "preferred-window-start-bp", "preferred-window-end-bp");
+  const ADMITTED_KIND = (RULES["tss-window"] || {}).kind || null;
+
   /* ---------------- track browser ---------------- */
-  const WANG = [-1000, -100], PREFERRED = [-500, -200];
 
   function offsetOfTss(target) {
     if (tssStart == null) return null;
@@ -319,8 +370,26 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
       </div>
     </div>
     <p class="hint">Drag to pan, scroll or pinch to zoom, click a candidate to inspect it.
-    Shaded bands mark the window the rules admit (${signed(WANG[0])} to ${signed(WANG[1])}) and the
-    region the paper reports activity in (${signed(PREFERRED[0])} to ${signed(PREFERRED[1])}).</p>`;
+    ${bandCaption()}</p>`;
+  }
+
+  /* Describes only the bands actually drawn, in the terms the configuration actually used. A
+     window applied as a preference is not "the window the rules admit", so it does not say so. */
+  function bandCaption() {
+    const parts = [];
+    if (ADMITTED) {
+      const verb = ADMITTED_KIND === "mandatory"
+        ? "the window the rules admit"
+        : "the window the rules prefer, applied as a preference rather than a gate";
+      parts.push(`${verb} (${signed(ADMITTED[0])} to ${signed(ADMITTED[1])})`);
+    }
+    if (PREFERRED) {
+      parts.push(`the region the paper reports activity in (${signed(PREFERRED[0])} to ${signed(PREFERRED[1])})`);
+    }
+    if (!parts.length) {
+      return `No position rule was applied in this run, so no window is marked.`;
+    }
+    return `Shaded bands mark ${parts.join(" and ")}.`;
   }
 
   function pxPerBase(width) { return width / (state.view[1] - state.view[0]); }
@@ -343,8 +412,9 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
   function drawContext(width) {
     const t = document.getElementById("t-context");
     let html = "";
-    const bands = [[WANG, "var(--band)"], [PREFERRED, "var(--band-strong)"]];
+    const bands = [[ADMITTED, "var(--band)"], [PREFERRED, "var(--band-strong)"]];
     for (const [range, colour] of bands) {
+      if (range == null) continue;
       const a = offsetOfTss(range[0]), b = offsetOfTss(range[1]);
       if (a == null) continue;
       const left = xOf(Math.min(a, b), width), right = xOf(Math.max(a, b), width);
@@ -442,7 +512,7 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
     g.beginPath(); g.moveTo(0, base + 0.5); g.lineTo(width, base + 0.5); g.stroke();
 
     const items = candidatesInView();
-    const max = DATA.candidates.length ? (DATA.candidates[0].max_preference_points || 7) : 7;
+    const max = DATA.candidates.length ? (DATA.candidates[0].max_preference_points ?? 0) : 0;
     for (const c of items) {
       const x = xOf(c.offset, width);
       const w = Math.max(1, 19 * pxPerBase(width));
@@ -489,7 +559,7 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
     const rows = ranked.slice(0, 400).map((c) => {
       const rejected = (c.excluded_by || []).length > 0;
       const span = c.tss_span ? `${signed(c.tss_span[0])} to ${signed(c.tss_span[1])}` : "—";
-      const max = c.max_preference_points || 7;
+      const max = c.max_preference_points ?? 0;
       const meter = Array.from({ length: max }, (_, i) =>
         `<i class="${i < c.preference_points ? "on" : ""}"></i>`).join("");
       return `<tr data-id="${esc(c.id)}" aria-selected="${state.selected === c.id}">
@@ -499,7 +569,9 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
         <td class="n num">${c.gc_percent}</td>
         <td>${rejected
           ? `<span class="pill fail">rejected</span>`
-          : `<span class="meter" title="${c.preference_points} of ${max} preferences">${meter}</span>`}</td>
+          : max
+            ? `<span class="meter" title="${c.preference_points} of ${max} preferences">${meter}</span>`
+            : `<span class="hint">no preferences applied</span>`}</td>
       </tr>`;
     }).join("");
     const shown = Math.min(400, ranked.length);
@@ -518,6 +590,171 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
   }
 
   /* ---------------- detail ---------------- */
+  /* ---------------- joining a verdict to the rule behind it ----------------
+     The page used to show a kebab id, a verdict pill and a sentence, while the data carried the
+     rule's name, its citation, its evidence class, the reasoning for it, every threshold with its
+     unit and legal range, and the alternatives not chosen. The footer claimed otherwise. */
+
+  const EVIDENCE_NOTE = {
+    established: "Supported by primary literature beyond this project's source paper.",
+    empirical: "Observed or asserted by the source, without a mechanistic account.",
+    exploratory: "Speculative. Carried for traceability, not because it is believed.",
+  };
+
+  function evidenceTag(rule) {
+    if (!rule) return "";
+    const warn = rule.provenance && rule.provenance.is_warning;
+    const label = warn ? "unsourced" : (rule.evidence_class || "");
+    if (!label) return "";
+    const title = warn
+      ? "No source could be traced for this rule. It must not be read as established biology."
+      : (EVIDENCE_NOTE[rule.evidence_class] || "");
+    return `<span class="tag ${esc(label)}" title="${esc(title)}">${esc(label)}</span>`;
+  }
+
+  function citationLine(rule) {
+    if (!rule || !rule.provenance) return "";
+    const p = rule.provenance;
+    const text = p.kind === "unsourced" ? "No source traced. " + (p.note || "") : p.display;
+    return `<div class="src">${esc(text || "")}</div>`;
+  }
+
+  function parameterValue(rule, name) {
+    const p = (rule.parameters || []).find((x) => x.name === name);
+    return p === undefined ? null : p.value;
+  }
+
+  function thresholdRows(rule) {
+    if (!rule || !(rule.parameters || []).length) return "";
+    const rows = rule.parameters.map((p) => {
+      const unit = p.unit ? " " + p.unit : "";
+      const range = (p.minimum != null && p.maximum != null)
+        ? `, within a permitted ${p.minimum} to ${p.maximum}` : "";
+      const diverged = p.is_default === false ? `, where the default is ${p.default}` : "";
+      return `<dt>${esc(p.name)}</dt><dd>${esc(String(p.value))}${esc(unit)}${esc(range)}${esc(diverged)}
+        <div class="hint" style="margin:1px 0 0">${esc(p.description)}</div></dd>`;
+    }).join("");
+    return `<dl class="measure">${rows}</dl>`;
+  }
+
+  function measurementRows(result) {
+    const measured = result.measurements || {};
+    const keys = Object.keys(measured);
+    if (!keys.length) return "";
+    const rows = keys.map((k) =>
+      `<dt>${esc(k)}</dt><dd>${esc(String(measured[k]))}</dd>`).join("");
+    return `<dl class="measure">${rows}</dl>`;
+  }
+
+  /* A matching value is distinct from a deliberate sourced choice. Manual overrides can also
+     change a selected option; preserve both its provenance and the effective values. */
+  function optionList(rule) {
+    if (!rule || !(rule.options || []).length) return "";
+    const rows = rule.options.map((o) => {
+      const matches = Object.keys(o.values).every((k) => parameterValue(rule, k) === o.values[k]);
+      const selected = rule.selected_option && rule.selected_option.id === o.id;
+      const label = selected ? (matches ? "selected" : "selected, then adjusted")
+        : matches ? "values match" : "not used";
+      return `<div class="rule-row" style="border-bottom:0;padding:5px 0">
+        <div><span class="pill ${selected || matches ? "pass" : "na"}">${label}</span></div>
+        <div><div class="what">${esc(o.label)}</div>
+          <div class="why">${esc(o.note)}</div>
+          <div class="src">${esc(o.provenance.display)}</div></div></div>`;
+    }).join("");
+    return `<p style="margin:8px 0 2px"><b>Alternatives.</b> Other sourced settings for this
+      rule, and what each costs.</p>${rows}`;
+  }
+
+  function ruleVerdict(result) {
+    const rule = RULES[result.id];
+    const cls = result.outcome === "pass" ? "pass" : result.outcome === "fail" ? "fail" : "na";
+    const label = result.outcome === "not-applicable" ? "n/a" : result.outcome;
+    const measured = measurementRows(result);
+    const thresholds = thresholdRows(rule);
+    const reasoning = rule
+      ? `<p style="margin:6px 0 0"><b>Why it matters.</b> ${esc(rule.rationale)}</p>
+         <p style="margin:6px 0 0"><b>Changing it.</b> ${esc(rule.consequence)}</p>`
+      : "";
+    const inner = reasoning
+      + (measured ? `<p style="margin:8px 0 2px"><b>Measured here.</b></p>${measured}` : "")
+      + (thresholds ? `<p style="margin:8px 0 2px"><b>Judged against.</b></p>${thresholds}` : "")
+      + optionList(rule);
+    return `<div class="rule-row">
+      <div><span class="pill ${cls}">${esc(label)}</span></div>
+      <div>
+        <div class="what">${esc(rule ? rule.name : result.id)} ${evidenceTag(rule)}${
+          result.points ? ` <span class="hint" style="margin:0">· 1 point</span>` : ""}</div>
+        <div class="why">${esc(result.detail)}</div>
+        <div class="src mono" style="font-style:normal;font-size:.7rem">${esc(result.id)}</div>
+        ${citationLine(rule)}
+        ${inner ? `<details><summary>Reasoning, measurements and thresholds</summary>${inner}</details>` : ""}
+      </div></div>`;
+  }
+
+  /* ---------------- the run's own configuration ----------------
+     ADR 0003 promised a settings panel and there was none, so a reader could not see what the run
+     applied without selecting a candidate first. */
+  function rulesPanel() {
+    const entries = DATA.configuration.rules || [];
+    const disabled = DATA.configuration.disabled_rules || [];
+    if (!entries.length && !disabled.length) return "";
+    const byKind = {};
+    for (const r of entries) (byKind[r.kind] = byKind[r.kind] || []).push(r);
+    byKind.off = disabled;
+    const roleNote = (r) => r.kind === "off"
+      ? `<p class="hint">Disabled for this run. No verdict, exclusion or preference point.</p>`
+      : r.kind_overridden
+        ? `<p class="hint">Catalogue role: ${esc(r.default_kind)}. This run: ${esc(r.kind)}.</p>`
+        : "";
+    const changes = DATA.configuration.customizations || [];
+    const customNote = DATA.configuration.is_custom
+      ? `<div class="notice"><b>Custom configuration.</b> Settings are research choices;
+          candidate ranks do not establish activation efficacy.
+          ${changes.length ? `<ul>${changes.map((change) => `<li>${esc(change.rule_id)}:
+            ${esc(change.setting)}, ${esc(String(change.before))} →
+            ${esc(String(change.after))}</li>`).join("")}</ul>` : ""}</div>` : "";
+    const warnings = (DATA.configuration.warnings || []).map((warning) =>
+      `<div class="notice">${esc(warning)}</div>`).join("");
+    const section = (kind, title, blurb) => {
+      const rules = byKind[kind] || [];
+      if (!rules.length) return "";
+      return `<h3 style="margin-top:16px">${esc(title)}
+          <span class="hint" style="margin:0">· ${rules.length}</span></h3>
+        <p class="hint" style="margin-top:2px">${esc(blurb)}</p>`
+        + rules.map((r) => `<div class="rule-row">
+            <div>${evidenceTag(r)}</div>
+            <div><div class="what">${esc(r.name)}</div>
+              <div class="why">${esc(r.rationale)}</div>
+              ${roleNote(r)}
+              ${citationLine(r)}
+              <details><summary>Thresholds, consequences and alternatives</summary>
+                <p style="margin:6px 0 0"><b>Changing it.</b> ${esc(r.consequence)}</p>
+                ${thresholdRows(r)}${optionList(r)}</details>
+            </div></div>`).join("");
+    };
+    const warned = entries.filter((r) => r.provenance && r.provenance.is_warning);
+    const plural = warned.length > 1;
+    return `<section class="card"><header><h2>Rules and their sources</h2>
+      <span class="eyebrow">${entries.length} applied</span></header>
+      <div class="body scroll">
+      ${customNote}
+      ${warnings}
+      ${warned.length ? `<div class="notice" style="border-color:var(--fail)">
+        <b>${warned.length} rule${plural ? "s" : ""} with no traceable source.</b>
+        <div style="margin-top:4px">${warned.map((r) => esc(r.name)).join(", ")}. Carried so
+        historical rankings stay explainable, not because ${plural ? "they are" : "it is"}
+        believed. Do not read ${plural ? "them" : "it"} as established biology.</div></div>` : ""}
+      ${section("mandatory", "Gates", "A candidate failing any of these is excluded outright.")}
+      ${section("preference", "Preferences",
+        "One point each, equal weight. Never a weighted sum, which is what made the original "
+        + "score uninterpretable (ADR 0006).")}
+      ${section("tiebreak", "Tie-breaks",
+        "Used only to order candidates that met the same number of preferences.")}
+      ${section("off", "Disabled rules",
+        "These criteria were explicitly switched off and were not evaluated.")}
+      </div></section>`;
+  }
+
   function detail() {
     const c = DATA.candidates.find((x) => x.id === state.selected);
     if (!c) {
@@ -527,12 +764,14 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
         the guide strand.</p></div></section>`;
     }
     const rejected = (c.excluded_by || []).length > 0;
-    const max = c.max_preference_points || 7;
+    const max = c.max_preference_points ?? 0;
     let body = `<dl class="kv">
       <dt>Position</dt><dd>${c.tss_span ? esc(signed(c.tss_span[0]) + " to " + signed(c.tss_span[1]) + " relative to the TSS") : "no TSS anchor"}
         ${c.genomic ? `<br><span class="mono" style="font-size:.76rem">chr${esc(c.genomic.contig)}:${c.genomic.start.toLocaleString()}–${c.genomic.end.toLocaleString()} (${esc(c.genomic.strand)})</span>` : ""}</dd>
       <dt>GC content</dt><dd class="num">${c.gc_percent}%</dd>
-      <dt>Score</dt><dd>${esc(c.score_summary || (c.preference_points + " of " + max))}</dd>
+      <dt>Score</dt><dd>${esc(c.score_summary
+        || (max ? c.preference_points + " of " + max + " preferences met"
+                : "no preferences were applied in this run"))}</dd>
     </dl>`;
 
     if (rejected) {
@@ -560,15 +799,10 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
     }
 
     if (c.rules && c.rules.length) {
-      body += `<h3 style="margin-top:16px">Every rule applied</h3>`;
-      body += c.rules.map((r) => {
-        const cls = r.outcome === "pass" ? "pass" : r.outcome === "fail" ? "fail" : "na";
-        const label = r.outcome === "not-applicable" ? "n/a" : r.outcome;
-        return `<div class="rule-row">
-          <div><span class="pill ${cls}">${esc(label)}</span></div>
-          <div><div class="what mono" style="font-size:.76rem">${esc(r.id)}${r.points ? " · 1 point" : ""}</div>
-          <div class="why">${esc(r.detail)}</div></div></div>`;
-      }).join("");
+      body += `<h3 style="margin-top:16px">Every rule applied</h3>
+        <p class="hint" style="margin-top:2px">Each verdict carries the source it rests on. Open a
+        row for the reasoning, the thresholds it was judged against and what changing them does.</p>`;
+      body += c.rules.map((r) => ruleVerdict(r)).join("");
     } else {
       body += `<p class="hint" style="margin-top:14px">Per-rule measurements were abbreviated for
         rejected candidates in this export. The rules that excluded it are listed above.</p>`;
@@ -706,9 +940,11 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
   function footer() {
     const caveat = DATA.regulatory_summary;
     return `<footer class="src">
-      <p><b>Provenance.</b> Every rule in this run carries its citation and evidence class; the
-      resolved configuration is embedded in this page's data rather than named by preset, because a
-      preset's meaning can change between versions.</p>
+      <p><b>Provenance.</b> Every rule above carries its citation and evidence class, the reasoning
+      behind it, the thresholds it was judged against with their units and legal ranges, and the
+      sourced alternatives not chosen — see <i>Rules and their sources</i>, or open any verdict.
+      The resolved configuration is embedded in this page's data rather than named by preset,
+      because a preset's meaning can change between versions.</p>
       ${caveat ? `<p><b>Regulatory annotation.</b> ${esc(caveat.provenance)}. ${esc(caveat.summary)}
         ${caveat.caveat ? esc(caveat.caveat) : ""}</p>` : ""}
       <p><b>What a high rank is not.</b> Wang et al. report that of designed duplexes, 15–20%
@@ -722,7 +958,8 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
     app.innerHTML = header() + controls() + browser() +
       `<div class="split">${list()}${detail()}</div>` +
       `<div class="split">${cellPanel()}${rejectionPanel()}</div>` +
-      `<div style="margin-top:22px">${motifPanel()}</div>` + footer();
+      `<div style="margin-top:22px">${motifPanel()}</div>` +
+      `<div style="margin-top:22px">${rulesPanel()}</div>` + footer();
     wire();
     redrawTracks();
     drawSparklines();
@@ -821,11 +1058,14 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
 
   document.getElementById("loading").hidden = true;
   app.hidden = false;
-  /* Open on the region the rules admit, which is where a reader looks first. */
-  const a = offsetOfTss(WANG[0]), b = offsetOfTss(WANG[1]);
-  if (a != null && b != null) {
-    const lo = Math.max(0, Math.min(a, b) - 150), hi = Math.min(promLen, Math.max(a, b) + 150);
-    if (hi - lo > 40) state.view = [lo, hi];
+  /* Open on the region this run's own position rule covers, which is where a reader looks first.
+     With no such rule, the whole promoter stays in view rather than a window from another run. */
+  if (ADMITTED) {
+    const a = offsetOfTss(ADMITTED[0]), b = offsetOfTss(ADMITTED[1]);
+    if (a != null && b != null) {
+      const lo = Math.max(0, Math.min(a, b) - 150), hi = Math.min(promLen, Math.max(a, b) + 150);
+      if (hi - lo > 40) state.view = [lo, hi];
+    }
   }
   const firstPassing = DATA.candidates.find((c) => c.rank === 1);
   if (firstPassing) state.selected = firstPassing.id;

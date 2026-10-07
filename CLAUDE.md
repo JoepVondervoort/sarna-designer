@@ -6,15 +6,30 @@ traceability outranks clean code: every rule carries a citation, every verdict c
 **State:** gene symbol → promoter → ranked candidates → interactive page all work.
 `design_sarnas(promoter, config)` is the engine; `EnsemblClient` resolves a gene to a promoter;
 `sarna.regulatory` annotates it; `sarna.view.html.render` writes a self-contained browser.
-1149 tests, 100% statement coverage, mypy strict clean. **No HTTP API** — the library and its
+1,300 tests passed, eight live-network tests excluded; mypy strict and Ruff clean. Coverage was
+not remeasured. **No HTTP API** — the library and its
 scripts are the only interfaces.
+
+## Accepted continuation decisions — 2026-10-07
+
+Read `docs/development/continuation-plan.md` for the user's accepted continuation decisions;
+they supersede corresponding open questions in these older working notes. The latest decision
+includes [ADR 0013](docs/adr/0013-researchers-can-adjust-rule-roles.md): researchers may adjust supported
+scientific rules between mandatory, preference and off in advanced custom configurations.
+`pos19-a` stays mandatory in the default, while custom configurations may change its role.
+Explain defaults, alternatives and consequences, and record all custom departures. This is an
+accepted requirement; engine support is implemented, while the interactive editor is pending.
+[ADR 0014](docs/adr/0014-local-delivery-and-wang-default.md) records the latest clarification:
+local installation is the delivery target, Wang remains the default including its window gate,
+and other papers inform optional recommendations rather than universal rules. This supersedes
+the earlier proposal to change the default window to a preference.
 
 ## Commands
 
 Use `.venv/bin/python`; there is a miniconda base environment that must stay untouched.
 
 ```bash
-.venv/bin/python -m pytest -q                      # 1149 tests, ~15 s
+.venv/bin/python -m pytest -q                      # 1300 tests, ~17 s
 .venv/bin/python -m pytest -m network              # 8 live-Ensembl tests, excluded by default
 .venv/bin/python -m pytest -m tracks               # needs the AF22 bigWigs; skips if absent
 .venv/bin/python -m mypy src tests scripts         # strict
@@ -90,6 +105,8 @@ Read the ADR before reopening its question; each records the alternatives and wh
 | What a preset is; legacy's declared divergences | 0010 |
 | Optional rules are hypotheses; the default carries none | 0011 |
 | MANE Select or refuse to pick a transcript | 0012 |
+| Researcher-adjustable scientific rule roles and transparent custom configurations | 0013 |
+| Local delivery, tested installation paths and Wang as the default | 0014 |
 
 `docs/scientific/`:
 
@@ -121,11 +138,11 @@ context each, so the TSS windows and 3' flank preferences are evaluable — pass
 
 Headline results:
 
-- Wang's **sequence** gates exclude **none** of the 14 activators; every alternative setting
-  measured excludes at least one.
+- GC, CpG-count and homopolymer gates at Wang's values each exclude **none** of the 14 activators.
+  The position-19 gate does exclude CEBPA. Do not describe the full sequence gate set as lossless.
 - Wang's **window** gate excludes **10 of 14**, and the 4 survivors are exactly the 4 published
   literature duplexes. Taking the most favourable TSS anchor for each design it still excludes 8.
-  Not acted on — see the open decision below.
+  Kept in the default by the user's latest decision; custom roles can investigate the cost.
 - No preset's *ranking* beats chance (AUC 0.41–0.53), with or without coordinates.
 - `exploratory` scores highest because two of its rules were fitted to this very data. The tests
   assert that, so the circularity stays visible.
@@ -148,47 +165,51 @@ Headline results:
 - Live-API tests earn their keep. Two Ensembl bugs — `mane=1` being required, and a 400 rather
   than a 404 for an unknown symbol — were invisible to recorded payloads.
 
-## Open decisions
+## Implementation gaps and remaining decisions
 
-- **Promoters can only be anchored to an Ensembl TSS.** The hardest requirement found so far:
+- **Measured alternatives to existing inferred anchors.** Literature-defined anchors already
+  exist in `sarna.genome.anchors`. The source adapter remains to be built:
   chapter 2 designed SCN1A against promoters mapped by Dong 2014 and Long 2008, and the Dong distal
   region — which produced 2 of the 3 SCN1A activators — has no Ensembl TSS within 5.5 kb. A tool
   that can only design relative to annotated TSSs could not reproduce this project's own hits.
-  Literature-defined promoter regions need to be first-class design anchors. See
+  Preserve explicit uncertainty when adding measured alternatives. See
   `docs/scientific/scn1a-design-coordinates.md`.
-- **No HTTP API or hosted UI.** `sarna.view.html.render` produces a self-contained page, which
-  covers the "show me the promoter" need without a server. Whether a FastAPI layer is still wanted
-  (ADR 0005 anticipated one) is undecided.
+- **Local application and installers.** `sarna.view.html.render` produces a self-contained page;
+  a local Python service, interactive editor and tested installation paths remain to be built.
 - **Position 18/19 when target length ≠ 19.** Evaluators use the literal Table 1 position and
   report `not-applicable` if the target is shorter. For a 21-mer, position 19 stops being the 3'
-  terminal base and `pos19-a`'s mechanism no longer holds. Undecided; keep length at 19.
+  terminal base and `pos19-a`'s mechanism no longer holds. Maximum is already 19; the library
+  still supports 18 with explicit not-applicable results. Order export is fixed at 19 + dTdT.
 - **3' overhangs are not modelled.** Candidates carry 19 nt cores; what gets ordered is a 21-mer.
   The chemistry question is *settled* — chapter 2's supplementary material shows **dTdT** on both
   strands, not ribo-UU — so what remains is building the order-ready export, not deciding what it
   should say. Largest gap before bench use.
-- **Should `tss-window` be a gate at all?** The biggest open question in the engine. As a gate at
+- **Window alternatives and their costs.** As a gate at
   Wang's −1000…−100 it rejects 64% of candidates on a real promoter and 10 of the 14 known
   activators, including KLF4 at −45 and CEBPA (in human trials) at −1088. As a preference it would
   admit all 14 and lose the strongest filter the engine has. The rule now offers the thesis's own
-  −2000…+500 window as a sourced option; the gate-versus-preference choice is the user's.
+  −2000…+500 window as a sourced option, with implementation restricted to an end of 0.
+  Wang's gate remains the default; custom configurations can change its role or disable it.
 - **`pos19-a` excludes CEBPA**, the duplex in MTL-CEBPA and the first saRNA in human trials.
-  Documented, not worked around: the gate stays conformant with Table 1. Making it a preference
-  would be defensible and has not been done speculatively.
+  The gate stays conformant with Table 1 in the default. Custom roles are now supported and
+  retain their departure from the frozen baseline in exports.
 - **No factor occupancy anywhere.** AF22 chromatin *accessibility* is measured, which is not the
   same thing. `CELL_TYPE_OBSERVATION` for a transcription factor is still unproduced; ENCODE would
   populate HeLa, and AF22 has no public TF ChIP-seq at all. The asymmetry is permanent-ish: the
   tool will always know more about HeLa than about the disease-relevant line.
-- **Licence.** Bundled JASPAR matrices are CC BY-NC-SA 4.0, so shipping them makes the package
-  non-commercial. `LICENSE` still says undecided. See `docs/scientific/tf-binding.md`.
+- **Licence audit.** Official JASPAR documentation states CC BY 4.0, contradicting the repository's
+  CC BY-NC-SA label. Audit the exact bundled assets and correct metadata/attribution before
+  distribution; do not assume unbundling is legally required. The precise MIT/Apache code licence
+  form still needs recording; `LICENSE` remains undecided.
 
 ## Next
 
-Two questions for the user before more building, both scientific rather than technical: whether
-`tss-window` should remain a gate, and whether chapter 4's SCN1A screens were in undifferentiated
-AF22. Then the 3' overhang decision and an order-ready export, which is the last thing standing
-between this and bench use; then ENCODE occupancy for HeLa. An HTTP API only if the user wants one.
+Follow the continuation plan. No further scientific/default confirmation is required for its
+next slice. Complete browser checks, source/licence metadata reconciliation and configuration
+versioning; generalise context readers and add pinned archived EPDnew, then DepMap, FANTOM5 and
+ENCODE. Build frozen local run storage, the settings-to-rerun workbench path and tested installers.
+Keep optional source retrieval explicit and include cached/offline use.
 
-One open scientific question worth putting to the user: chapter 4's SCN1A screens appear to have
-been run in undifferentiated AF22, whose SCN1A promoter carries no active mark. If so, those null
-results are predicted by the mechanism rather than informative about the duplexes, and the
-comparison belongs in differentiated neurons. See `docs/scientific/af22-chromatin.md`.
+Low active-mark enrichment in AF22 is a contextual observation, not a direct transcription
+measurement or proof of the cause of a null result. HeLa expression remains unverified. Keep
+warnings separate from expression observations and do not make chromatin a candidate score.

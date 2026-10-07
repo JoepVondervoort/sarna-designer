@@ -8,6 +8,7 @@ parameter with two values, not as two different programs.
 """
 
 import re
+from math import isfinite
 from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict, model_validator
@@ -90,6 +91,8 @@ class RuleParameter(BaseModel):
         return self
 
     def _check_in_bounds(self, value: float, what: str) -> None:
+        if not isfinite(value):
+            raise ValueError(f"{what} must be finite for parameter {self.name!r}")
         if self.minimum is not None and value < self.minimum:
             raise ValueError(
                 f"{what} {value} is below the minimum {self.minimum} for "
@@ -129,6 +132,8 @@ class RuleParameter(BaseModel):
         if isinstance(value, bool) or not isinstance(value, int | float):
             raise ValueError(f"parameter {self.name!r} is numeric; got {value!r}")
         self._check_in_bounds(value, what="value")
+        if isinstance(self.default, int) and isinstance(value, float) and not value.is_integer():
+            raise ValueError(f"parameter {self.name!r} requires a whole number; got {value!r}")
         return value
 
     def to_dict(self, value: ParameterValue | None = None) -> dict[str, Any]:

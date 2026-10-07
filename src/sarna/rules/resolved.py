@@ -17,9 +17,10 @@ inspectable as data for export (ADR 0003).
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
+from typing import Any
 
 from sarna.rules.parameters import ParameterValue
-from sarna.rules.rule import Rule
+from sarna.rules.rule import Rule, RuleKind
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,10 +31,14 @@ class ResolvedRule:
         rule: The rule being evaluated.
         overrides: Values replacing the parameter defaults, typically from a preset or the UI.
             Copied, so a later change to the caller's mapping cannot alter this object.
+        kind_override: Mandatory or preference for this run, leaving the catalogue unchanged.
+        option_id: A deliberately selected sourced option. A matching number is not provenance.
     """
 
     rule: Rule
     overrides: Mapping[str, ParameterValue] = field(default_factory=dict)
+    kind_override: RuleKind | None = None
+    option_id: str | None = None
     values: Mapping[str, ParameterValue] = field(init=False)
 
     def __post_init__(self) -> None:
@@ -44,9 +49,25 @@ class ResolvedRule:
                 always a typo in a preset and must not be ignored.
             ValueError: If a value is the wrong type for its parameter or outside its bounds.
         """
+        if self.kind_override is not None:
+            if not isinstance(self.kind_override, RuleKind):
+                raise ValueError("kind_override must be a RuleKind")
+            if self.kind_override is not self.rule.kind:
+                if RuleKind.TIEBREAK in (self.rule.kind, self.kind_override):
+                    raise ValueError(
+                        f"rule {self.rule.id!r}: a continuous tie-break cannot become a "
+                        "gate or preference, or vice versa"
+                    )
+                if self.rule.id == "target-length-19":
+                    raise ValueError(
+                        "target-length-19 defines candidate generation and cannot become "
+                        "a scored preference"
+                    )
         resolved: dict[str, ParameterValue] = {
             parameter.name: parameter.default for parameter in self.rule.parameters
         }
+        if self.option_id is not None:
+            resolved.update(self.rule.option(self.option_id).values)
         for name, value in self.overrides.items():
             if name not in resolved:
                 known = ", ".join(sorted(resolved)) or "none"
@@ -54,8 +75,52 @@ class ResolvedRule:
                     f"rule {self.rule.id!r} has no parameter {name!r}; it has {known}"
                 )
             resolved[name] = self.rule.parameter(name).validated(value)
+        self._check_relationships(resolved)
         object.__setattr__(self, "overrides", MappingProxyType(dict(self.overrides)))
         object.__setattr__(self, "values", MappingProxyType(resolved))
+
+    @property
+    def id(self) -> str:
+        """Return the unchanged catalogue identifier."""
+        return self.rule.id
+
+    @property
+    def kind(self) -> RuleKind:
+        """Return the effective role used by evaluation, gating, scoring and exports."""
+        return self.kind_override if self.kind_override is not None else self.rule.kind
+
+    def _check_relationships(self, values: Mapping[str, ParameterValue]) -> None:
+        """Reject contradictory settings before they reach an evaluator."""
+        ordered_pairs = (
+            ("minimum-gc-fraction", "maximum-gc-fraction"),
+            ("window-start-bp", "window-end-bp"),
+            ("preferred-window-start-bp", "preferred-window-end-bp"),
+            ("central-region-start", "central-region-end"),
+        )
+        for first, last in ordered_pairs:
+            left, right = values.get(first), values.get(last)
+            if isinstance(left, int | float) and isinstance(right, int | float) and left > right:
+                raise ValueError(f"rule {self.id!r}: {first} must not exceed {last}")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Export effective behavior alongside the catalogue role and choice origin."""
+        exported = self.rule.to_dict(self.values)
+        exported["kind"] = str(self.kind)
+        exported["default_kind"] = str(self.rule.kind)
+        exported["kind_overridden"] = self.kind is not self.rule.kind
+        exported["selected_option"] = (
+            self.rule.option(self.option_id).to_dict() if self.option_id is not None else None
+        )
+        for parameter in exported["parameters"]:
+            name = parameter["name"]
+            parameter["origin"] = (
+                "override"
+                if name in self.overrides
+                else "named-option"
+                if self.option_id is not None and name in self.rule.option(self.option_id).values
+                else "catalogue-default"
+            )
+        return exported
 
     @classmethod
     def from_option(cls, rule: Rule, option_id: str) -> "ResolvedRule":
@@ -75,7 +140,7 @@ class ResolvedRule:
         Raises:
             KeyError: If the rule has no such option.
         """
-        return cls(rule, rule.option(option_id).values)
+        return cls(rule, option_id=option_id)
 
     def _value(self, name: str) -> ParameterValue:
         """Return a resolved value, or raise if the parameter does not exist."""

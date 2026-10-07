@@ -1,4 +1,4 @@
-"""The two shipped presets (ADR 0002, ADR 0010).
+"""The shipped presets (ADR 0002, ADR 0010).
 
 A preset names the rules it applies and the values it overrides. It never edits a rule, so the
 catalogue stays the single immutable statement of what rules exist and a preset is a projection
@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from sarna.design.config import DesignConfig
 from sarna.rules.catalog import CATALOGUE
 from sarna.rules.parameters import ParameterValue
+from sarna.rules.rule import RuleKind
 
 ParameterOverrides = Mapping[str, Mapping[str, ParameterValue]]
 
@@ -47,13 +48,22 @@ class Preset:
     divergences: tuple[str, ...] = ()
     """Known ways this preset departs from what it claims to reproduce. Exported and displayed."""
 
-    def resolve(self, user_overrides: ParameterOverrides | None = None) -> DesignConfig:
+    def resolve(
+        self,
+        user_overrides: ParameterOverrides | None = None,
+        *,
+        role_overrides: Mapping[str, RuleKind | None] | None = None,
+        option_ids: Mapping[str, str] | None = None,
+    ) -> DesignConfig:
         """Resolve this preset, optionally layering user overrides over its own.
 
         Args:
             user_overrides: Further parameter overrides, keyed by rule id then parameter name.
                 Merged per rule, so overriding one parameter leaves the preset's other values
                 for that rule in place.
+            role_overrides: Custom gate/preference roles; ``None`` disables a rule. An optional
+                catalogue rule can be added by explicitly assigning it a supported role.
+            option_ids: Deliberately chosen sourced alternatives; manual values take precedence.
 
         Returns:
             The resolved configuration.
@@ -63,22 +73,38 @@ class Preset:
                 would let a user believe they had changed something.
             ValueError: If an override value is invalid for its parameter.
         """
+        roles = role_overrides or {}
+        options = option_ids or {}
+        for rule_id in roles:
+            CATALOGUE[rule_id]  # Reject unknown ids, including attempts to disable them.
+        selected = (*self.rule_ids, *(
+            rule.id for rule in CATALOGUE
+            if rule.id not in self.rule_ids and rule.id in roles
+        ))
+        for rule_id in set(user_overrides or {}) | set(options):
+            if rule_id not in selected or (rule_id in roles and roles[rule_id] is None):
+                raise KeyError(
+                    f"cannot override rule {rule_id!r}: it is not selected by preset "
+                    f"{self.id!r} or is disabled, so changing its parameters would have no effect"
+                )
         merged: dict[str, dict[str, ParameterValue]] = {
             rule_id: dict(values) for rule_id, values in self.overrides.items()
         }
+        for rule_id, option_id in options.items():
+            for name in CATALOGUE[rule_id].option(option_id).values:
+                merged.get(rule_id, {}).pop(name, None)
         for rule_id, values in (user_overrides or {}).items():
-            if rule_id not in self.rule_ids:
-                raise KeyError(
-                    f"cannot override rule {rule_id!r}: it is not selected by preset "
-                    f"{self.id!r}, so changing its parameters would have no effect"
-                )
             merged.setdefault(rule_id, {}).update(values)
+        baseline = DesignConfig.of(self.rule_ids, self.overrides).rules
         return DesignConfig.of(
-            self.rule_ids,
+            selected,
             merged,
             preset_id=self.id,
             preset_name=self.name,
             preset_divergences=self.divergences,
+            role_overrides=roles,
+            option_ids=options,
+            baseline_rules=baseline,
         )
 
 
@@ -91,7 +117,8 @@ WANG_2015 = Preset(
     name="Wang et al. 2015 (default)",
     description=(
         "Conformant with Wang et al. 2015 Table 1. Every rule the catalogue enables by "
-        "default, at its published value. Recommended for new designs."
+        "default, at its published value. A literature-based starting point for research; "
+        "conformance does not establish efficacy for a new gene or cell type."
     ),
     rule_ids=_DEFAULT_RULE_IDS,
     is_default=True,
@@ -150,13 +177,12 @@ LEGACY_SCANNER = Preset(
 
 STRICT = Preset(
     id="strict",
-    name="Strict (high-confidence subset)",
+    name="Strict (narrower location criteria)",
     description=(
-        "Wang et al. 2015 with its own softer statements promoted to requirements: the region "
-        "the paper reports activity in becomes the admission window, no CpG is tolerated, and "
-        "asymmetry must be positive rather than merely non-negative. Produces far fewer "
-        "candidates, all of them conformant on every count the paper makes. Use it when you can "
-        "only afford to synthesise a handful."
+        "Wang et al. 2015 with a narrower -500 to -200 bp admission window and a more "
+        "permissive CpG-island detector, which excludes more candidate regions. Sequence "
+        "criteria retain Wang's values. These stricter location choices do not establish "
+        "greater confidence in activation."
     ),
     rule_ids=_DEFAULT_RULE_IDS,
     overrides={

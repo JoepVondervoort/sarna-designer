@@ -40,6 +40,8 @@ class DesignConfig:
     preset_id: str | None = None
     preset_name: str | None = None
     preset_divergences: tuple[str, ...] = ()
+    disabled_rules: tuple[ResolvedRule, ...] = ()
+    baseline_rules: tuple[ResolvedRule, ...] | None = None
 
     def __post_init__(self) -> None:
         """Reject a selection naming the same rule twice.
@@ -48,7 +50,9 @@ class DesignConfig:
             ValueError: If a rule id appears more than once, which would evaluate it twice and
                 double-count its preference point.
         """
-        seen = [resolved.rule.id for resolved in self.rules]
+        if any(resolved.id == LENGTH_RULE for resolved in self.disabled_rules):
+            raise ValueError("target-length-19 defines candidate generation and cannot be off")
+        seen = [resolved.id for resolved in (*self.rules, *self.disabled_rules)]
         duplicates = sorted({rule_id for rule_id in seen if seen.count(rule_id) > 1})
         if duplicates:
             raise ValueError(
@@ -64,6 +68,10 @@ class DesignConfig:
         preset_id: str | None = None,
         preset_name: str | None = None,
         preset_divergences: tuple[str, ...] = (),
+        *,
+        role_overrides: Mapping[str, RuleKind | None] | None = None,
+        option_ids: Mapping[str, str] | None = None,
+        baseline_rules: tuple[ResolvedRule, ...] | None = None,
     ) -> "DesignConfig":
         """Resolve a selection of catalogued rule ids into a configuration.
 
@@ -73,6 +81,9 @@ class DesignConfig:
             preset_id: The preset this came from, if any.
             preset_name: Its human-readable name.
             preset_divergences: Known ways it departs from what it reproduces.
+            role_overrides: Effective roles; ``None`` means off, retained only as metadata.
+            option_ids: Explicit selections of sourced alternatives, keyed by rule id.
+            baseline_rules: Frozen preset values used to explain custom departures.
 
         Returns:
             The resolved configuration.
@@ -82,14 +93,30 @@ class DesignConfig:
             ValueError: If an override value is invalid for its parameter.
         """
         by_rule = overrides or {}
+        ids = tuple(rule_ids)
+        roles = role_overrides or {}
+        options = option_ids or {}
+        for changed_id in set(by_rule) | set(roles) | set(options):
+            if changed_id not in ids:
+                raise KeyError(f"cannot override rule {changed_id!r}: it is not selected")
+        active: list[ResolvedRule] = []
+        disabled: list[ResolvedRule] = []
+        for rule_id in ids:
+            resolved = ResolvedRule(
+                CATALOGUE[rule_id], by_rule.get(rule_id, {}),
+                kind_override=roles.get(rule_id), option_id=options.get(rule_id),
+            )
+            if rule_id in roles and roles[rule_id] is None:
+                disabled.append(resolved)
+            else:
+                active.append(resolved)
         return cls(
-            rules=tuple(
-                ResolvedRule(CATALOGUE[rule_id], by_rule.get(rule_id, {}))
-                for rule_id in rule_ids
-            ),
+            rules=tuple(active),
             preset_id=preset_id,
             preset_name=preset_name,
             preset_divergences=preset_divergences,
+            disabled_rules=tuple(disabled),
+            baseline_rules=baseline_rules,
         )
 
     def __len__(self) -> int:
@@ -121,7 +148,54 @@ class DesignConfig:
         )
 
     def _of_kind(self, kind: RuleKind) -> tuple[ResolvedRule, ...]:
-        return tuple(resolved for resolved in self.rules if resolved.rule.kind is kind)
+        return tuple(resolved for resolved in self.rules if resolved.kind is kind)
+
+    @property
+    def customizations(self) -> tuple[dict[str, Any], ...]:
+        """Describe effective departures from the frozen preset, including disabled rules."""
+        if self.baseline_rules is None:
+            return ()
+        baseline = {resolved.id: resolved for resolved in self.baseline_rules}
+        active = {resolved.id: resolved for resolved in self.rules}
+        changes: list[dict[str, Any]] = []
+        for rule_id in dict.fromkeys((*baseline, *active)):
+            before, after = baseline.get(rule_id), active.get(rule_id)
+            old_role = str(before.kind) if before is not None else "off"
+            new_role = str(after.kind) if after is not None else "off"
+            if old_role != new_role:
+                changes.append({"rule_id": rule_id, "setting": "role",
+                                "before": old_role, "after": new_role})
+            if after is None:
+                continue
+            if before is not None:
+                for name, value in after.values.items():
+                    if before.values[name] != value:
+                        changes.append({"rule_id": rule_id, "setting": name,
+                                        "before": before.values[name], "after": value})
+            if after.option_id is not None and (
+                before is None or before.option_id != after.option_id
+            ):
+                changes.append({"rule_id": rule_id, "setting": "selected-option",
+                                "before": before.option_id if before else None,
+                                "after": after.option_id})
+        return tuple(changes)
+
+    @property
+    def is_custom(self) -> bool:
+        """Return whether this run differs from its preset or lacks a frozen named baseline."""
+        return self.baseline_rules is None or self.preset_id is None or bool(self.customizations)
+
+    @property
+    def warnings(self) -> tuple[str, ...]:
+        """Explain supported settings whose interpretation needs care, without blocking them."""
+        preference_ids = {resolved.id for resolved in self.preferences}
+        if {"tss-window", "tss-preferred-window"} <= preference_ids:
+            return (
+                "Both TSS window criteria are preferences. Where their windows overlap, "
+                "location can earn two points. Disable one to score only one location "
+                "criterion; preference counts do not estimate activation efficacy.",
+            )
+        return ()
 
     @property
     def mandatory(self) -> tuple[ResolvedRule, ...]:
@@ -195,5 +269,15 @@ class DesignConfig:
                 "name": self.preset_name,
                 "divergences": list(self.preset_divergences),
             },
-            "rules": [resolved.rule.to_dict(resolved.values) for resolved in self.rules],
+            "is_custom": self.is_custom,
+            "customizations": list(self.customizations),
+            "warnings": list(self.warnings),
+            "baseline_rules": (
+                [resolved.to_dict() for resolved in self.baseline_rules]
+                if self.baseline_rules is not None else None
+            ),
+            "rules": [resolved.to_dict() for resolved in self.rules],
+            "disabled_rules": [
+                {**resolved.to_dict(), "kind": "off"} for resolved in self.disabled_rules
+            ],
         }

@@ -81,17 +81,17 @@ def thermodynamic_asymmetry(
     if assessment.predicted_guide is GuideStrand.ANTISENSE and (
         assessment.difference >= threshold
     ):
-        return RuleResult.passed(resolved.rule, assessment.explanation, measurements)
+        return RuleResult.passed(resolved, assessment.explanation, measurements)
     if assessment.predicted_guide is GuideStrand.ANTISENSE:
         return RuleResult.failed(
-            resolved.rule,
+            resolved,
             f"{assessment.explanation} The margin of "
             f"{assessment.difference:+.2f} {table.unit} is below the "
             f"{threshold:.2f} {table.unit} required, so the strand selection is not confident "
             f"enough.",
             measurements,
         )
-    return RuleResult.failed(resolved.rule, assessment.explanation, measurements)
+    return RuleResult.failed(resolved, assessment.explanation, measurements)
 
 
 def asymmetry_margin(context: CandidateContext, resolved: ResolvedRule) -> RuleResult:
@@ -105,7 +105,7 @@ def asymmetry_margin(context: CandidateContext, resolved: ResolvedRule) -> RuleR
     end_length = resolved.integer("end-length-nt")
     assessment = assess_asymmetry(context.target, table, end_length=end_length)
     return RuleResult.tiebreak(
-        resolved.rule,
+        resolved,
         assessment.difference,
         f"Asymmetry {assessment.difference:+.2f} {table.unit} "
         f"({table.name}). Larger is a more confident strand selection.",

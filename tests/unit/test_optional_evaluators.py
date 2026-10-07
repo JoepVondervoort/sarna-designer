@@ -156,7 +156,7 @@ class TestCentralStability:
     def test_an_inverted_region_is_a_configuration_error(self) -> None:
         # Silently passing or failing every candidate would be worse than refusing: an empty
         # region is a setting mistake, not a property of any candidate.
-        with pytest.raises(ValueError, match="would be empty"):
+        with pytest.raises(ValueError, match="must not exceed"):
             result_for(
                 "central-stability",
                 STRONG_CENTRE,

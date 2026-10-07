@@ -28,7 +28,7 @@ def au_rich_guide_5_prime(context: CandidateContext, resolved: ResolvedRule) -> 
     required = resolved.integer("minimum-au-count")
     if window > context.length:
         return RuleResult.not_applicable(
-            resolved.rule,
+            resolved,
             f"The target is {context.length} nt long, shorter than the {window} nt window this "
             f"rule examines, so the window cannot be read.",
         )
@@ -44,14 +44,14 @@ def au_rich_guide_5_prime(context: CandidateContext, resolved: ResolvedRule) -> 
     region = f"positions {first}-{context.length}"
     if weak >= required:
         return RuleResult.passed(
-            resolved.rule,
+            resolved,
             f"{weak} of the {window} bases at {region} are A or T, meeting the {required} "
             f"required. A weak 3' end on the target is a weak 5' end on the guide, which is "
             f"what biases AGO2 to retain the intended strand.",
             measurements,
         )
     return RuleResult.failed(
-        resolved.rule,
+        resolved,
         f"Only {weak} of the {window} bases at {region} are A or T, below the {required} "
         f"required, so the guide's 5' end is more stable than asymmetric loading prefers.",
         measurements,
@@ -75,12 +75,12 @@ def no_gc_stretch(context: CandidateContext, resolved: ResolvedRule) -> RuleResu
     }
     if longest <= permitted:
         return RuleResult.passed(
-            resolved.rule,
+            resolved,
             f"The longest run of G or C is {longest} nt, within the {permitted} nt permitted.",
             measurements,
         )
     return RuleResult.failed(
-        resolved.rule,
+        resolved,
         f"The longest run of G or C is {longest} nt, above the {permitted} nt permitted. A "
         f"tract that stable resists unwinding and favours intramolecular structure.",
         measurements,
@@ -103,7 +103,7 @@ def central_stability(context: CandidateContext, resolved: ResolvedRule) -> Rule
         )
     if end > context.length:
         return RuleResult.not_applicable(
-            resolved.rule,
+            resolved,
             f"The target is only {context.length} nt long, so it has no position {end} and the "
             f"central region {start}-{end} cannot be read.",
         )
@@ -117,13 +117,13 @@ def central_stability(context: CandidateContext, resolved: ResolvedRule) -> Rule
     }
     if strong >= required:
         return RuleResult.passed(
-            resolved.rule,
+            resolved,
             f"{strong} of the {len(bases)} bases at positions {start}-{end} are G or C, "
             f"meeting the {required} required.",
             measurements,
         )
     return RuleResult.failed(
-        resolved.rule,
+        resolved,
         f"Only {strong} of the {len(bases)} bases at positions {start}-{end} are G or C, "
         f"below the {required} required.",
         measurements,

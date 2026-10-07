@@ -26,6 +26,7 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from sarna.rules.parameters import ParameterValue
+from sarna.rules.resolved import ResolvedRule
 from sarna.rules.rule import Rule, RuleKind
 
 
@@ -50,8 +51,8 @@ class RuleResult(BaseModel):
     """One rule's verdict on one candidate, with the reason and the numbers behind it.
 
     Prefer the :meth:`passed`, :meth:`failed`, :meth:`not_applicable` and :meth:`tiebreak`
-    constructors over building one directly: they take the :class:`~sarna.rules.rule.Rule` and
-    copy its kind across, so an evaluator cannot accidentally report a preference as a gate.
+    constructors over building one directly: evaluators pass the resolved rule so its effective
+    role reaches gating, scoring and exports. Bare catalogue rules remain supported.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -76,7 +77,7 @@ class RuleResult(BaseModel):
     @classmethod
     def passed(
         cls,
-        rule: Rule,
+        rule: Rule | ResolvedRule,
         detail: str,
         measurements: Mapping[str, ParameterValue] | None = None,
     ) -> "RuleResult":
@@ -98,7 +99,7 @@ class RuleResult(BaseModel):
     @classmethod
     def failed(
         cls,
-        rule: Rule,
+        rule: Rule | ResolvedRule,
         detail: str,
         measurements: Mapping[str, ParameterValue] | None = None,
     ) -> "RuleResult":
@@ -120,7 +121,7 @@ class RuleResult(BaseModel):
         )
 
     @classmethod
-    def not_applicable(cls, rule: Rule, reason: str) -> "RuleResult":
+    def not_applicable(cls, rule: Rule | ResolvedRule, reason: str) -> "RuleResult":
         """Report that ``rule`` could not be evaluated, and why.
 
         Used when the inputs the rule needs are absent rather than unsatisfactory — most often a
@@ -141,7 +142,7 @@ class RuleResult(BaseModel):
     @classmethod
     def tiebreak(
         cls,
-        rule: Rule,
+        rule: Rule | ResolvedRule,
         value: float,
         detail: str,
         measurements: Mapping[str, ParameterValue] | None = None,

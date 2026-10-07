@@ -36,7 +36,7 @@ def _target_base(
     """Return the base at ``position``, or a not-applicable result if the target is too short."""
     if position > context.length:
         return None, RuleResult.not_applicable(
-            resolved.rule,
+            resolved,
             f"The target is only {context.length} nt long, so it has no position {position} "
             f"to measure.",
         )
@@ -58,10 +58,10 @@ def _at_target_position(
     measurements = {f"position-{position}": base}
     if base in permitted:
         return RuleResult.passed(
-            resolved.rule, f"Position {position} is {base}, which is {description}.", measurements
+            resolved, f"Position {position} is {base}, which is {description}.", measurements
         )
     return RuleResult.failed(
-        resolved.rule,
+        resolved,
         f"Position {position} is {base}, not {description}.",
         measurements,
     )
@@ -103,19 +103,19 @@ def flank_au(position: int) -> Evaluator:
         base = context.flank_base_at(position)
         if base is None:
             return RuleResult.not_applicable(
-                resolved.rule,
+                resolved,
                 f"The promoter ends before position {position}, so the 3' flank cannot be "
                 f"read there. The flank lies in the promoter rather than in the duplex.",
             )
         measurements = {f"position-{position}": base}
         if base in PURINE_FREE_BASES:
             return RuleResult.passed(
-                resolved.rule,
+                resolved,
                 f"Flank position {position} is {base}, which is A or T.",
                 measurements,
             )
         return RuleResult.failed(
-            resolved.rule,
+            resolved,
             f"Flank position {position} is {base}, not A or T.",
             measurements,
         )

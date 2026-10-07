@@ -28,7 +28,7 @@ def _tss_window(
     end_bp = resolved.integer(end_parameter)
     contained = context.tss_window_contains(start_bp, end_bp)
     if contained is None:
-        return RuleResult.not_applicable(resolved.rule, _NO_TSS)
+        return RuleResult.not_applicable(resolved, _NO_TSS)
     assert context.tss_span is not None
     first, last = context.tss_span
     window = f"{TssPosition(start_bp)} to {TssPosition(end_bp)}"
@@ -36,12 +36,12 @@ def _tss_window(
     span = f"{first} to {last}"
     if contained:
         return RuleResult.passed(
-            resolved.rule,
+            resolved,
             f"The target spans {span} relative to the TSS, inside the {window} window.",
             measurements,
         )
     return RuleResult.failed(
-        resolved.rule,
+        resolved,
         f"The target spans {span} relative to the TSS, which is not wholly inside the "
         f"{window} window.",
         measurements,
@@ -70,7 +70,7 @@ def not_in_cpg_island(context: CandidateContext, resolved: ResolvedRule) -> Rule
     overlaps = context.overlaps_cpg_island
     if overlaps is None:
         return RuleResult.not_applicable(
-            resolved.rule,
+            resolved,
             "CpG island detection was not run for this promoter, so whether the target lies "
             "in an island is unknown.",
         )
@@ -83,7 +83,7 @@ def not_in_cpg_island(context: CandidateContext, resolved: ResolvedRule) -> Rule
             else "no CpG islands were found in the promoter"
         )
         return RuleResult.passed(
-            resolved.rule, f"The target is outside any CpG island: {found}.", measurements
+            resolved, f"The target is outside any CpG island: {found}.", measurements
         )
     touched = next(
         island
@@ -91,7 +91,7 @@ def not_in_cpg_island(context: CandidateContext, resolved: ResolvedRule) -> Rule
         if island.overlaps(context.offset, context.offset + context.length)
     )
     return RuleResult.failed(
-        resolved.rule,
+        resolved,
         f"The target overlaps a CpG island spanning promoter positions "
         f"{touched.start + 1} to {touched.end} "
         f"({touched.length} bp, {touched.gc_fraction:.0%} GC, observed/expected CpG "

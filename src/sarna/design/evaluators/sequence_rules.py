@@ -26,12 +26,12 @@ def target_length(context: CandidateContext, resolved: ResolvedRule) -> RuleResu
     measurements = {"length": context.length}
     if context.length == required:
         return RuleResult.passed(
-            resolved.rule,
+            resolved,
             f"The target is {context.length} nt, as required.",
             measurements,
         )
     return RuleResult.failed(
-        resolved.rule,
+        resolved,
         f"The target is {context.length} nt, but {required} nt is required.",
         measurements,
     )
@@ -46,18 +46,18 @@ def gc_content(context: CandidateContext, resolved: ResolvedRule) -> RuleResult:
     band = f"{minimum:.0%} to {maximum:.0%} band"
     if fraction < minimum:
         return RuleResult.failed(
-            resolved.rule,
+            resolved,
             f"GC content is {fraction:.1%}, below the {minimum:.0%} minimum.",
             measurements,
         )
     if fraction > maximum:
         return RuleResult.failed(
-            resolved.rule,
+            resolved,
             f"GC content is {fraction:.1%}, above the {maximum:.0%} maximum.",
             measurements,
         )
     return RuleResult.passed(
-        resolved.rule, f"GC content is {fraction:.1%}, inside the {band}.", measurements
+        resolved, f"GC content is {fraction:.1%}, inside the {band}.", measurements
     )
 
 
@@ -68,13 +68,13 @@ def no_homopolymer_run(context: CandidateContext, resolved: ResolvedRule) -> Rul
     measurements = {"longest-run": longest}
     if longest > permitted:
         return RuleResult.failed(
-            resolved.rule,
+            resolved,
             f"The target contains a run of {longest} identical bases; at most {permitted} "
             f"are permitted.",
             measurements,
         )
     return RuleResult.passed(
-        resolved.rule,
+        resolved,
         f"The longest run of identical bases is {longest}, within the limit of {permitted}.",
         measurements,
     )
@@ -88,12 +88,12 @@ def cpg_count(context: CandidateContext, resolved: ResolvedRule) -> RuleResult:
     plural = "" if found == 1 else "s"
     if found > permitted:
         return RuleResult.failed(
-            resolved.rule,
+            resolved,
             f"The target contains {found} CpG{plural}; at most {permitted} is permitted.",
             measurements,
         )
     return RuleResult.passed(
-        resolved.rule,
+        resolved,
         f"The target contains {found} CpG{plural}, within the limit of {permitted}.",
         measurements,
     )
@@ -114,13 +114,13 @@ def no_simple_repeats(context: CandidateContext, resolved: ResolvedRule) -> Rule
     worst_unit, worst = max(copies.items(), key=lambda item: item[1])
     if worst > permitted:
         return RuleResult.failed(
-            resolved.rule,
+            resolved,
             f"The target contains {worst} tandem copies of a {_UNIT_NAMES[worst_unit]}; at "
             f"most {permitted} are permitted.",
             measurements,
         )
     return RuleResult.passed(
-        resolved.rule,
+        resolved,
         f"The longest simple repeat is {worst} tandem copies, within the limit of {permitted}.",
         measurements,
     )

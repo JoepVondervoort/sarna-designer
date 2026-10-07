@@ -12,7 +12,8 @@ ranked, annotated, exportable duplex candidates.
 > the generated page are the interfaces.
 >
 > The engine is now validated against measured activity for the first time — 125 assayed
-> sequences, 14 of them activators — and Wang's published sequence gates exclude none of the 14.
+> sequences, 14 of them activators. The position-19 gate excludes CEBPA, a known activator;
+> the default window excludes 10 of 14 when recovered locations are used.
 > Read [`docs/scientific/empirical-validation.md`](docs/scientific/empirical-validation.md) for
 > what that does and does not establish. Treat a high rank as a prioritisation aid, not a
 > prediction of activity.
@@ -34,14 +35,15 @@ experience can use, and whose answers a reviewer can audit.
 Design rules derive from **Wang J, Place RF, Portnoy V, Huang V, Kang MR, Kosaka M, Ho MKC,
 Li L-C. _Inducing gene expression by targeting promoter sequences using small activating RNAs._
 J Biol Methods, 2015** ([PMC4379447](https://pmc.ncbi.nlm.nih.gov/articles/PMC4379447/)),
-whose Table 1 is the canonical criteria set.
+whose Table 1 supplies the default criteria. These are literature recommendations rather than
+universal biological requirements; researchers can investigate alternatives in custom configurations.
 
 Four rule presets ship (see [ADR 0002](docs/adr/0002-wang-2015-default-legacy-preset.md) and
 [ADR 0011](docs/adr/0011-optional-rules-are-hypotheses-not-findings.md)):
 
 - **`wang-2015`** — the default. Conformant with Table 1.
-- **`strict`** — tightens only the *location* criteria, because the measured data supports Wang's
-  sequence criteria exactly as published. Two obvious-looking tightenings were tried, measured and
+- **`strict`** — tightens only the *location* criteria. The range-restricted dataset does not
+  establish better efficacy for these settings. Two sequence tightenings were tried, measured and
   rejected: requiring zero CpG excludes 4 of the 14 known activators, and requiring an asymmetry
   margin of 0.5 kcal/mol excludes 2 more.
 - **`exploratory`** — adds optional criteria from Reynolds et al. 2004, Ui-Tei et al. 2004 and the
@@ -105,6 +107,30 @@ print(rejected.id, rejected.rejection_summary)   # never silently dropped
 `result.to_dict()` is a JSON-serialisable record of the run, including the resolved
 configuration, every candidate and every rule verdict.
 
+### Custom settings
+
+Wang remains the default. Supported binary scientific rules can become gates, preferences or
+be switched off. Required generation inputs and continuous tie-break semantics remain enforced.
+
+```python
+from sarna.rules.rule import RuleKind
+
+config = WANG_2015.resolve(
+    {"gc-content": {"maximum-gc-fraction": 0.65}},
+    role_overrides={
+        "tss-window": RuleKind.PREFERENCE,
+        "tss-preferred-window": None,   # off: avoid scoring location twice
+    },
+)
+result = design_sarnas(promoter, config)
+print(config.customizations)             # changes from the frozen preset baseline
+```
+
+The generated page labels custom settings and shows disabled rules, sources, consequences and
+alternatives. A matching numerical value is distinguished from a deliberately selected sourced
+option. Adjusting a rule changes filtering/ranking; it does not establish improved activity.
+See [configuration verification](docs/development/custom-configuration-verification.md).
+
 ### From a gene symbol
 
 ```python
@@ -132,19 +158,24 @@ for lost in report.rejected_activators:        # duplexes that worked and the ga
 
 ## Current limitations
 
-- **No HTTP API and no hosted UI.** The library, the scripts and the generated HTML page are the
-  interfaces.
+- **No local app service or packaged installers yet.** The library, scripts and generated HTML
+  are the current interfaces. A local workbench with tested installation paths for supported
+  Windows, macOS and Linux systems is the accepted delivery target; see the
+  [continuation plan](docs/development/continuation-plan.md).
 - **3' overhangs are not modelled.** Candidates are 19 nt cores; what a researcher orders is a
-  21-mer with a 3' UU overhang on both strands. This is the largest remaining gap before the tool
-  is usable at the bench.
+  21-mer with a 3' dTdT overhang on both strands. Order-ready CSV and chemistry validation
+  remain to be implemented.
 - **Empirical validation is narrow.** 125 assayed sequences exist, but all were designed to pass
   Wang's gate, so the set cannot show a gate to be too permissive — only too strict. The sequences
-  also arrive without their promoter coordinates, so the location rules and four of the seven
-  preferences cannot be evaluated against them.
+  have recovered coordinates and 519 bp context for 123 of 125 designs, enabling window and
+  flank checks through `benchmark(..., locations=load_chapter4_locations())`. This context is
+  insufficient for the default 500 bp CpG-island definition. Ranking remains unvalidated.
 - **No cell-type binding data.** Motif predictions are sequence-only and say nothing about any
-  cell type. ENCODE would populate HeLa; AF22 has no public ChIP-seq.
-- **Bundled JASPAR matrices are CC BY-NC-SA 4.0**, which makes the package non-commercial. The
-  project licence is still undecided.
+  cell type. TF-occupancy adapters remain absent; AF22 histone ChIP-seq is a separate evidence axis.
+- **Licensing metadata needs correction before distribution.** Official
+  [JASPAR documentation](https://jaspar.elixir.no/about/) states CC BY 4.0, contradicting the
+  repository's non-commercial label. Audit the exact bundled assets and attribution; the precise
+  MIT/Apache code licensing form remains to be recorded.
 - Promoter fixtures must be CpG-depleted or real sequence. Uniform random sequence is called as
   one large CpG island by any correct detector, which rejects nearly every candidate — see
   [`docs/scientific/synthetic-promoter-fixtures.md`](docs/scientific/synthetic-promoter-fixtures.md).
@@ -155,8 +186,8 @@ for lost in report.rejected_activators:        # duplexes that worked and the ga
 - The AF22 histone bigWigs (GSE108506) are on **GRCh37/hg19**, while Ensembl REST serves
   **GRCh38** by default. Verified 2026-10-06 from the bigWig headers. The legacy annotation
   pipeline combined the two without converting, so **every regulatory annotation it produced is
-  unreliable** (defect B15). How the new engine reconciles the assemblies is an open
-  architecture decision; the design path is unaffected.
+  unreliable** (defect B15). The current AF22 reader performs guarded GRCh38-to-hg19 liftover,
+  preserving conversion failure reasons; the design path retains assembly-tagged coordinates.
 - `Designs.xlsx` is still missing, but the thesis's own chapter 4 supplies a labelled set of 125
   assayed sequences, which is now the project's validation fixture.
 
