@@ -110,10 +110,22 @@ class AppRouter:
         """Hold a bounded worker pool and the local run service."""
         self.service = service
         self.workers = ThreadPoolExecutor(max_workers=2, thread_name_prefix="sarna")
+        # Screenings get their own pool because they are a different kind of work. A design
+        # finishes in under a second; a screening waits on NCBI's queue for seven to fifteen
+        # minutes and may wait thirty. Sharing one two-worker pool meant that starting both
+        # scopes -- which is the supported and expected use -- occupied every worker, and the
+        # next design sat in "Queued" until a search came back. ADR 0019's premise is that the
+        # researcher reads their candidates while the search runs, so the search must not hold
+        # the capacity that reading needs. Two workers also caps this app at two concurrent
+        # NCBI jobs, which is the other half of the same ADR's rate-limit concern.
+        self.screeners = ThreadPoolExecutor(max_workers=2, thread_name_prefix="sarna-screen")
 
     def close(self) -> None:
         """Finish workers when the application or a test shuts down."""
         self.workers.shutdown(wait=True, cancel_futures=True)
+        # Queued screenings are dropped; running ones are left to finish, as they hold an NCBI
+        # request id that would otherwise be abandoned mid-flight.
+        self.screeners.shutdown(wait=True, cancel_futures=True)
 
     def dispatch(
         self, method: str, target: str, body: bytes = b"",
@@ -300,7 +312,7 @@ class AppRouter:
                 "No candidate in this run passed the gates, so there is nothing to screen."
             )
         screening_id = self.service.store.start_screening(run_id, scope)
-        self.workers.submit(self.service.screen, screening_id, run_id, scope)
+        self.screeners.submit(self.service.screen, screening_id, run_id, scope)
         return self._json(202, {"id": screening_id, "scope": scope})
 
     @staticmethod

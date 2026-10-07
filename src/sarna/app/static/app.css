@@ -121,3 +121,16 @@ body.frozen .setup,body.frozen .intro-note,body.frozen .saved-label,body.frozen 
 .tube code{display:block;font-size:12.5px;letter-spacing:.5px;overflow-wrap:anywhere;line-height:1.7}
 .tube small{display:block;font-size:10px;color:var(--muted);margin-top:6px;line-height:1.55}
 @media(max-width:760px){.end-evidence{grid-template-columns:1fr}.end-verdict{padding:6px 0}.ladder-label{flex-basis:70px}}
+
+/* Two scopes, two independent searches, two lanes. One shared status line could only describe
+   one of them, which is why both buttons used to be disabled together. */
+.offtarget-actions{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;padding:0 20px 16px}
+.screen-lane{display:flex;align-items:center;gap:9px;min-width:0}
+.screen-state{font-size:11px;color:var(--muted);line-height:1.5;overflow-wrap:anywhere}
+.screen-state.running{color:var(--teal)}
+.screen-state.running:before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--teal);margin-right:6px;animation:screen-pulse 1.1s ease-in-out infinite}
+.screen-state.error{color:var(--red)}
+.screen-state.complete{color:#2c7556}
+.offtarget-actions>.hint{flex:1 1 100%;margin-top:0}
+@keyframes screen-pulse{0%,100%{opacity:.25}50%{opacity:1}}
+@media(prefers-reduced-motion:reduce){.screen-state.running:before{animation:none;opacity:.8}}

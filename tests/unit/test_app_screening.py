@@ -6,6 +6,8 @@ with its own provenance, not an edit to the frozen record (ADR 0019).
 """
 
 import json
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +18,7 @@ from sarna.app.service import DesignService
 from sarna.app.web import AppRouter
 from sarna.offtarget.models import GENOMIC_SCOPE, TRANSCRIPT_SCOPE
 from sarna.offtarget.ncbi import BlastClient
-from tests.unit.test_app import run_request, service_for
+from tests.unit.test_app import DNA, run_request, service_for
 from tests.unit.test_offtarget_ncbi import PUT_REPLY, READY_WITH_HITS, REPORT
 
 
@@ -206,3 +208,68 @@ def test_every_supported_scope_has_a_database(scope: str) -> None:
     from sarna.offtarget.ncbi import parameters_for
 
     assert parameters_for(scope).database
+
+
+class TestAScreeningMustNotStarveTheRestOfTheApp:
+    """A screening waits on NCBI for minutes; a design takes under a second.
+
+    ADR 0019's whole premise is that the researcher reads their candidates while the search
+    runs. That only holds if the search is not occupying the capacity the reading needs. Both
+    scopes are supported and the user asked for both, so two screenings in flight is the
+    expected state, not an edge case.
+    """
+
+    @staticmethod
+    def _block_screening(
+        monkeypatch: pytest.MonkeyPatch, service: DesignService, release: threading.Event
+    ) -> list[str]:
+        """Replace screening with one that blocks until released, recording what started."""
+        started: list[str] = []
+
+        def blocked(*args: object, **kwargs: object) -> None:
+            started.append(str(kwargs.get("scope", args[2] if len(args) > 2 else "?")))
+            release.wait(timeout=60)
+
+        monkeypatch.setattr(service, "screen", blocked)
+        return started
+
+    def test_two_screenings_in_flight_do_not_delay_a_new_design(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        service, run_id, _ = completed_run(tmp_path)
+        release = threading.Event()
+        started = self._block_screening(monkeypatch, service, release)
+        router = AppRouter(service)
+        try:
+            for scope in (TRANSCRIPT_SCOPE, GENOMIC_SCOPE):
+                status, _, _ = router.dispatch(
+                    "POST", f"/api/runs/{run_id}/screenings",
+                    json.dumps({"scope": scope}).encode())
+                assert status == 202
+            deadline = time.monotonic() + 10
+            while len(started) < 2 and time.monotonic() < deadline:
+                time.sleep(0.02)
+            assert len(started) == 2, f"only {started} reached NCBI"
+
+            # Both searches are now sitting in NCBI's queue. A design must still run.
+            body = json.dumps({"source": "sequence", "sequence": DNA,
+                               "regulatory": False, "motifs": False}).encode()
+            status, _, payload = router.dispatch("POST", "/api/runs", body)
+            assert status == 202
+            new_run = json.loads(payload)["id"]
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                state = service.store.status(new_run)["status"]
+                if state != "running":
+                    break
+                if service.store.status(new_run)["stage"] != "Queued":
+                    break
+                time.sleep(0.05)
+            stage = service.store.status(new_run)["stage"]
+            assert stage != "Queued", (
+                "a design submitted while two screenings waited on NCBI never left the queue; "
+                "the screening work is occupying the pool the interactive work needs"
+            )
+        finally:
+            release.set()
+            router.close()

@@ -109,6 +109,43 @@ parameters. This vindicates the asynchronous design — a researcher reads their
 it runs — and the 30-minute ceiling is set accordingly. It also means screening is not something
 to run casually, which is another reason it is a button rather than part of every design.
 
+## Making it faster, 2026-10-07
+
+Three changes, one of which was a defect rather than a tuning opportunity.
+
+**A screening was occupying the capacity the rest of the app needs.** `AppRouter` held one
+`ThreadPoolExecutor(max_workers=2)` and submitted design runs, batch children *and* screenings to
+it. A design finishes in under a second; a screening waits on NCBI for seven to fifteen minutes
+and may wait thirty. Starting both scopes — which is the supported use, and the one the user asked
+for — therefore occupied every worker, and the next design sat in `Queued` until a search came
+back. This ADR's own premise is that the researcher reads their candidates while the search runs;
+that only holds if the search is not holding the capacity the reading needs. Screenings now have
+their own two-worker pool, which also caps this app at two concurrent NCBI jobs. A test submits
+two blocking screenings and then a design, and asserts the design leaves the queue; it fails
+against the shared pool and passes against the separate one, in 1.3 s rather than hitting its
+21 s timeout.
+
+**NCBI's own estimate was parsed and then ignored.** Every submission is answered with `RTOE`, how
+long NCBI expects the search to take, and the search cannot be ready before then. The loop slept a
+flat `MINIMUM_POLL_SECONDS` from the moment of submission, so a seven-minute search made about
+twenty-eight requests, nearly all of them before completion was possible. Every one is a request
+against the shared service this ADR notes can block the whole institution's address. The first
+wait is now the estimate, floored at the rate limit and capped at half the budget so a wild
+estimate cannot turn an early finish into a wait for the deadline. Later polls return to the
+floor: honouring the estimate must not become a backoff, because a job that overruns should still
+be collected within one poll of finishing. This removes requests; it does not add latency.
+
+**The two scopes could not run at once.** `startScreening` disabled both buttons, so a researcher
+who wanted both answers — the dual-scope requirement this ADR implements — waited two NCBI queues
+end to end. Each scope now has its own lane, its own status and its own button, and the server
+runs them concurrently. The wall-clock for both answers is now the longer of the two searches
+rather than their sum.
+
+What none of this changes is the bottleneck. NCBI's queue decides when a search finishes, and
+nothing here makes it decide sooner. A local BLAST backend would, at the cost of ~10 GB of
+database and an installation step that contradicts [INSTALL.md](../../INSTALL.md);
+`BlastClient` remains the seam where that would go.
+
 ## Costs and limits
 
 Screening needs internet; the designs do not, and a failed screening leaves the run untouched.

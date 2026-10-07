@@ -1025,43 +1025,73 @@ async function printDuplexSheet() {
 }
 
 
+const SCOPE_BUTTON = {transcript:"screen-transcript", genomic:"screen-genomic"};
+
+function renderScreeningStatus() {
+  // The card's tag summarises both lanes; each lane carries its own detail. One shared status
+  // line could only ever describe one of two searches, which is why both buttons were disabled
+  // together and the two scopes could not run at once.
+  const jobs = state.screeningJobs || {};
+  const states = Object.values(jobs).map(j => j.status);
+  const done = Object.keys(state.screenings || {}).length;
+  $("offtarget-status").textContent = states.includes("running") ? "RUNNING"
+    : states.includes("error") ? (done ? "PARTIAL" : "FAILED")
+    : done ? "COMPLETE" : "NOT RUN";
+  $("offtarget-progress").textContent = states.includes("running")
+    ? "Searches run at NCBI and report here when they finish. You can keep working meanwhile."
+    : "";
+  for (const scope of Object.keys(SCOPE_BUTTON)) {
+    const lane = $(`screen-state-${scope}`);
+    if (!lane) continue;
+    const job = jobs[scope];
+    lane.textContent = job ? (job.stage || job.status) : "";
+    lane.className = "screen-state " + (job ? job.status : "");
+  }
+}
+
 async function startScreening(scope) {
   // Opt-in, and the run is already readable: this adds evidence, it never gates the designs.
   const run = state.result;
   if (!run || frozen) { error("Screening needs a live run."); return; }
-  for (const id of ["screen-transcript","screen-genomic"]) $(id).disabled = true;
-  $("offtarget-status").textContent = "RUNNING";
-  $("offtarget-progress").textContent = "Starting…";
+  state.screeningJobs = state.screeningJobs || {};
+  if (state.screeningJobs[scope]?.status === "running") return;
+  state.screeningJobs[scope] = {status:"running", stage:"Starting…"};
+  // Only this scope's button is disabled. The two searches are independent jobs at NCBI and
+  // the server now runs them on a pool of their own, so making the researcher wait for one
+  // before starting the other simply doubled the wall-clock for the answer they asked for.
+  $(SCOPE_BUTTON[scope]).disabled = true;
+  renderScreeningStatus();
   try {
     const started = await api(`/api/runs/${run.app.run_id}/screenings`,
       {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({scope})});
     if (!started.id) throw new Error("The server did not return a screening id.");
-    pollScreening(started.id, run.app.run_id);
+    pollScreening(started.id, run.app.run_id, scope);
   } catch (e) {
     error(e.message);
-    $("offtarget-status").textContent = "FAILED";
-    for (const id of ["screen-transcript","screen-genomic"]) $(id).disabled = false;
+    state.screeningJobs[scope] = {status:"error", stage:e.message};
+    $(SCOPE_BUTTON[scope]).disabled = false;
+    renderScreeningStatus();
   }
 }
 
-async function pollScreening(screeningId, runId) {
+async function pollScreening(screeningId, runId, scope) {
   // The server waits NCBI's requested interval; this is only the interface catching up.
   try {
     const record = await api(`/api/screenings/${screeningId}`);
     if (state.result?.app.run_id !== runId) return;
-    $("offtarget-progress").textContent = record.stage || "";
+    state.screeningJobs = state.screeningJobs || {};
     if (record.status === "running") {
-      setTimeout(() => pollScreening(screeningId, runId), 2000);
+      state.screeningJobs[scope] = {status:"running", stage:record.stage || ""};
+      renderScreeningStatus();
+      setTimeout(() => pollScreening(screeningId, runId, scope), 2000);
       return;
     }
-    for (const id of ["screen-transcript","screen-genomic"]) $(id).disabled = false;
-    if (record.status === "error") {
-      $("offtarget-status").textContent = "FAILED";
-      $("offtarget-progress").textContent = record.error || "The screening failed.";
-      return;
-    }
-    $("offtarget-status").textContent = "COMPLETE";
-    renderScreening(record);
+    $(SCOPE_BUTTON[scope]).disabled = false;
+    state.screeningJobs[scope] = record.status === "error"
+      ? {status:"error", stage:record.error || "The screening failed."}
+      : {status:"complete", stage:"Finished"};
+    if (record.status !== "error") renderScreening(record);
+    renderScreeningStatus();
   } catch (e) { error(e.message); }
 }
 

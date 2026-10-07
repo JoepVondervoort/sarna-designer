@@ -99,10 +99,20 @@ def run_screening(
 
     deadline = now() + max_wait
     interval = max(poll_seconds, MINIMUM_POLL_SECONDS)
+    # NCBI answers every submission with RTOE, its own estimate of how long the search will
+    # take, and the search cannot be ready before then. Waiting it out costs no latency and
+    # removes every poll that could only have returned WAITING: at the fifteen-second floor a
+    # seven-minute search made twenty-eight requests against a shared service ADR 0019 notes
+    # can block the whole institution's address. Capped at half the budget so a wild estimate
+    # cannot turn an early finish into a wait for the deadline, and floored at the rate limit.
+    wait_next = min(max(float(submitted.estimated_seconds), interval), max_wait / 2)
     waited = 0.0
     while True:
-        sleep(interval)
-        waited += interval
+        sleep(wait_next)
+        waited += wait_next
+        # Only the first wait follows the estimate. Afterwards return to the floor, so a job
+        # that overruns is still collected within one poll of finishing rather than backing off.
+        wait_next = interval
         try:
             hits = client.fetch(submitted.request_id, parameters)
             break
