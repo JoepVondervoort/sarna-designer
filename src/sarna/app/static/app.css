@@ -20,3 +20,32 @@ body.frozen .setup,body.frozen .intro-note,body.frozen .saved-label,body.frozen 
 .performance-banner p{font-size:12px;line-height:1.6}
 .performance-banner .hint{margin-top:6px}
 .performance-banner .warn{color:var(--gold);font-weight:600}
+
+.top-result{border-left:3px solid var(--teal)}
+.top-result h3{font-size:17px;letter-spacing:-.3px}
+.top-duplex{display:grid;gap:9px;margin:14px 0 4px}
+.top-duplex>div{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;background:#f3f8f6;border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.top-duplex>div>div{min-width:0}
+.top-duplex span{display:block;font-size:10px;letter-spacing:.7px;font-weight:700;color:var(--muted)}
+.top-duplex code{font-size:13px;word-break:break-all;line-height:1.5}
+.top-duplex button{font-size:11px;padding:6px 10px}
+.top-actions-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+#duplex-sheet{display:none}
+@media print{
+  body{background:white}
+  .topbar,.intro,.setup,.workspace>*:not(#duplex-sheet),footer,dialog,#tooltip,
+  .export-bar,.layout>aside{display:none!important}
+  .layout{display:block}
+  #duplex-sheet{display:block;font-size:11pt;color:black;max-width:none}
+  #duplex-sheet h1{font-size:17pt;margin:0 0 4mm;letter-spacing:-.3px}
+  #duplex-sheet h2{font-size:12pt;margin:6mm 0 2mm;border-bottom:1px solid #999;padding-bottom:1mm}
+  #duplex-sheet code{font-family:ui-monospace,Consolas,monospace;font-size:11pt;word-break:break-all}
+  #duplex-sheet .sheet-table{border-collapse:collapse;width:100%}
+  #duplex-sheet .sheet-table th{text-align:left;width:38mm;vertical-align:top;padding:1.2mm 0;font-weight:600}
+  #duplex-sheet .sheet-table td{padding:1.2mm 0;vertical-align:top}
+  #duplex-sheet ul{margin:2mm 0 0 5mm;padding:0}
+  #duplex-sheet li{margin-bottom:1.5mm}
+  #duplex-sheet .sheet-foot{margin-top:7mm;padding-top:2mm;border-top:1px solid #999;
+    font-size:8.5pt;color:#333}
+  @page{margin:16mm}
+}

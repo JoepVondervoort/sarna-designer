@@ -54,6 +54,7 @@
           <div id="draft-notice" class="draft-notice" hidden>Settings have changed. These results still belong to the saved run. Apply your changes to calculate a new run.</div>
           <div id="diff-notice" class="diff-notice" hidden></div>
           <div class="metrics"><div><span id="metric-generated">—</span><p>targets evaluated</p></div><div><span id="metric-passing">—</span><p>pass available gates</p></div><div><span id="metric-best">—</span><p>best preference rating</p></div><div><span id="metric-length">—</span><p>promoter span</p></div></div>
+          <section id="top-result" class="card top-result" hidden></section>
           <div id="ranking-performance" class="performance-banner" hidden></div>
           <div id="context-banner" class="context-banner"></div>
           <section class="card promoter-card"><div class="card-heading"><div><h3>Promoter landscape</h3><p id="map-orientation" class="hint"></p></div><div class="map-controls"><button type="button" id="pan-left" aria-label="Pan left">←</button><button type="button" id="zoom-in" aria-label="Zoom in">+</button><button type="button" id="zoom-out" aria-label="Zoom out">−</button><button type="button" id="pan-right" aria-label="Pan right">→</button><button type="button" id="zoom-reset">Full region</button></div></div><div class="map-wrap"><svg id="promoter-map" viewBox="0 0 1000 290" role="img" aria-label="Interactive promoter map"></svg></div><div class="map-legend"><span><i class="legend-dot reference"></i>Reference</span><span><i class="legend-dot window"></i>Design window</span><span><i class="legend-dot regulatory"></i>Pooled annotations</span><span><i class="legend-dot motif"></i>Motif predictions</span><span><i class="legend-dot candidate"></i>Passing candidates</span><small>Hover or focus for evidence · click a candidate to inspect</small></div></section>
@@ -63,6 +64,7 @@
         </div>
       </section>
     </div>
+    <section id="duplex-sheet" aria-hidden="true"></section>
     <footer>saRNA Designer <span id="engine-version"></span> · Research criteria explain a design; experimental validation establishes activation.</footer>
   </main>
   <dialog id="settings-dialog"><div class="dialog-header"><div><p class="eyebrow">RESEARCHER CONTROLS</p><h2>Rules, defaults &amp; alternatives</h2></div><button type="button" class="close-dialog" aria-label="Close settings">×</button></div><p class="dialog-intro">A <b>gate</b> excludes candidates that fail it. A <b>preference</b> adds one point when met. <b>Off</b> removes the check. Edits stay a draft until you run Python again. Continuous asymmetry is a tiebreak, and core length defines candidate generation.</p><div id="rule-editor"></div><div class="dialog-footer"><button type="button" id="reset-settings" class="secondary">Reset to selected preset</button><button type="button" class="primary close-dialog">Keep draft changes</button></div></dialog>

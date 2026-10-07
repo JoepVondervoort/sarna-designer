@@ -9,6 +9,7 @@ import argparse
 import base64
 import json
 import os
+import re
 import socket
 import struct
 import subprocess
@@ -184,6 +185,27 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     assert browser.evaluate("!document.getElementById('ranking-performance').hidden") is True
     assert "does not beat chance" in str(browser.evaluate(
         "document.getElementById('ranking-performance').textContent"))
+    # The results open on the answer: how many survived and what to order.
+    assert browser.evaluate("!document.getElementById('top-result').hidden") is True
+    top = str(browser.evaluate("document.getElementById('top-result').textContent"))
+    assert "passed every evaluable gate" in top, top[:160]
+    assert "[dT][dT]" in top, "the top card must show the order-ready duplex, not the bare core"
+    # The printable sheet builds from the record, and keeps gates and preferences apart: a
+    # passed gate listed as a preference would contradict the rating printed beside it.
+    sheet = str(browser.evaluate(
+        "(()=>{const r=state.result, best=r.candidates.find(c=>c.rank===1);"
+        "document.getElementById('duplex-sheet').innerHTML=duplexSheetHTML(r,best);"
+        "return document.getElementById('duplex-sheet').innerText;})()"))
+    assert "Order these two oligonucleotides" in sheet
+    assert sheet.count("[dT][dT]") >= 2, "both strands belong on the sheet"
+    assert "Gates passed" in sheet and "Preferences met" in sheet
+    assert "No off-target screening has been performed" in sheet
+    assert "does not beat chance" in sheet, "the sheet must carry the measurement too"
+    stated = re.search(r"meeting (\d+) of (\d+) evaluated preferences", sheet)
+    listed = re.search(r"Preferences met \((\d+)\)", sheet)
+    assert stated and listed, sheet[:400]
+    assert stated.group(1) == listed.group(1), (
+        f"the sheet says {stated.group(1)} preferences met but lists {listed.group(1)}")
     # The live order export goes to Python over HTTP. Fetch it the way the button does and read
     # what a researcher would actually paste into a vendor form.
     live_order = str(browser.evaluate(

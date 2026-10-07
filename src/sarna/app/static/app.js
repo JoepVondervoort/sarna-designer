@@ -422,6 +422,7 @@ function showResult(result) {
   $("metric-best").textContent = first ? `${first.rating.met}/${first.rating.evaluated}` : "—";
   $("metric-length").textContent = `${fmt(result.promoter.length)} bp`;
   renderRankingPerformance(result.ranking_performance);
+  renderTopResult(result);
   const cell = result.cell_types.find(c => [c.id,c.name.toLowerCase()].includes(result.app.cell_line.toLowerCase()));
   const chromatin = cell?.chromatin;
   $("context-banner").innerHTML = `<strong>Cell context · ${escapeHTML(result.app.cell_line)}</strong><p>${chromatin?escapeHTML(chromatin.summary || "Local histone measurements loaded; inspect sources below."):"Promoter activity is unknown in this run. No cell-specific expression or histone measurement establishes that this locus is active."}</p><details><summary>Evidence gaps &amp; source notes</summary><ul>${result.app.notices.map(n => `<li>${escapeHTML(n)}</li>`).join("")}${result.app.anchor?.caveat?`<li>${escapeHTML(result.app.anchor.caveat)}</li>`:""}</ul></details>`;
@@ -603,6 +604,134 @@ function renderRankingPerformance(measured) {
   parts.push(`<p class="hint">Source: ${escapeHTML(measured.source)} · AUC ${measured.auc} against ${measured.chance_auc} for a coin flip, p = ${measured.auc_p_value}</p>`);
   box.innerHTML = parts.join("");
 }
+
+function referenceLabel(result) {
+  // Which promoter reference this run designed against, named the way the setup panel names it.
+  const anchor = result.app.anchor;
+  if (anchor && anchor.id && !anchor.id.startsWith(result.transcript?.ensembl_id || "\u0000")) {
+    return `${anchor.label || anchor.id}${anchor.reference_kind ? ` (${anchor.reference_kind} reference)` : ""}`;
+  }
+  const t = result.transcript;
+  if (!t) return "pasted sequence";
+  const marks = [t.is_mane_select ? "MANE Select" : null, t.biotype, t.refseq_match].filter(Boolean);
+  return `${t.ensembl_id}${marks.length ? ` — ${marks.join(", ")}` : ""}`;
+}
+
+function orderRowFor(result, candidateId) {
+  // The order-ready duplex Python computed for this candidate. Returns null for a candidate
+  // that failed a gate: those are not in the order table, by design.
+  const order = result.order;
+  if (!order || !order.rows) return null;
+  const row = order.rows.find(r => r[1] === candidateId);
+  return row ? Object.fromEntries(order.columns.map((c, i) => [c, row[i]])) : null;
+}
+
+function renderTopResult(result) {
+  // Opens on the answer a researcher came for: how many survived, what the best one is, and
+  // what to order. Everything else on the page remains available below it.
+  const box = $("top-result");
+  const best = result.candidates.find(c => c.rank === 1);
+  if (!best) {
+    box.hidden = false;
+    box.innerHTML = `<div class="card-heading"><div><p class="eyebrow">RESULT</p>`
+      + `<h3>No candidate passed every evaluable gate</h3>`
+      + `<p class="hint">${fmt(result.counts.generated)} targets were evaluated and all were excluded. `
+      + `The promoter map and the Excluded view below show which rule rejected each one; the most `
+      + `common reasons are in the run's rejection breakdown. This is a result, not a failure: it `
+      + `usually means a gate is too strict for this promoter rather than that no saRNA exists.</p>`
+      + `</div></div>`;
+    return;
+  }
+  const order = orderRowFor(result, best.id);
+  const met = best.rating.evaluated ? `${best.rating.met}/${best.rating.evaluated}` : "not evaluated";
+  const duplex = order
+    ? `<div class="top-duplex">`
+      + `<div><div><span>Sense · 5′ → 3′</span><code>${escapeHTML(order.sense_order_5to3)}</code></div>`
+      + `<button type="button" data-copy="${escapeHTML(order.sense_order_5to3)}">Copy</button></div>`
+      + `<div><div><span>Antisense · 5′ → 3′</span><code>${escapeHTML(order.antisense_order_5to3)}</code></div>`
+      + `<button type="button" data-copy="${escapeHTML(order.antisense_order_5to3)}">Copy</button></div>`
+      + `<p class="hint">Two 21-mers: a 19 nt RNA core plus a 3′ dTdT overhang on each strand. `
+      + `No off-target screening has been performed.</p></div>`
+    : `<p class="hint">Order-ready sequences are not in this record.</p>`;
+  box.hidden = false;
+  box.innerHTML = `<div class="card-heading"><div><p class="eyebrow">START HERE</p>`
+    + `<h3>${fmt(result.counts.passing)} of ${fmt(result.counts.generated)} targets passed every evaluable gate</h3>`
+    + `<p class="hint">Highest-rated is <b>${escapeHTML(best.id)}</b> at ${escapeHTML(positionText(best))} `
+    + `${best.tss_span ? "relative to the reference TSS" : "in the supplied sequence"}, meeting `
+    + `${met} evaluated preferences, with ${escapeHTML(best.rating.guide || "an unknown")} predicted as the guide strand.</p>`
+    + `</div><span class="tag">RANK 1</span></div>`
+    + duplex
+    + `<div class="top-actions-row">`
+    + `<button type="button" id="print-duplex" class="primary">Print duplex sheet</button>`
+    + `<button type="button" id="inspect-top" class="secondary">Why this one?</button>`
+    + `<button type="button" id="export-order-top" class="secondary">Order CSV · all ${fmt(result.counts.passing)}</button>`
+    + `</div>`;
+}
+
+function duplexSheetHTML(result, candidate) {
+  // A one-page record to take to the bench. Everything comes from the run record; nothing is
+  // recomputed here, so the sheet cannot disagree with the page that produced it.
+  const order = orderRowFor(result, candidate.id);
+  const measured = result.ranking_performance;
+  const gene = result.gene ? `${result.gene.symbol} (${result.gene.ensembl_id})` : "Pasted sequence";
+  const met = candidate.rating.evaluated
+    ? `${candidate.rating.met} of ${candidate.rating.evaluated} evaluated preferences`
+    : "no preferences could be evaluated";
+  const rules = (candidate.rules || []);
+  const named = r => escapeHTML(r.name || r.id);
+  const gates = rules.filter(r => r.kind === "mandatory");
+  const gatesPassed = gates.filter(r => r.outcome === "pass");
+  const preferencesMet = rules.filter(r => r.kind === "preference" && r.outcome === "pass");
+  const unavailable = rules.filter(r => r.outcome === "not-applicable");
+  const row = (label, value) => `<tr><th>${label}</th><td>${value}</td></tr>`;
+  return `<h1>saRNA duplex — ${escapeHTML(candidate.id)}</h1>
+    <table class="sheet-table">
+      ${row("Gene", escapeHTML(gene))}
+      ${row("Promoter reference", escapeHTML(referenceLabel(result)))}
+      ${row("Position", escapeHTML(positionText(candidate)) + (candidate.tss_span ? " relative to reference TSS" : " in supplied sequence"))}
+      ${row("Genomic", candidate.genomic ? escapeHTML(`${candidate.genomic.contig}:${candidate.genomic.start}-${candidate.genomic.end} (${candidate.genomic.strand} strand, GRCh38)`) : "—")}
+      ${row("Target site DNA", `<code>${escapeHTML(candidate.target_site_dna)}</code>`)}
+    </table>
+    <h2>Order these two oligonucleotides</h2>
+    ${order ? `<table class="sheet-table">
+      ${row("Sense strand", `<code>${escapeHTML(order.sense_order_5to3)}</code>`)}
+      ${row("Antisense strand", `<code>${escapeHTML(order.antisense_order_5to3)}</code>`)}
+      ${row("Chemistry", "19 nt RNA core + 3′ dTdT overhang on both strands; 21 nt each")}
+    </table>` : "<p>This candidate did not pass the gates and has no order-ready duplex.</p>"}
+    <h2>Why it was selected</h2>
+    <p>Rank ${candidate.rank ?? "—"} of ${fmt(result.counts.passing)} that passed every evaluable gate,
+       meeting ${escapeHTML(met)}. Predicted guide strand:
+       ${escapeHTML(candidate.rating.guide || "unknown")}, by ${escapeHTML(candidate.rating.guide_model || "—")}.</p>
+    <p><b>Gates passed (${gatesPassed.length} of ${gates.length}):</b> ${gatesPassed.length ? gatesPassed.map(named).join("; ") : "none"}. A gate excludes a candidate that fails it.</p>
+    <p><b>Preferences met (${preferencesMet.length}):</b> ${preferencesMet.length ? preferencesMet.map(named).join("; ") : "none"}. A preference adds one point and never excludes.</p>
+    ${unavailable.length ? `<p><b>Could not be evaluated (${unavailable.length}):</b> ${unavailable.map(named).join("; ")}. These counted neither for nor against it, and are not failures.</p>` : ""}
+    <h2>What this does not establish</h2>
+    <ul>
+      <li>${measured ? escapeHTML(measured.headline) : "Ranking performance was not measured for this run."}</li>
+      <li>No off-target screening has been performed. Screen these sequences independently before ordering.</li>
+      <li>A rating counts criteria met. It is not a probability that this duplex activates the gene.</li>
+      <li>Cell context: ${escapeHTML(result.app.cell_line || "not specified")}. A cell name alone supplies no expression evidence.</li>
+    </ul>
+    <p class="sheet-foot">Run ${escapeHTML(result.app.run_id)} · engine ${escapeHTML(result.app.engine_version)} ·
+       configuration ${escapeHTML(result.configuration.preset.name)}${result.configuration.is_custom ? " (customised)" : ""} ·
+       generated ${escapeHTML(new Date(result.app.created).toLocaleString())}</p>`;
+}
+
+async function printDuplexSheet() {
+  const result = state.result;
+  if (!result) return;
+  const id = state.selected || result.candidates.find(c => c.rank === 1)?.id;
+  if (!id) { error("There is no candidate to print."); return; }
+  let candidate = result.candidates.find(c => c.id === id);
+  try {
+    if (!candidate.rules && !frozen) {
+      candidate = await api(`/api/runs/${result.app.run_id}/candidates/${id}`);
+    }
+    $("duplex-sheet").innerHTML = duplexSheetHTML(result, candidate);
+    window.print();
+  } catch (e) { error(e.message); }
+}
+
 function tooltip(target,event) {
   const text=target?.closest("[data-tip]")?.dataset.tip;
   if (!text) { $("tooltip").hidden=true; return; }
@@ -730,5 +859,15 @@ $("candidate-detail").addEventListener("click",async e=>{const b=e.target.closes
 $("run-evidence").addEventListener("click",renderEvidence);
 for (const type of ["csv","json","html"]) $("export-"+type).addEventListener("click",()=>exportRun(type));
 $("export-order").addEventListener("click",exportOrder);
+document.addEventListener("click", event => {
+  const target = event.target.closest("#print-duplex,#inspect-top,#export-order-top");
+  if (!target) return;
+  if (target.id === "print-duplex") printDuplexSheet();
+  if (target.id === "export-order-top") exportOrder();
+  if (target.id === "inspect-top") {
+    const best = state.result?.candidates.find(c => c.rank === 1);
+    if (best) { selectCandidate(best.id); $("candidate-detail").scrollIntoView({behavior:"smooth", block:"start"}); }
+  }
+});
 document.addEventListener("pointermove",e=>tooltip(e.target,e));document.addEventListener("focusin",e=>tooltip(e.target));document.addEventListener("focusout",()=>{$("tooltip").hidden=true;});document.addEventListener("scroll",()=>{$("tooltip").hidden=true;},true);
 initialize();
