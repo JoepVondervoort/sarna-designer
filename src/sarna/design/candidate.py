@@ -195,14 +195,7 @@ class Candidate:
                 "tables_agree": self.guide_comparison.tables_agree,
                 "summary": self.guide_comparison.summary,
                 "assessments": [
-                    {
-                        "table": assessment.table_id,
-                        "predicted_guide": str(assessment.predicted_guide),
-                        "difference": assessment.difference,
-                        "unit": assessment.unit,
-                        "explanation": assessment.explanation,
-                    }
-                    for assessment in self.guide_comparison.assessments
+                    assessment.to_dict() for assessment in self.guide_comparison.assessments
                 ],
             },
             "rules": [

@@ -25,6 +25,7 @@ source.
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 from sarna.sequence.nucleic import NucleicSequence
 from sarna.thermo.ends import (
@@ -115,6 +116,26 @@ class AsymmetryAssessment:
             f"guide — the undesirable outcome, since the antisense strand is the one intended to "
             f"engage the promoter."
         )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Export the verdict together with the two measurements it was derived from.
+
+        ADR 0009 requires that a prediction never arrive as a bare verdict. A reader who
+        receives only ``difference`` has to trust the sign; one who receives both ends and
+        their stacks can redo the subtraction. :attr:`explanation` says the same thing in
+        words, which a person can read but an interface cannot draw.
+        """
+        return {
+            "table": self.table_id,
+            "table_name": self.table_name,
+            "predicted_guide": str(self.predicted_guide),
+            "difference": self.difference,
+            "tolerance": self.tolerance,
+            "unit": self.unit,
+            "five_prime": self.five_prime.to_dict(),
+            "three_prime": self.three_prime.to_dict(),
+            "explanation": self.explanation,
+        }
 
 
 def assess_asymmetry(

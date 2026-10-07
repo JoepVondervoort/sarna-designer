@@ -17,6 +17,7 @@ this end less stable?" with the actual steps it summed rather than a bare number
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 from sarna.sequence.alphabet import Nucleic
 from sarna.sequence.nucleic import NucleicSequence
@@ -55,6 +56,20 @@ class EndStability:
     def breakdown(self) -> str:
         """Return the summed steps as text, e.g. ``GC -9.36 + CG -9.07 + GC -9.36``."""
         return " + ".join(f"{step} {energy:.2f}" for step, energy in self.stacks)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Export the end as numbers rather than only as the prose in :attr:`breakdown`.
+
+        A consumer that receives only the signed difference cannot show *why* one end is the
+        weaker, which is the whole content of the prediction. Exporting the stacks keeps the
+        subtraction checkable by whoever reads it (ADR 0009).
+        """
+        return {
+            "end": str(self.end),
+            "energy": self.energy,
+            "unit": self.unit,
+            "stacks": [[step, energy] for step, energy in self.stacks],
+        }
 
 
 def end_stability(

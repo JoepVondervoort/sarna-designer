@@ -275,3 +275,42 @@ class TestThresholdUnitGuards:
         assert _threshold_in("kJ/mol", 2.0) == pytest.approx(8.368)
         with pytest.raises(ValueError, match="joules"):
             _threshold_in("joules", 2.0)
+
+
+class TestTheEndsAreExportedAsNumbersNotOnlyAsProse:
+    """The evidence for a guide call must survive serialisation (ADR 0009).
+
+    Until this was added, ``AsymmetryAssessment`` exported only the signed difference and an
+    English sentence. The two end energies and the stacks they were summed from existed in
+    Python and reached no consumer that was not a human reading a paragraph, so an interface
+    could state the verdict but could not draw the measurement behind it.
+    """
+
+    def test_an_end_exports_its_energy_stacks_and_unit(self) -> None:
+        # Legacy constants above, summed by hand: GC + CG + GC for the 5' end of GCGC...
+        end = end_stability(TARGET, LEGACY_DNA_KJ, DuplexEnd.FIVE_PRIME)
+        exported = end.to_dict()
+        assert exported["end"] == "5'"
+        assert exported["energy"] == pytest.approx(GCE + CGE + GCE)
+        assert exported["unit"] == "kJ/mol"
+        assert exported["stacks"] == [
+            ["GC", pytest.approx(GCE)], ["CG", pytest.approx(CGE)], ["GC", pytest.approx(GCE)]
+        ]
+
+    def test_the_stacks_sum_to_the_energy_so_the_two_cannot_drift(self) -> None:
+        for end in (DuplexEnd.FIVE_PRIME, DuplexEnd.THREE_PRIME):
+            exported = end_stability(TARGET, RNA_XIA_1998, end).to_dict()
+            assert sum(energy for _step, energy in exported["stacks"]) == pytest.approx(
+                exported["energy"]
+            )
+
+    def test_an_assessment_carries_both_ends_so_a_reader_can_check_the_subtraction(self) -> None:
+        assessment = assess_asymmetry(TARGET, RNA_XIA_1998)
+        exported = assessment.to_dict()
+        # The sign convention is E(3') - E(5'); exporting the difference alone makes that
+        # claim uncheckable, which is precisely what ADR 0009 refuses.
+        assert exported["three_prime"]["energy"] - exported["five_prime"]["energy"] == (
+            pytest.approx(exported["difference"])
+        )
+        assert exported["predicted_guide"] == str(assessment.predicted_guide)
+        assert exported["table"] == assessment.table_id

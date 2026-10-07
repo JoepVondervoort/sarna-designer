@@ -487,7 +487,7 @@ async function selectCandidate(id) {
     Object.assign(candidate,full);
     const primary = full.guide_prediction.assessments.find(a=>a.table===full.rating.guide_model);
     const sequenceBox = (name,sequence) => `<div class="sequence-box"><div><span>${name} · 5′ → 3′</span><button type="button" data-copy="${escapeHTML(sequence)}">Copy</button></div><code>${escapeHTML(sequence)}</code></div>`;
-    $("candidate-detail").innerHTML = `<div class="detail-heading"><div><h3>${id} <span class="muted">${full.rank?`Rank ${full.rank}`:"Excluded by gates"}</span></h3><p class="hint">${escapeHTML(positionText(full))} ${full.tss_span?"relative to reference TSS":"in supplied sequence"} · ${full.target_site_dna.length} nt core · ${full.gc_percent}% GC${full.genomic?` · genomic ${escapeHTML(full.genomic.strand)} strand`:""}</p></div><span class="tag">${ratingText(full)} PREFERENCES</span></div><div class="detail-body"><div>${sequenceBox("Promoter target DNA",full.target_site_dna)}${sequenceBox("Sense RNA core",full.sense_strand_rna)}${sequenceBox("Antisense RNA core",full.antisense_strand_rna)}<p class="hint">RNA cores shown without the dTdT overhangs required for this project’s duplex chemistry. This is a design record, with no off-target screening performed.</p></div><div><div class="guide-summary"><strong>Predicted RNA guide: ${escapeHTML(full.rating.guide || "unknown")}</strong><p>${escapeHTML(tableNames[full.rating.guide_model] || full.rating.guide_model)} · ${escapeHTML(full.guide_prediction.summary)}</p><p class="hint">This predicts duplex loading, not the identity of a promoter-associated target RNA, and not activation.</p></div><table class="model-table"><thead><tr><th>Parameter model</th><th>Guide</th><th>End difference</th></tr></thead><tbody>${full.guide_prediction.assessments.map(a=>`<tr data-tip="${escapeHTML(a.explanation)}" tabindex="0"><td>${escapeHTML(tableNames[a.table] || a.table)}</td><td>${escapeHTML(a.predicted_guide)}</td><td>${a.difference.toFixed(2)} ${escapeHTML(a.unit)}</td></tr>`).join("")}</tbody></table><details class="verdict"><summary>How the selected model reaches this prediction</summary><p>${escapeHTML(primary?.explanation || "The selected model was not assessed.")}</p></details></div></div>${full.excluded_by.length?`<p class="hint">${escapeHTML(full.rejection_summary)}</p>`:""}<div class="rule-verdicts"><h3>Every rule, explained</h3>${full.rules.map(r=>ruleVerdict(r,run.configuration)).join("")}</div>`;
+    $("candidate-detail").innerHTML = `<div class="detail-heading"><div><h3>${id} <span class="muted">${full.rank?`Rank ${full.rank}`:"Excluded by gates"}</span></h3><p class="hint">${escapeHTML(positionText(full))} ${full.tss_span?"relative to reference TSS":"in supplied sequence"} · ${full.target_site_dna.length} nt core · ${full.gc_percent}% GC${full.genomic?` · genomic ${escapeHTML(full.genomic.strand)} strand`:""}</p></div><span class="tag">${ratingText(full)} PREFERENCES</span></div>${duplexPanel(run,full)}<div class="detail-body"><div>${sequenceBox("Promoter target DNA",full.target_site_dna)}${sequenceBox("Sense RNA core",full.sense_strand_rna)}${sequenceBox("Antisense RNA core",full.antisense_strand_rna)}<p class="hint">The cores above are the 19 nt RNA the rules are evaluated against, without overhangs. The duplex panel at the top is what you order. No off-target screening has been performed.</p></div><div><div class="guide-summary"><strong>Predicted RNA guide: ${escapeHTML(full.rating.guide || "unknown")}</strong><p>${escapeHTML(tableNames[full.rating.guide_model] || full.rating.guide_model)} · ${escapeHTML(full.guide_prediction.summary)}</p><p class="hint">This predicts duplex loading, not the identity of a promoter-associated target RNA, and not activation.</p></div><table class="model-table"><thead><tr><th>Parameter model</th><th>Guide</th><th>End difference</th></tr></thead><tbody>${full.guide_prediction.assessments.map(a=>`<tr data-tip="${escapeHTML(a.explanation)}" tabindex="0"><td>${escapeHTML(tableNames[a.table] || a.table)}</td><td>${escapeHTML(a.predicted_guide)}</td><td>${a.difference.toFixed(2)} ${escapeHTML(a.unit)}</td></tr>`).join("")}</tbody></table><details class="verdict"><summary>How the selected model reaches this prediction</summary><p>${escapeHTML(primary?.explanation || "The selected model was not assessed.")}</p></details></div></div>${full.excluded_by.length?`<p class="hint">${escapeHTML(full.rejection_summary)}</p>`:""}<div class="rule-verdicts"><h3>Every rule, explained</h3>${full.rules.map(r=>ruleVerdict(r,run.configuration)).join("")}</div>`;
   } catch (e) { error(e.message); }
 }
 function ruleVerdict(verdict,config) {
@@ -547,14 +547,11 @@ function renderMap() {
   label("Passing targets",245,"Targets that pass evaluable mandatory rules, coloured teal. Unavailable gates must still be examined in candidate details.");
   label("Excluded targets",273,"Targets with at least one failed mandatory rule. Hover or select to see which checks failed.");
   for (const y of [65,110,148,182,217,251,279]) parts.push(`<line x1="${left}" x2="${right}" y1="${y}" y2="${y}" stroke="#e8efeb"/>`);
-  for (let i=0;i<=6;i++) {
-    const offset=Math.round(state.start+(state.end-state.start-1)*i/6), x=scale(offset);
-    // Coordinate labels only: Python already supplies scientific candidate spans.
-    const continuous = p.tss_offset===null?null:offset-p.tss_offset;
-    const text = continuous===null?String(offset+1):signed(continuous>=0?continuous+1:continuous);
-    parts.push(`<text class="tick" text-anchor="${i===0?"start":i===6?"end":"middle"}" x="${x}" y="20">${text}</text>`);
-  }
-  parts.push('<g clip-path="url(#map-clip)">');
+  parts.push(`<g id="map-ticks">${tickMarkup(state.start,state.end,p)}</g>`);
+  // Two nested groups on purpose: the clip stays in the untransformed coordinate system while
+  // the inner group is translated during a drag. Putting both on one element leaves the clip's
+  // reference space ambiguous, and browsers have disagreed about it.
+  parts.push('<g clip-path="url(#map-clip)"><g id="map-pan">');
   if (p.tss_offset!==null && p.tss_offset>=state.start && p.tss_offset<state.end) {
     const x=scale(p.tss_offset);
     parts.push(`<line x1="${x}" x2="${x}" y1="29" y2="281" stroke="#52726b" stroke-dasharray="4 4" opacity=".5"/><path d="M${x-5} 37h10l-5 7z" fill="#344d55" ${tip("+1 · chosen reference. The first transcribed base in this coordinate system. Its source and uncertainty are recorded in run evidence.")}/><text x="${x+7}" y="46" fill="#344d55" font-size="10">+1 reference</text>`);
@@ -597,7 +594,7 @@ function renderMap() {
     const c=r.candidates.find(c=>c.id===state.selected);
     rect(c.offset,c.offset+c.target_site_dna.length,c.rank===null?261:228,c.rank===null?19:25,"none",`${c.id} selected`,`stroke="#b97a2b" stroke-width="2" data-candidate="${c.id}"`);
   }
-  parts.push('</g>'); $("promoter-map").innerHTML=parts.join("");
+  parts.push('</g></g>'); $("promoter-map").innerHTML=parts.join("");
   renderRejectionLegend(r);
   const note = $("unevaluated-note");
   if (note) {
@@ -610,11 +607,103 @@ function renderMap() {
       : "";
   }
 }
+const MAP_LEFT = 133, MAP_PLOT = 832, MAP_MIN_SPAN = 40;
+
+function tickMarkup(start,end,p) {
+  // Coordinate labels only: Python already supplies scientific candidate spans.
+  let out = "";
+  for (let i=0;i<=6;i++) {
+    const offset=Math.round(start+(end-start-1)*i/6);
+    const x=MAP_LEFT+(offset-start)/(end-start)*MAP_PLOT;
+    const continuous = p.tss_offset===null?null:offset-p.tss_offset;
+    const text = continuous===null?String(offset+1):signed(continuous>=0?continuous+1:continuous);
+    out += `<text class="tick" text-anchor="${i===0?"start":i===6?"end":"middle"}" x="${x}" y="20">${text}</text>`;
+  }
+  return out;
+}
+
+function setViewport(start,span) {
+  // One clamp, used by the buttons, the wheel and the drag, so the three cannot disagree.
+  const max = state.result.promoter.length;
+  const width = Math.min(max,Math.max(MAP_MIN_SPAN,span));
+  state.start = Math.max(0,Math.min(max-width,start));
+  state.end = state.start+width;
+}
+
+function enableMapDrag() {
+  // A full redraw costs ~14.5 ms on this promoter (2,600 SVG nodes) against a 16.7 ms frame
+  // budget, so redrawing on every pointermove would drop frames on any slower machine.
+  // Panning is a pure horizontal translation of the plotted area, so during the drag the
+  // clipped group is translated -- exact, not an approximation -- and the full redraw happens
+  // once on release. Only the seven tick labels are refreshed live.
+  const svg = $("promoter-map");
+  let drag = null;
+  const perPixel = () => 1000 / (svg.getBoundingClientRect().width || 1000);
+
+  const move = event => {
+    if (!drag) return;
+    const dx = (event.clientX - drag.x) * drag.unit;
+    drag.moved = Math.max(drag.moved, Math.abs(event.clientX - drag.x));
+    // Dragging right pulls the sequence right, which reveals earlier offsets.
+    const wanted = drag.start - dx * drag.span / MAP_PLOT;
+    const start = Math.max(0, Math.min(drag.max - drag.span, wanted));
+    drag.pending = start;
+    const pan = svg.querySelector("#map-pan");
+    if (pan) pan.setAttribute("transform",
+      `translate(${((drag.start - start) * MAP_PLOT / drag.span).toFixed(2)},0)`);
+    const ticks = svg.querySelector("#map-ticks");
+    if (ticks) ticks.innerHTML = tickMarkup(start, start + drag.span, state.result.promoter);
+  };
+  const end = () => {
+    if (!drag) return;
+    const {pending, span, moved} = drag;
+    drag = null;
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", end);
+    window.removeEventListener("pointercancel", end);
+    svg.classList.remove("dragging");
+    // A drag that ends over a candidate must not also select it; a click without movement must.
+    state.suppressMapClick = moved > 3;
+    setViewport(pending, span);
+    renderMap();
+  };
+
+  svg.addEventListener("pointerdown", event => {
+    if (!state.result || event.button !== 0) return;
+    if (state.end - state.start >= state.result.promoter.length && state.start === 0) {
+      // Nothing to pan to at full extent; leave clicks and focus alone.
+      return;
+    }
+    event.preventDefault();
+    drag = {x: event.clientX, start: state.start, span: state.end - state.start,
+            max: state.result.promoter.length, unit: perPixel(), moved: 0,
+            pending: state.start};
+    svg.classList.add("dragging");
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+  });
+
+  svg.addEventListener("wheel", event => {
+    if (!state.result) return;
+    event.preventDefault();
+    const rect = svg.getBoundingClientRect();
+    // Zoom about the cursor, so the base under the pointer stays under the pointer.
+    const atX = (event.clientX - rect.left) * perPixel();
+    const fraction = Math.min(1, Math.max(0, (atX - MAP_LEFT) / MAP_PLOT));
+    const span = state.end - state.start;
+    const focus = state.start + fraction * span;
+    const wanted = Math.min(state.result.promoter.length,
+      Math.max(MAP_MIN_SPAN, span * (event.deltaY > 0 ? 1.25 : 0.8)));
+    setViewport(focus - fraction * wanted, wanted);
+    renderMap();
+  }, {passive: false});
+}
+
 function viewport(factor,pan=0) {
   if (!state.result) return;
-  const max=state.result.promoter.length, old=state.end-state.start, span=Math.min(max,Math.max(40,old*factor));
-  const centre=(state.start+state.end)/2+old*pan;
-  state.start=Math.max(0,Math.min(max-span,centre-span/2)); state.end=state.start+span;
+  const old=state.end-state.start, span=Math.min(state.result.promoter.length,Math.max(MAP_MIN_SPAN,old*factor));
+  setViewport((state.start+state.end)/2+old*pan-span/2, span);
   renderMap();
 }
 function renderEvidence() {
@@ -697,6 +786,127 @@ function orderRowFor(result, candidateId) {
   return row ? Object.fromEntries(order.columns.map((c, i) => [c, row[i]])) : null;
 }
 
+const RNA_PAIR = {A:"U", U:"A", G:"C", C:"G"};
+const STRAND_ROLE = {
+  antisense:{antisense:"guide", sense:"passenger"},
+  sense:{antisense:"passenger", sense:"guide"},
+};
+const ROLE_NOTE = {
+  guide:"Loaded into RISC. This is the strand that engages the target.",
+  passenger:"Discarded after loading. It is still synthesised and still annealed.",
+  undecided:"No strand is favoured: the two 5′ ends are equally stable to within the model’s tolerance.",
+};
+
+function strandRoles(guide) {
+  // "ambiguous" and a missing prediction are the same display case but not the same statement;
+  // the caption below the diagram distinguishes them.
+  return STRAND_ROLE[guide] || {antisense:"undecided", sense:"undecided"};
+}
+
+function duplexLadder(order, candidate) {
+  // Draws the molecule as it is actually annealed: antiparallel, with the 2 nt 3' dTdT
+  // overhang on *each* strand, and a rung only where the bases genuinely pair. Three
+  // sequences listed 5'->3' in separate boxes cannot show any of that, and the reader was
+  // left to reverse-complement 19 bases in their head to check the design at all.
+  const sense = order.sense_core_rna_5to3, anti = order.antisense_core_rna_5to3;
+  const n = sense.length;
+  if (!n || anti.length !== n) return "";
+  // Antisense written 3'->5' so it lies antiparallel under the sense strand.
+  const antiReversed = [...anti].reverse();
+  const paired = [...sense].map((b, i) => RNA_PAIR[b] === antiReversed[i]);
+  const roles = strandRoles(candidate.rating.guide);
+  const endLen = Math.min(candidate.guide_prediction.end_length_nt || 4, n);
+  const cell = (text, cls="") => `<span class="${cls}">${escapeHTML(text)}</span>`;
+  // The two ends the prediction compares, marked on the drawing rather than described beside it.
+  const endClass = i => i < endLen ? " end-five" : i >= n - endLen ? " end-three" : "";
+  const senseCells = [...sense].map((b, i) => cell(b, "b" + endClass(i)));
+  const antiCells = antiReversed.map((b, i) => cell(b, "b" + endClass(i)));
+  const rungs = paired.map((ok, i) =>
+    cell(ok ? "│" : "×", (ok ? "rung" : "rung mismatch") + endClass(i)));
+  const dT = () => [cell("dT", "ov"), cell("dT", "ov")];
+  const blank = () => [cell(" ", "pad"), cell(" ", "pad")];
+  const row = (label, role, terminus5, cells, terminus3) =>
+    `<div class="ladder-row ${role}">`
+    + `<span class="ladder-label">${escapeHTML(label)}<i>${escapeHTML(role)}</i></span>`
+    + `<span class="term">${terminus5}</span><span class="bases">${cells.join("")}</span>`
+    + `<span class="term">${terminus3}</span></div>`;
+  return `<div class="ladder" role="img" aria-label="${escapeHTML(
+      `Duplex: sense ${sense} paired with antisense ${anti}, each with a 3 prime dTdT overhang`)}">`
+    // Sense reads 5'->3' left to right; its dTdT therefore sits on the right.
+    + row("Sense", roles.sense, "5′", [...blank(), ...senseCells, ...dT()], "3′")
+    + `<div class="ladder-row rungs"><span class="ladder-label"></span><span class="term"></span>`
+    + `<span class="bases">${[...blank(), ...rungs, ...blank()].join("")}</span>`
+    + `<span class="term"></span></div>`
+    // Antisense reads 3'->5' left to right, so its dTdT sits on the left and its 5' end,
+    // the one the loading rule is about, is at the right-hand end of the drawing.
+    + row("Antisense", roles.antisense, "3′", [...dT(), ...antiCells, ...blank()], "5′")
+    + `</div>`;
+}
+
+function endEvidence(candidate) {
+  // The measurement behind the guide call, as numbers. Until the ends were serialised this
+  // existed only inside one English sentence, so the interface could state the verdict and
+  // not show the subtraction it rests on (ADR 0009).
+  const pred = candidate.guide_prediction;
+  const model = candidate.rating.guide_model;
+  const a = pred.assessments.find(x => x.table === model) || pred.assessments[0];
+  if (!a || !a.five_prime) return "";
+  const box = (side, end, cls) =>
+    `<div class="end-box ${cls}"><span>Target ${escapeHTML(end.end)} end · ${escapeHTML(side)}</span>`
+    + `<b>${end.energy.toFixed(2)} ${escapeHTML(end.unit)}</b>`
+    + `<small>${end.stacks.map(([s, e]) => `${escapeHTML(s)} ${e.toFixed(2)}`).join(" + ")}</small></div>`;
+  const weaker = a.three_prime.energy > a.five_prime.energy ? "3′" : "5′";
+  return `<div class="end-evidence">`
+    + box("left of the diagram", a.five_prime, "left")
+    + `<div class="end-verdict"><b>${a.difference >= 0 ? "+" : ""}${a.difference.toFixed(2)} ${escapeHTML(a.unit)}</b>`
+    + `<small>E(3′) − E(5′)</small></div>`
+    + box("right of the diagram", a.three_prime, "right")
+    + `<p class="hint">Less negative is less stable. The ${weaker} end is the weaker of the two. `
+    + `RISC loads whichever strand has the more weakly paired 5′ end (Schwarz et al. 2003; `
+    + `Khvorova et al. 2003), and the antisense strand’s 5′ end pairs with the target’s `
+    + `3′ end — the right-hand end above. ${escapeHTML(
+        a.predicted_guide === "ambiguous"
+          ? "Here the two ends are equal to within the model’s tolerance, so no strand is favoured."
+          : `Hence ${a.predicted_guide} is predicted to be loaded.`)}</p>`
+    + `</div>`;
+}
+
+function duplexPanel(result, candidate) {
+  // One panel answering the two questions a researcher has at the bench: what do I order,
+  // and which tube is the guide.
+  const order = orderRowFor(result, candidate.id);
+  if (!order) {
+    return `<div class="duplex-panel"><p class="hint">This candidate failed a gate, so it has no `
+      + `order-ready duplex. The rule verdicts below say which gate and why.</p></div>`;
+  }
+  const roles = strandRoles(candidate.rating.guide);
+  const tube = (name, role, sequence) =>
+    `<div class="tube ${role}"><div class="tube-head"><span class="role-chip ${role}">`
+    + `${escapeHTML(role === "undecided" ? "not predicted" : role)}</span>`
+    + `<span>${escapeHTML(name)} · 5′ → 3′ · ${order.ordered_length_nt} nt</span>`
+    + `<button type="button" data-copy="${escapeHTML(sequence)}">Copy</button></div>`
+    + `<code>${escapeHTML(sequence)}</code>`
+    + `<small>${escapeHTML(ROLE_NOTE[role])}</small></div>`;
+  const warning = candidate.rating.guide === "sense"
+    ? `<p class="duplex-warning">The <b>sense</b> strand is predicted to be loaded. The duplex is `
+      + `designed for the antisense strand to engage the promoter, so this prediction runs against `
+      + `the design intent. The candidate is not withheld; the prediction is reported.</p>`
+    : "";
+  return `<div class="duplex-panel">`
+    + `<div class="duplex-head"><h4>The duplex you would order</h4>`
+    + `<p class="hint">Two ${order.ordered_length_nt}-mers, annealed 1:1. Each is a `
+    + `${order.core_length_nt} nt RNA core plus a 3′ ${escapeHTML(order.overhang)} overhang, `
+    + `so the duplex carries a 2 nt 3′ overhang at both ends. Order as RNA with a 3′ dTdT; `
+    + `the overhang is deoxythymidine, not a ribo-UU.</p></div>`
+    + duplexLadder(order, candidate)
+    + endEvidence(candidate)
+    + warning
+    + `<div class="tubes">`
+    + tube("Sense", roles.sense, order.sense_order_5to3)
+    + tube("Antisense", roles.antisense, order.antisense_order_5to3)
+    + `</div></div>`;
+}
+
 function renderTopResult(result) {
   // Opens on the answer a researcher came for: how many survived, what the best one is, and
   // what to order. Everything else on the page remains available below it.
@@ -715,14 +925,25 @@ function renderTopResult(result) {
   }
   const order = orderRowFor(result, best.id);
   const met = best.rating.evaluated ? `${best.rating.met}/${best.rating.evaluated}` : "not evaluated";
+  const roles = strandRoles(best.rating.guide);
+  const line = (name, role, sequence) =>
+    `<div><div><span class="role-chip ${role}">${escapeHTML(
+        role === "undecided" ? "not predicted" : role)}</span>`
+    + `<span>${escapeHTML(name)} · 5′ → 3′</span><code>${escapeHTML(sequence)}</code></div>`
+    + `<button type="button" data-copy="${escapeHTML(sequence)}">Copy</button></div>`;
   const duplex = order
     ? `<div class="top-duplex">`
-      + `<div><div><span>Sense · 5′ → 3′</span><code>${escapeHTML(order.sense_order_5to3)}</code></div>`
-      + `<button type="button" data-copy="${escapeHTML(order.sense_order_5to3)}">Copy</button></div>`
-      + `<div><div><span>Antisense · 5′ → 3′</span><code>${escapeHTML(order.antisense_order_5to3)}</code></div>`
-      + `<button type="button" data-copy="${escapeHTML(order.antisense_order_5to3)}">Copy</button></div>`
-      + `<p class="hint">Two 21-mers: a 19 nt RNA core plus a 3′ dTdT overhang on each strand. `
-      + `No off-target screening has been performed.</p></div>`
+      + line("Sense", roles.sense, order.sense_order_5to3)
+      + line("Antisense", roles.antisense, order.antisense_order_5to3)
+      + `<p class="hint">Two ${order.ordered_length_nt}-mers: a ${order.core_length_nt} nt RNA core `
+      + `plus a 3′ dTdT overhang on each strand, annealed 1:1. `
+      + `${roles.antisense === "guide"
+          ? "The antisense strand is predicted to be loaded, which is the design intent."
+          : roles.sense === "guide"
+          ? "The sense strand is predicted to be loaded, against the design intent — see the candidate below."
+          : "Neither strand is favoured for loading by the selected model."} `
+      + `No off-target screening has been performed. `
+      + `<button type="button" id="inspect-top-duplex" class="text-button">See how they pair ›</button></p></div>`
     : `<p class="hint">Order-ready sequences are not in this record.</p>`;
   box.hidden = false;
   box.innerHTML = `<div class="card-heading"><div><p class="eyebrow">START HERE</p>`
@@ -1058,7 +1279,8 @@ document.querySelectorAll("[data-sort]").forEach(b=>b.addEventListener("click",(
 $("candidate-rows").addEventListener("click",e=>{if (!e.target.closest("input")) {const row=e.target.closest("[data-candidate]");if(row)selectCandidate(row.dataset.candidate);}});
 $("candidate-rows").addEventListener("change",e=>{const id=e.target.dataset.check;if(id){e.target.checked?state.checked.add(id):state.checked.delete(id);renderTable();}});
 $("candidate-rows").addEventListener("keydown",e=>{if ((e.key==="Enter" || e.key===" ") && e.target.matches("tr[data-candidate]")){e.preventDefault();selectCandidate(e.target.dataset.candidate);}});
-$("promoter-map").addEventListener("click",e=>{const v=e.target.closest("[data-candidate]");if(v)selectCandidate(v.dataset.candidate);});
+$("promoter-map").addEventListener("click",e=>{if(state.suppressMapClick){state.suppressMapClick=false;return;}const v=e.target.closest("[data-candidate]");if(v)selectCandidate(v.dataset.candidate);});
+enableMapDrag();
 $("promoter-map").addEventListener("keydown",e=>{if ((e.key==="Enter" || e.key===" ") && e.target.dataset.candidate){e.preventDefault();selectCandidate(e.target.dataset.candidate);}});
 $("page-previous").addEventListener("click",()=>{state.page--;renderTable();});$("page-next").addEventListener("click",()=>{state.page++;renderTable();});
 $("select-page").addEventListener("change",e=>{filteredCandidates().slice(state.page*50,(state.page+1)*50).forEach(c=>e.target.checked?state.checked.add(c.id):state.checked.delete(c.id));renderTable();});
@@ -1094,11 +1316,11 @@ $("offtarget-results").addEventListener("click",event=>{
   if (scope) renderScreening({scope,result:state.screenings[scope],status:"complete"});
 });
 document.addEventListener("click", event => {
-  const target = event.target.closest("#print-duplex,#inspect-top,#export-order-top");
+  const target = event.target.closest("#print-duplex,#inspect-top,#inspect-top-duplex,#export-order-top");
   if (!target) return;
   if (target.id === "print-duplex") printDuplexSheet();
   if (target.id === "export-order-top") exportOrder();
-  if (target.id === "inspect-top") {
+  if (target.id === "inspect-top" || target.id === "inspect-top-duplex") {
     const best = state.result?.candidates.find(c => c.rank === 1);
     if (best) { selectCandidate(best.id); $("candidate-detail").scrollIntoView({behavior:"smooth", block:"start"}); }
   }

@@ -181,6 +181,46 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     drawn = browser.evaluate(
         "document.querySelectorAll('#promoter-map rect[data-candidate]').length")
     assert isinstance(drawn, int) and drawn > 0
+    # Panning translates the clipped group instead of redrawing 2,600 SVG nodes, because a full
+    # redraw measured 14.5 ms against a 16.7 ms frame budget. That shortcut is only legitimate
+    # if the translated picture is the one the redraw would have produced, so this compares
+    # them: it reads a mark's position, drags, predicts from the transform, releases, and
+    # checks the redrawn position against the prediction.
+    drag = browser.evaluate("""(()=>{
+      const svg=document.getElementById('promoter-map');
+      const id=(state.result.candidates.find(c=>c.rank!==null)||{}).id;
+      if(!id) return {error:"no passing candidate to track"};
+      const xOf=()=>{const r=svg.querySelector('[data-candidate="'+id+'"]');
+                     return r?+r.getAttribute('x'):null;};
+      const box=()=>svg.getBoundingClientRect();
+      const send=(target,type,x)=>target.dispatchEvent(new PointerEvent(type,{bubbles:true,
+        cancelable:true,clientX:x,clientY:box().top+box().height/2,button:0,buttons:1,
+        pointerId:1,isPrimary:true}));
+      const b=box(), from=b.left+b.width*0.6, to=b.left+b.width*0.3;
+      const before=xOf(), viewportBefore=state.start;
+      send(svg,'pointerdown',from);
+      const grabbing=getComputedStyle(svg).cursor;
+      send(window,'pointermove',to);
+      const node=svg.querySelector('#map-pan');
+      const tx=node?parseFloat((node.getAttribute('transform')||'translate(0').match(
+        /translate\(([-\d.]+)/)[1]):null;
+      send(window,'pointerup',to);
+      return {before, tx, after:xOf(), grabbing, panned:state.start!==viewportBefore,
+              cleared:svg.querySelector('#map-pan').getAttribute('transform')===null,
+              inRange: state.start>=0 && state.end<=state.result.promoter.length+1e-6};
+    })()""")
+    assert isinstance(drag, dict) and "error" not in drag, drag
+    assert drag["grabbing"] == "grabbing", "the map gives no grab affordance while dragging"
+    assert drag["panned"] is True, "dragging the promoter map did not pan it"
+    assert drag["cleared"] is True, "the drag transform outlived the drag"
+    assert drag["inRange"] is True, "panning left the promoter"
+    if drag["before"] is not None and drag["after"] is not None:
+        predicted = drag["before"] + drag["tx"]
+        assert abs(predicted - drag["after"]) < 0.01, (
+            f"the drag drew the mark at {predicted} but the redraw puts it at {drag['after']}; "
+            "the fast pan path and the full redraw disagree")
+    browser.evaluate("document.getElementById('zoom-reset').click()")
+
     # The measured ranking performance is shown, not left to the footer.
     assert browser.evaluate("!document.getElementById('ranking-performance').hidden") is True
     assert "does not beat chance" in str(browser.evaluate(
@@ -206,6 +246,46 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     top = str(browser.evaluate("document.getElementById('top-result').textContent"))
     assert "passed every evaluable gate" in top, top[:160]
     assert "[dT][dT]" in top, "the top card must show the order-ready duplex, not the bare core"
+    # The duplex is drawn as it anneals, not as three independent 5'->3' strings. The rungs
+    # are computed from the bases rather than assumed, so a strand that is not the reverse
+    # complement of its partner would draw crosses here rather than quietly look correct.
+    ladder = browser.evaluate("""(()=>{
+      const rows=[...document.querySelectorAll('#candidate-detail .ladder-row')];
+      if (rows.length!==3) return {error:"expected sense, rungs and antisense rows"};
+      const text=r=>[...r.querySelectorAll('.bases span')].map(s=>s.textContent.trim());
+      const roles=rows.filter(r=>r.querySelector('.ladder-label i'))
+                      .map(r=>r.querySelector('.ladder-label i').textContent);
+      return {sense:text(rows[0]), rungs:text(rows[1]), anti:text(rows[2]), roles,
+              overhangs:document.querySelectorAll('#candidate-detail .ladder .ov').length};
+    })()""")
+    assert isinstance(ladder, dict) and "error" not in ladder, ladder
+    pairs = {"A": "U", "U": "A", "G": "C", "C": "G"}
+    sense, anti = ladder["sense"], ladder["anti"]
+    assert len(sense) == len(anti) == len(ladder["rungs"]), ladder
+    # Every drawn rung must correspond to a real Watson-Crick pair between the two rows.
+    for index, rung in enumerate(ladder["rungs"]):
+        if rung not in ("", "\u00a0"):
+            top, bottom = sense[index], anti[index]
+            assert pairs.get(top) == bottom, (
+                f"column {index} draws a rung between {top} and {bottom}, which do not pair")
+    # Both 3' dTdT overhangs are drawn: two bases on each of the two strands.
+    assert ladder["overhangs"] == 4, ladder["overhangs"]
+    assert "guide" in ladder["roles"] and "passenger" in ladder["roles"], ladder["roles"]
+    # The subtraction behind the guide call is shown as numbers, not only inside a sentence.
+    ends = browser.evaluate("""(()=>{
+      const boxes=[...document.querySelectorAll('#candidate-detail .end-box b')]
+        .map(b=>parseFloat(b.textContent));
+      const diff=parseFloat(document.querySelector('#candidate-detail .end-verdict b').textContent);
+      const stacks=[...document.querySelectorAll('#candidate-detail .end-box small')]
+        .map(s=>s.textContent.split('+').map(t=>parseFloat(t.trim().split(/\s+/)[1])));
+      return {boxes, diff, stacks};})()""")
+    assert isinstance(ends, dict)
+    five, three = ends["boxes"]
+    assert abs((three - five) - ends["diff"]) < 0.011, (
+        f"the panel shows E(3')={three} and E(5')={five} but a difference of {ends['diff']}")
+    for energy, steps in zip(ends["boxes"], ends["stacks"], strict=True):
+        assert abs(sum(steps) - energy) < 0.011, (
+            f"the stacks {steps} do not sum to the {energy} printed above them")
     # The printable sheet builds from the record, and keeps gates and preferences apart: a
     # passed gate listed as a preference would contradict the rating printed beside it.
     sheet = str(browser.evaluate(

@@ -509,3 +509,19 @@ def test_local_routes_serve_real_setup_and_reject_unknown_files(tmp_path: Path):
         assert router.dispatch("GET", "/favicon.ico")[0] == 200
     finally:
         router.close()
+
+
+def test_the_app_publishes_the_end_energies_behind_each_guide_call(tmp_path: Path):
+    # Hand-calculated as in the end-length test above: for a two-base end of this target the
+    # 5' stack is GC = -3.42 and the 3' stack AA = -0.93 kcal/mol (RNA, Xia 1998).
+    # An interface cannot draw the asymmetry from the signed difference alone.
+    result = run_request(service_for(tmp_path),
+                         overrides={"thermodynamic-asymmetry": {"end-length-nt": 2}})
+    first = next(c for c in result["candidates"] if c["offset"] == 0)
+    assessment = next(a for a in first["guide_prediction"]["assessments"]
+                      if a["table"] == "rna-xia-1998")
+    assert assessment["five_prime"]["energy"] == pytest.approx(-3.42)
+    assert assessment["five_prime"]["stacks"] == [["GC", pytest.approx(-3.42)]]
+    assert assessment["three_prime"]["energy"] == pytest.approx(-0.93)
+    assert assessment["three_prime"]["stacks"] == [["AA", pytest.approx(-0.93)]]
+    assert assessment["unit"] == "kcal/mol"
