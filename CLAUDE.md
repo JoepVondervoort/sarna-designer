@@ -141,6 +141,7 @@ Read the ADR before reopening its question; each records the alternatives and wh
 | The order-ready duplex: separate export, Python-computed, caveats in the row | 0017 |
 | Apache-2.0, and the bundled data's actual terms | 0018 |
 | Off-target screening: opt-in, remote, dual-scope, reported never filtered | 0019 |
+| Localhost rather than a hosted service, and what would change that | 0020 |
 
 `docs/scientific/`:
 

@@ -488,6 +488,21 @@ class TestCaching:
         client_for(DEFAULT_ROUTES, cache_dir=tmp_path).gene("SCN1A")
         assert any(f.name.startswith("GRCh38") for f in tmp_path.iterdir())
 
+    def test_an_unusable_cache_directory_degrades_to_no_cache(self, tmp_path: Path) -> None:
+        """A shared cache folder that is not mounted must not stop the tool working.
+
+        INSTALL.md offers ``SARNA_CACHE_DIR`` pointed at a network share so a group fetches each
+        gene once. A laptop off the VPN then has an unreachable path, and the constructor's
+        ``mkdir`` raised ``FileNotFoundError`` before a single lookup was attempted -- turning a
+        missing convenience into a tool that would not start.
+        """
+        unusable = tmp_path / "not-a-directory" / "cache"
+        unusable.parent.write_text("this is a file, not a folder", encoding="utf-8")
+        client = client_for(DEFAULT_ROUTES, cache_dir=unusable)
+        assert client.gene("SCN1A").symbol == "SCN1A"
+        # Caching is simply off; nothing was written and nothing failed.
+        assert not unusable.exists()
+
     def test_the_cache_directory_is_created(self, tmp_path: Path) -> None:
         target = tmp_path / "nested" / "cache"
         client_for(DEFAULT_ROUTES, cache_dir=target).gene("SCN1A")

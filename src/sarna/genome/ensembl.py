@@ -257,7 +257,18 @@ class EnsemblClient:
         self._client = client
         self._backoff = backoff_seconds
         if cache_dir is not None:
-            cache_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                cache_dir.mkdir(parents=True, exist_ok=True)
+            except OSError as error:
+                # A cache is an optimisation. INSTALL.md offers a shared network folder so a
+                # group fetches each gene once, and a laptop off the VPN then has an unreachable
+                # path; raising here would turn a missing convenience into a tool that does not
+                # start. Caching switches off and every lookup goes to Ensembl as before.
+                LOGGER.warning(
+                    "caching is off: %s cannot be used as a cache directory (%s)",
+                    cache_dir, error,
+                )
+                self.cache_dir = None
 
     def _read_cache(self, cached: Path | None) -> JsonPayload | None:
         """Return a cached payload, or ``None`` if there is none or it is unusable.

@@ -215,14 +215,36 @@ itself, in a private folder, so you never have to touch or change your system Py
 nothing this tool installs can affect other software.
 
 **Why it runs locally rather than as a website.** Recorded in
-[ADR 0014](docs/adr/0014-local-delivery-and-wang-default.md) and
-[ADR 0015](docs/adr/0015-local-workbench-and-frozen-ui.md): your sequences and designs stay on
-your machine, the tool works offline once a gene is cached, and there is no server to maintain
-or trust.
+[ADR 0014](docs/adr/0014-local-delivery-and-wang-default.md),
+[ADR 0015](docs/adr/0015-local-workbench-and-frozen-ui.md) and, with the case for and against a
+hosted service set out in full, [ADR 0020](docs/adr/0020-localhost-or-a-hosted-service.md): your
+sequences and designs stay on your machine, the tool works offline once a gene is cached, and
+there is no server to maintain or trust. The short version is that the gene you are working on
+*is* the research question, and running locally means only Ensembl — and NCBI, if you ask for an
+off-target screen — ever learns it.
 
 **Why there are two commands.** `sarna-designer-check` makes a broken installation say so
 clearly instead of failing later in a way that looks like a scientific problem. It is quick and
 makes no network calls unless you ask.
+
+---
+
+## Sharing reference data in a group (optional)
+
+Everyone who looks up SCN1A downloads the same gene, transcript and sequence records from
+Ensembl. If several of you work on the same genes, you can point the cache at a shared folder so
+it is fetched once:
+
+- **Windows (PowerShell):** `setx SARNA_CACHE_DIR "\\\\server\\share\\sarna-cache"`
+- **macOS / Linux:** add `export SARNA_CACHE_DIR=/Volumes/share/sarna-cache` to your shell profile
+
+Then restart the app. Whoever looks a gene up first fills the cache; everyone else reads it, and
+can work offline afterwards.
+
+This is safe to share while somebody else is using it — cache entries are written to a temporary
+name and renamed, so you never read a half-written file. It holds only public Ensembl records,
+no designs: your runs stay in your own `--data-dir`. If the shared folder is unreachable the tool
+fetches from Ensembl as usual rather than failing.
 
 ---
 
