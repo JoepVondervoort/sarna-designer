@@ -520,7 +520,91 @@ function renderRejectionLegend(result) {
         + `${escapeHTML(ruleName(entry.rule))} \u00b7 ${entry.percent_of_generated}%</span>`).join("")
     + (breakdown.length > REJECTION_COLOURS.length
         ? `<span><i style="background:${OTHER_REJECTION}"></i>other</span>` : "")
-    + `<small>A candidate is counted against the first rule that excluded it.</small>`;
+    // Which mode the track is drawn in is a statement about what the reader is looking at, so
+    // it is said rather than left to be inferred from the shape of the bars.
+    + `<small>${state.excludedBinned
+        ? "A candidate is counted against the first rule that excluded it. Excluded targets are "
+          + "binned by position, and each column is split by the share of that bin each rule "
+          + "rejected \u2014 every column is the same height, which carries no meaning. Hover "
+          + "for counts; click a column, or zoom below " + INDIVIDUAL_MARK_SPAN
+          + " bp, to see each target."
+        : "A candidate is counted against the first rule that excluded it. Every excluded "
+          + "target in view is drawn individually; click one to inspect it."}</small>`;
+}
+
+const EXCLUDED_TOP = 256, EXCLUDED_HEIGHT = 22, EXCLUDED_BINS = 104;
+// How wide a view can be before excluded targets stop being separable marks. A 19 nt target
+// drawn across 832 units is distinguishable from its neighbour only while 832/span >= 3.
+const INDIVIDUAL_MARK_SPAN = 280;
+
+function drawExcluded(parts, r, rejectionColours, scale, tip, rect) {
+  // A target is generated at every offset, so across the full 2,500 bp region there are about
+  // three excluded candidates per pixel of the 832-unit plot. Drawn one rect each they merge
+  // into a solid band that claims to show every rejection and in fact shows none of them: the
+  // marks overlap, and 2,468 of them cost 14 ms a frame to redraw.
+  //
+  // Above the separability threshold they are therefore binned into a stacked histogram, which
+  // says something the ribbon could not -- *where* along the promoter each rule does its
+  // rejecting. Below it every candidate is drawn and clickable as before. Nothing is dropped
+  // either way: the bin reports its own counts by rule, and clicking it zooms in far enough
+  // for the individual marks to appear.
+  const excluded = r.candidates.filter(c => c.rank === null);
+  const cause = c => c.rating?.excluded_by_first || c.excluded_by[0] || "other";
+  if (state.end - state.start <= INDIVIDUAL_MARK_SPAN) {
+    for (const c of excluded) {
+      rect(c.offset, c.offset + c.target_site_dna.length, 264 + (c.offset % 3) * 3, 3,
+        rejectionColours.get(cause(c)) || OTHER_REJECTION,
+        `${c.id}: excluded by ${c.excluded_by.join(", ")}. Position ${positionText(c)}. `
+        + `Click for details.`, `data-candidate="${c.id}"`);
+    }
+    return false;
+  }
+  const width = (state.end - state.start) / EXCLUDED_BINS;
+  const bins = Array.from({length: EXCLUDED_BINS}, () => new Map());
+  let any = false;
+  for (const c of excluded) {
+    if (c.offset < state.start || c.offset >= state.end) continue;
+    const index = Math.min(EXCLUDED_BINS - 1, Math.floor((c.offset - state.start) / width));
+    const counts = bins[index], key = cause(c);
+    counts.set(key, (counts.get(key) || 0) + 1);
+    any = true;
+  }
+  if (!any) return false;
+  // Each column is full height and split by share, not scaled by count. A target is generated
+  // at every offset and on this promoter nearly all are excluded, so bin totals are constant
+  // by construction: measured over SCN1A, 99 of 104 bins sat within a tenth of the largest.
+  // Scaling height by count would spend the whole visual channel on that noise and draw a
+  // ragged top edge implying a signal there is not one. What varies, and what the track exists
+  // for, is *which* rule rejects where. Absolute totals stay in the tooltip.
+  bins.forEach((counts, index) => {
+    if (!counts.size) return;
+    const from = state.start + index * width, to = from + width;
+    const x1 = scale(from), x2 = scale(to), columnWidth = Math.max(1, x2 - x1);
+    const ordered = [...counts].sort((a, b) => b[1] - a[1]);
+    let total = 0;
+    for (const [, n] of ordered) total += n;
+    let y = EXCLUDED_TOP + EXCLUDED_HEIGHT;
+    for (const [rule, n] of ordered) {
+      const height = (n / total) * EXCLUDED_HEIGHT;
+      y -= height;
+      parts.push(`<rect x="${x1}" y="${y}" width="${columnWidth}" height="${height}" `
+        + `fill="${rejectionColours.get(rule) || OTHER_REJECTION}"/>`);
+    }
+    // One transparent column carries the hover and the click, so the whole bar responds
+    // rather than only whichever thin segment the pointer happens to land on.
+    const where = r.promoter.tss_offset === null
+      ? `${Math.round(from) + 1}\u2026${Math.round(to)}`
+      : `${signed(Math.round(from - r.promoter.tss_offset) || 1)}\u2026`
+        + `${signed(Math.round(to - r.promoter.tss_offset) || 1)}`;
+    parts.push(`<rect x="${x1}" y="${EXCLUDED_TOP}" width="${columnWidth}" `
+      + `height="${EXCLUDED_HEIGHT}" fill="transparent" `
+      + `data-zoom-from="${Math.round(from)}" data-zoom-to="${Math.round(to)}" `
+      + tip(`${where}: ${total} excluded target${total === 1 ? "" : "s"}. `
+            + ordered.map(([rule, n]) =>
+                `${ruleName(rule)}: ${n} (${Math.round(100 * n / total)}%)`).join(" \u00b7 ")
+            + `. Click to zoom in and see each one.`) + `/>`);
+  });
+  return true;
 }
 
 function renderMap() {
@@ -582,19 +666,18 @@ function renderMap() {
     ? "Not scanned \u2014 motif prediction was switched off for this run."
     : "No bundled matrix matched above its threshold in this window.");
   const rejectionColours = rejectionPalette(r);
-  for (const c of r.candidates.filter(c=>c.rank===null)) {
-    const cause = c.rating?.excluded_by_first || c.excluded_by[0];
-    rect(c.offset,c.offset+c.target_site_dna.length,264+(c.offset%3)*3,3,
-      rejectionColours.get(cause) || OTHER_REJECTION,
-      `${c.id}: excluded by ${c.excluded_by.join(", ")}. Position ${positionText(c)}. `
-      + `Click for details.`,`data-candidate="${c.id}"`);
-  }
+  state.excludedBinned = drawExcluded(parts, r, rejectionColours, scale, tip, rect);
   for (const c of r.candidates.filter(c=>c.rank!==null)) rect(c.offset,c.offset+c.target_site_dna.length,232+((c.rank-1)%3)*5,7,"#087e80",`${c.id} · rank ${c.rank} · ${ratingText(c)} evaluated preferences · ${c.rating.guide || "unknown"} guide (${c.rating.guide_model}). Position ${positionText(c)}. Click for details.`,`data-candidate="${c.id}"`);
   if (state.selected) {
     const c=r.candidates.find(c=>c.id===state.selected);
     rect(c.offset,c.offset+c.target_site_dna.length,c.rank===null?261:228,c.rank===null?19:25,"none",`${c.id} selected`,`stroke="#b97a2b" stroke-width="2" data-candidate="${c.id}"`);
   }
-  parts.push('</g></g>'); $("promoter-map").innerHTML=parts.join("");
+  parts.push('</g></g>');
+  const svg = $("promoter-map");
+  svg.innerHTML=parts.join("");
+  // Only offer the grab cursor when there is somewhere to pan. At full extent the drag is a
+  // no-op, and advertising it is a promise the map does not keep.
+  svg.classList.toggle("pannable", state.start > 0 || state.end < p.length);
   renderRejectionLegend(r);
   const note = $("unevaluated-note");
   if (note) {
@@ -1309,7 +1392,19 @@ document.querySelectorAll("[data-sort]").forEach(b=>b.addEventListener("click",(
 $("candidate-rows").addEventListener("click",e=>{if (!e.target.closest("input")) {const row=e.target.closest("[data-candidate]");if(row)selectCandidate(row.dataset.candidate);}});
 $("candidate-rows").addEventListener("change",e=>{const id=e.target.dataset.check;if(id){e.target.checked?state.checked.add(id):state.checked.delete(id);renderTable();}});
 $("candidate-rows").addEventListener("keydown",e=>{if ((e.key==="Enter" || e.key===" ") && e.target.matches("tr[data-candidate]")){e.preventDefault();selectCandidate(e.target.dataset.candidate);}});
-$("promoter-map").addEventListener("click",e=>{if(state.suppressMapClick){state.suppressMapClick=false;return;}const v=e.target.closest("[data-candidate]");if(v)selectCandidate(v.dataset.candidate);});
+$("promoter-map").addEventListener("click",e=>{
+  if(state.suppressMapClick){state.suppressMapClick=false;return;}
+  const v=e.target.closest("[data-candidate]");
+  if(v){selectCandidate(v.dataset.candidate);return;}
+  // A column of the excluded-target histogram zooms to the targets it is counting, which is
+  // how the individual rejections stay reachable at full-region zoom.
+  const bin=e.target.closest("[data-zoom-from]");
+  if(bin){
+    const from=+bin.dataset.zoomFrom, to=+bin.dataset.zoomTo;
+    setViewport((from+to)/2-INDIVIDUAL_MARK_SPAN/2, INDIVIDUAL_MARK_SPAN);
+    renderMap();
+  }
+});
 enableMapDrag();
 $("promoter-map").addEventListener("keydown",e=>{if ((e.key==="Enter" || e.key===" ") && e.target.dataset.candidate){e.preventDefault();selectCandidate(e.target.dataset.candidate);}});
 $("page-previous").addEventListener("click",()=>{state.page--;renderTable();});$("page-next").addEventListener("click",()=>{state.page++;renderTable();});

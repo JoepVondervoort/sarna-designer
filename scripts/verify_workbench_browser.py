@@ -173,7 +173,8 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     clipped = browser.evaluate("""(()=>{
       const clip=document.querySelector('#map-clip rect');
       const top=+clip.getAttribute('y'), bottom=top + +clip.getAttribute('height');
-      return [...document.querySelectorAll('#promoter-map rect[data-candidate]')]
+      const marks='#promoter-map rect[data-candidate],#promoter-map rect[data-zoom-from]';
+      return [...document.querySelectorAll(marks)]
         .filter(r => +r.getAttribute('y') < top
                   || +r.getAttribute('y') + +r.getAttribute('height') > bottom).length;
     })()""")
@@ -181,11 +182,50 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     drawn = browser.evaluate(
         "document.querySelectorAll('#promoter-map rect[data-candidate]').length")
     assert isinstance(drawn, int) and drawn > 0
+    # At full-region zoom a target is generated at every offset, so drawing each excluded one
+    # produced about three overlapping marks per pixel: a band that claimed to show every
+    # rejection and resolved none of them. They are binned instead. The promise that a
+    # rejection is never silently dropped now means the bins must account for all of them.
+    browser.evaluate("document.getElementById('zoom-reset').click()")
+    binned = browser.evaluate("""(()=>{
+      const bins=[...document.querySelectorAll('#promoter-map rect[data-zoom-from]')];
+      const counted=bins.reduce((sum,b)=>{
+        const m=(b.getAttribute('data-tip')||'').match(/(\d+) excluded target/);
+        return sum + (m?+m[1]:0);}, 0);
+      return {bins:bins.length, counted,
+              excluded: state.result.candidates.filter(c=>c.rank===null).length,
+              legend: document.querySelector('#rejection-legend small').textContent,
+              binnedMode: state.excludedBinned};})()""")
+    assert isinstance(binned, dict)
+    if binned["excluded"]:
+        assert binned["binnedMode"] is True, "the full region should bin excluded targets"
+        assert binned["bins"] > 0, "no density columns were drawn"
+        assert binned["counted"] == binned["excluded"], (
+            f"the bins account for {binned['counted']} excluded targets but the run has "
+            f"{binned['excluded']}; some rejection is not represented anywhere")
+        # Which mode the track is in is a claim about what the reader is seeing, so it is said.
+        assert "same height" in binned["legend"], binned["legend"]
+        # Every rejection stays reachable: a column zooms to the targets it counts.
+        reached = browser.evaluate("""(()=>{
+          const bin=document.querySelector('#promoter-map rect[data-zoom-from]');
+          bin.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+          return {marks:document.querySelectorAll('#promoter-map rect[data-candidate]').length,
+                  binned:state.excludedBinned,
+                  legend:document.querySelector('#rejection-legend small').textContent};})()""")
+        assert isinstance(reached, dict)
+        assert reached["binned"] is False, "clicking a density column did not zoom in far enough"
+        assert reached["marks"] > 0, "zooming into a column drew no individual targets"
+        assert "individually" in reached["legend"], reached["legend"]
+    browser.evaluate("document.getElementById('zoom-reset').click()")
+
     # Panning translates the clipped group instead of redrawing 2,600 SVG nodes, because a full
     # redraw measured 14.5 ms against a 16.7 ms frame budget. That shortcut is only legitimate
     # if the translated picture is the one the redraw would have produced, so this compares
     # them: it reads a mark's position, drags, predicts from the transform, releases, and
     # checks the redrawn position against the prediction.
+    # Zoomed in, because at full extent there is nowhere to pan and the map says so by not
+    # offering the grab cursor at all.
+    browser.evaluate("document.getElementById('zoom-in').click()")
     drag = browser.evaluate(r"""(()=>{
       const svg=document.getElementById('promoter-map');
       const id=(state.result.candidates.find(c=>c.rank!==null)||{}).id;
@@ -198,6 +238,7 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
         pointerId:1,isPrimary:true}));
       const b=box(), from=b.left+b.width*0.6, to=b.left+b.width*0.3;
       const before=xOf(), viewportBefore=state.start;
+      const idle=getComputedStyle(svg).cursor;
       send(svg,'pointerdown',from);
       const grabbing=getComputedStyle(svg).cursor;
       send(window,'pointermove',to);
@@ -205,12 +246,13 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
       const tx=node?parseFloat((node.getAttribute('transform')||'translate(0').match(
         /translate\(([-\d.]+)/)[1]):null;
       send(window,'pointerup',to);
-      return {before, tx, after:xOf(), grabbing, panned:state.start!==viewportBefore,
+      return {before, tx, after:xOf(), grabbing, idle, panned:state.start!==viewportBefore,
               cleared:svg.querySelector('#map-pan').getAttribute('transform')===null,
               inRange: state.start>=0 && state.end<=state.result.promoter.length+1e-6};
     })()""")
     assert isinstance(drag, dict) and "error" not in drag, drag
     assert drag["grabbing"] == "grabbing", "the map gives no grab affordance while dragging"
+    assert drag["idle"] == "grab", "a pannable map should offer the grab cursor at rest"
     assert drag["panned"] is True, "dragging the promoter map did not pan it"
     assert drag["cleared"] is True, "the drag transform outlived the drag"
     assert drag["inRange"] is True, "panning left the promoter"
