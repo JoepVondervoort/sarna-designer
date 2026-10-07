@@ -187,7 +187,7 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     # rejection and resolved none of them. They are binned instead. The promise that a
     # rejection is never silently dropped now means the bins must account for all of them.
     browser.evaluate("document.getElementById('zoom-reset').click()")
-    binned = browser.evaluate("""(()=>{
+    binned = browser.evaluate(r"""(()=>{
       const bins=[...document.querySelectorAll('#promoter-map rect[data-zoom-from]')];
       const counted=bins.reduce((sum,b)=>{
         const m=(b.getAttribute('data-tip')||'').match(/(\d+) excluded target/);
