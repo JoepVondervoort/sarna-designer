@@ -8,6 +8,7 @@ The substance here is that an anchor cannot lie about how well its zero point is
 that a cell line cannot present an absence of data as an absence of binding.
 """
 
+import re
 from itertools import pairwise
 from pathlib import Path
 
@@ -297,8 +298,18 @@ note = "A user-supplied promoter."
 
 class TestTheCellLineRegistry:
     def test_the_shipped_lines_load_from_data(self) -> None:
-        assert set(CELL_TYPES) == {"hela", "af22"}
+        # The two the project has evidence from, plus six declared because the saRNA literature
+        # used them or because a missing axis could realistically be answered in them. Pinned by
+        # name: adding or removing a line is a decision, not a refactor.
+        assert set(CELL_TYPES) == {
+            "hela", "af22", "hek293", "hepg2", "k562", "mcf7", "pc3", "sh-sy5y"}
         assert cell_type("hela") is HELA
+
+    def test_only_af22_ships_with_any_data_loaded(self) -> None:
+        # Six lines were added for relevance, not for data. If one ever acquires a loaded axis
+        # that must be a deliberate change, because it alters what the tool claims to know.
+        loaded = {identifier for identifier, cell in CELL_TYPES.items() if cell.available_axes}
+        assert loaded == {"af22"}
 
     def test_proliferation_is_recorded_because_it_bears_on_rnaa(self) -> None:
         assert HELA.is_proliferating
@@ -350,20 +361,23 @@ class TestTheCellLineRegistry:
         assert "X" in availability.note
 
     def test_an_unknown_line_explains_how_to_add_one(self) -> None:
+        # Deliberately a line this project does not ship: HEK293 used to stand here and now
+        # exists, which is why the assertion names something nobody is about to add.
+        assert "jurkat" not in CELL_TYPES
         with pytest.raises(KeyError, match="SARNA_CELL_LINES"):
-            cell_type("hek293")
+            cell_type("jurkat")
 
     def test_a_user_file_adds_cell_lines(self, tmp_path: Path) -> None:
         path = tmp_path / "mine.toml"
         path.write_text(
             """
 [[cell_line]]
-id = "sh-sy5y"
-name = "SH-SY5Y"
-proliferating = true
-source = "Biedler et al. 1978"
-locator = "Cancer Res 38:3751"
-description = "Neuroblastoma line used as a neuronal model."
+id = "my-ipsc-neurons"
+name = "Lab iPSC-derived neurons"
+proliferating = false
+source = "This laboratory, unpublished"
+locator = "internal differentiation protocol, revision 3"
+description = "Patient-derived neurons used as the disease-relevant context."
 
 [cell_line.expression]
 available = true
@@ -372,8 +386,10 @@ note = "RNA-seq available."
 """
         )
         registry = load_cell_types([path])
-        assert "sh-sy5y" in registry
-        assert registry["sh-sy5y"].available_axes == (DataAxis.EXPRESSION,)
+        assert "my-ipsc-neurons" in registry
+        assert registry["my-ipsc-neurons"].available_axes == (DataAxis.EXPRESSION,)
+        # A researcher's own line need not carry an accession; the shipped ones must.
+        assert registry["my-ipsc-neurons"].rrid == ""
 
     def test_a_duplicate_cell_line_id_is_refused(self, tmp_path: Path) -> None:
         path = tmp_path / "clash.toml"
@@ -390,6 +406,53 @@ description = "d"
         )
         with pytest.raises(ValueError, match="duplicate cell line id"):
             load_cell_types([path])
+
+    @staticmethod
+    def shipped(monkeypatch: pytest.MonkeyPatch) -> dict[str, CellType]:
+        """Return only the lines this project ships.
+
+        ``CELL_TYPES`` also carries whatever ``SARNA_CELL_LINES`` points at, and a researcher's
+        own line is not held to the obligations below -- they may well be working with cells
+        that have no accession yet.
+        """
+        monkeypatch.delenv("SARNA_CELL_LINES", raising=False)
+        return load_cell_types()
+
+    def test_every_shipped_line_is_identified_by_its_cellosaurus_accession(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A cell line name is ambiguous; an RRID is not.
+
+        "HEK293" names several lines that differ, and HeLa has many drifted stocks. A result
+        that records only a display name cannot be checked against anybody else's. Each shipped
+        line therefore carries its Cellosaurus accession, which resolves to one record with the
+        line's origin, its known problems and its cross-references.
+        """
+        for identifier, cell in self.shipped(monkeypatch).items():
+            assert cell.rrid, f"{identifier} ships without a Cellosaurus accession"
+            assert re.fullmatch(r"CVCL_[0-9A-Z]+", cell.rrid), (
+                f"{identifier} carries {cell.rrid!r}, which is not a Cellosaurus accession")
+
+    def test_every_shipped_line_cites_a_source_and_a_locator(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The same obligation every rule carries: a claim arrives with where it came from.
+        for identifier, cell in self.shipped(monkeypatch).items():
+            assert cell.provenance.locator, f"{identifier} cites a source with no locator"
+            assert len(cell.description) > 80, f"{identifier} has no usable description"
+
+    def test_every_axis_of_every_line_says_where_its_answer_would_come_from(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # "available = false" is a first-class answer, but only when it says what is missing.
+        for identifier, cell in self.shipped(monkeypatch).items():
+            for axis in DataAxis:
+                note = cell.availability(axis).note
+                assert note, f"{identifier}/{axis} declares neither data nor a reason"
+
+    def test_the_accession_travels_into_the_export(self) -> None:
+        exported = HELA.to_dict()
+        assert exported["rrid"] == "CVCL_0030"
 
     def test_the_export_lists_every_axis(self) -> None:
         exported = AF22.to_dict()

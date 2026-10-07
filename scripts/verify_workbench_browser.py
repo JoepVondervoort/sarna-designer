@@ -186,7 +186,7 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     # if the translated picture is the one the redraw would have produced, so this compares
     # them: it reads a mark's position, drags, predicts from the transform, releases, and
     # checks the redrawn position against the prediction.
-    drag = browser.evaluate("""(()=>{
+    drag = browser.evaluate(r"""(()=>{
       const svg=document.getElementById('promoter-map');
       const id=(state.result.candidates.find(c=>c.rank!==null)||{}).id;
       if(!id) return {error:"no passing candidate to track"};
@@ -272,7 +272,7 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     assert ladder["overhangs"] == 4, ladder["overhangs"]
     assert "guide" in ladder["roles"] and "passenger" in ladder["roles"], ladder["roles"]
     # The subtraction behind the guide call is shown as numbers, not only inside a sentence.
-    ends = browser.evaluate("""(()=>{
+    ends = browser.evaluate(r"""(()=>{
       const boxes=[...document.querySelectorAll('#candidate-detail .end-box b')]
         .map(b=>parseFloat(b.textContent));
       const diff=parseFloat(document.querySelector('#candidate-detail .end-verdict b').textContent);

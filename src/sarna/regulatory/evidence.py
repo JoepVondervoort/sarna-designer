@@ -174,6 +174,27 @@ class CellType:
     """Whether the cells divide. Bears directly on chromatin accessibility and RNAa competence."""
 
     provenance: Provenance
+
+    is_experimental_context: bool = False
+    """Whether this project ran experiments in this line.
+
+    The registry holds two different kinds of entry and conflating them would mislead. HeLa and
+    AF22 are where chapter 4's screen was actually performed, so an observation about them is a
+    statement about this project's own data. The rest are declared because the saRNA literature
+    used them, or because an axis this tool cannot answer could realistically be answered there
+    -- useful to look up, but nothing here was measured in them. Only the first kind gets a
+    context panel beside a design; all of them are offered in the cell-line picker.
+    """
+
+    rrid: str = ""
+    """Cellosaurus accession, e.g. ``CVCL_0030``.
+
+    A display name does not identify a cell line. "HEK293" names several lines that differ,
+    HeLa stocks have drifted apart for seventy years, and SH-SY5Y has partially contaminated
+    redistributions. The accession resolves to one record carrying the line's origin, its
+    known problems and its cross-references to DepMap and ENCODE, so a result recorded here
+    can be checked against somebody else's.
+    """
     data: Mapping[DataAxis, DataAvailability] = field(default_factory=dict)
     """What evidence exists, per axis. A missing axis is treated as unavailable with no route."""
 
@@ -202,6 +223,8 @@ class CellType:
         return {
             "id": self.id,
             "name": self.name,
+            "rrid": self.rrid,
+            "experimental_context": self.is_experimental_context,
             "description": self.description,
             "proliferating": self.is_proliferating,
             "provenance": str(self.provenance),
@@ -282,6 +305,8 @@ def _cell_type_from(entry: dict[str, Any]) -> CellType:
     return CellType(
         id=entry["id"],
         name=entry["name"],
+        rrid=str(entry.get("rrid", "")).strip(),
+        is_experimental_context=bool(entry.get("experimental_context", False)),
         description=str(entry["description"]).strip(),
         is_proliferating=bool(entry["proliferating"]),
         provenance=Provenance.citation(entry["source"], entry["locator"]),

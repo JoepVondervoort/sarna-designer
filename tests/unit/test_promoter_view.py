@@ -280,9 +280,20 @@ class _StubChromatinReader:
 
 
 class TestCellTypePanels:
-    def test_both_characterised_cell_types_get_a_panel(self) -> None:
+    def test_only_the_lines_this_project_experimented_in_get_a_panel(self) -> None:
+        # The registry also carries lines declared for lookup -- HEK293, HepG2, K562 and the
+        # rest -- in which nothing here was measured. A panel for each would be six identical
+        # statements of ignorance beside the one line that has chromatin data.
         panels = cell_panels_for()
         assert {panel.cell_type.id for panel in panels} == {"hela", "af22"}
+        assert all(panel.cell_type.is_experimental_context for panel in panels)
+
+    def test_a_line_declared_only_for_lookup_can_still_be_asked_for_explicitly(self) -> None:
+        from sarna.regulatory.evidence import cell_type
+
+        panels = cell_panels_for([cell_type("sh-sy5y")])
+        assert [panel.cell_type.id for panel in panels] == ["sh-sy5y"]
+        assert panels[0].status is CellTypeStatus.NOT_ASSAYED
 
     def test_every_panel_is_honestly_marked_not_assayed(self) -> None:
         # No factor-occupancy data is wired in. Saying so is what stops an empty panel from
@@ -494,6 +505,7 @@ class TestCellPanelExport:
         )
         exported = view.to_dict()
         assert {panel["id"] for panel in exported["cell_types"]} == {"hela", "af22"}
+        assert all(panel["rrid"].startswith("CVCL_") for panel in exported["cell_types"])
         assert all(panel["absence_note"] for panel in exported["cell_types"])
 
 

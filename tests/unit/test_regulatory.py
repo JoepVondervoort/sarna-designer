@@ -135,8 +135,11 @@ class TestCellTypes:
             assert str(cell.provenance)
 
     def test_an_unknown_cell_type_raises_and_lists_the_known_ones(self) -> None:
-        with pytest.raises(KeyError, match="af22, hela"):
-            cell_type("hek293")
+        with pytest.raises(KeyError, match="af22, hek293") as raised:
+            cell_type("jurkat")
+        # The point of the message is that it names what *is* available, so the researcher can
+        # see whether their line is spelled differently rather than absent.
+        assert "sh-sy5y" in str(raised.value)
 
 
 class TestMotifMatrices:

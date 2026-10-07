@@ -15,6 +15,8 @@
 [[cell_line]]
 id = "hela"
 name = "HeLa"
+rrid = "CVCL_0030"
+experimental_context = true
 proliferating = true
 source = "van de Vondervoort 2026"
 locator = "chapters 2 and 4, Material and methods - cell culture"
@@ -51,6 +53,8 @@ ENCODE, so this is the cell line where occupancy could actually be answered prop
 [[cell_line]]
 id = "af22"
 name = "AF22 (lt-NES)"
+rrid = "CVCL_A5CW"
+experimental_context = true
 proliferating = false
 source = "Falk et al. 2012"
 locator = "PLOS ONE 7(1):e29597, capture of neuroepithelial-like stem cells"
@@ -85,4 +89,224 @@ note = """
 No public ChIP-seq exists for this line for any transcription factor, and none is likely to. The \
 asymmetry is worth stating: the tool will always know more about HeLa than about the \
 disease-relevant model.
+"""
+
+# ---------------------------------------------------------------------------------------------
+# Lines added because the saRNA literature actually used them, or because they are where a
+# missing axis could realistically be answered. Every accession below was read off that line's
+# Cellosaurus record rather than recalled; where Cellosaurus corrects the commonly quoted
+# description -- Hep-G2 is the clearest case -- the correction is stated here, not the folklore.
+#
+# None of these ship with loaded data. They are declared so the panel can say what is known
+# about a line a researcher names, including that nothing here has been measured in it.
+
+[[cell_line]]
+id = "hek293"
+name = "HEK293"
+rrid = "CVCL_0045"
+proliferating = true
+source = "Graham et al. 1977"
+locator = "J Gen Virol 36:59-74; adenovirus 5-transformed human embryonic kidney"
+description = """
+Adenovirus 5-transformed human embryonic kidney cells, female, fetal. Transformed rather than \
+cancer-derived, transfects at very high efficiency, and is the line most saRNA protocols are \
+first established in. Li et al. 2006 included it among the lines where dsP21-322 activated p21, \
+so it is a reasonable positive-control context. Note that "HEK293" names a family of drifted and \
+engineered derivatives; the accession identifies the parental line only.
+"""
+
+[cell_line.expression]
+available = false
+source = "DepMap / CCLE"
+note = """
+Not wired in, and not straightforward: HEK293 is not a cancer line, so its coverage in DepMap is \
+inconsistent across releases. Human Protein Atlas cell-line RNA-seq is the more dependable route \
+for this one.
+"""
+
+[cell_line.chromatin]
+available = false
+source = "ENCODE"
+note = "Not loaded. ENCODE holds HEK293 histone ChIP-seq, so this axis is reachable with an adapter."
+
+[cell_line.tf_occupancy]
+available = false
+source = "ENCODE"
+note = """
+Not wired in. ENCODE has substantial HEK293 TF ChIP-seq, much of it eGFP-tagged constructs rather \
+than antibodies against the native factor, which is a real difference when the question is whether \
+a factor occupies a site at endogenous levels.
+"""
+
+[[cell_line]]
+id = "hepg2"
+name = "Hep-G2"
+rrid = "CVCL_0027"
+proliferating = true
+source = "Aden et al. 1979"
+locator = "Nature 282:615-616, PMID 233137"
+description = """
+Male, 15 years. Cellosaurus records this line as a hepatoblastoma; the widely repeated \
+"hepatocellular carcinoma" is a misclassification carried forward from the original report. The \
+line matters here because MTL-CEBPA, the first saRNA to reach human trials, activates CEBPA in \
+liver, and because it is an ENCODE Tier 2 line with deep histone and factor coverage.
+"""
+
+[cell_line.expression]
+available = false
+source = "DepMap / CCLE (ACH-000739)"
+note = "Not wired in. DepMap publishes RNA-seq for this line, so the axis is reachable."
+
+[cell_line.chromatin]
+available = false
+source = "ENCODE"
+note = """
+Not loaded. One of the most completely profiled lines in ENCODE for histone modifications, so \
+this is among the easiest places to add a second chromatin context beside AF22.
+"""
+
+[cell_line.tf_occupancy]
+available = false
+source = "ENCODE"
+note = """
+Not wired in. ENCODE holds on the order of a hundred factor ChIP-seq datasets here. With K562 it \
+is one of the two lines where "is this factor actually bound?" could be answered rather than \
+predicted from sequence.
+"""
+
+[[cell_line]]
+id = "k562"
+name = "K-562"
+rrid = "CVCL_0004"
+proliferating = true
+source = "Lozzio & Lozzio 1975"
+locator = "Blood 45:321-334, PMID 163658"
+description = """
+Female, 53 years. Blast-phase chronic myelogenous leukaemia, BCR-ABL1 positive, grown in \
+suspension. An ENCODE Tier 1 line and the most densely assayed human cell line in existence. It \
+is in this registry for one reason: it is where the transcription-factor occupancy this tool \
+cannot measure anywhere else has actually been measured, for hundreds of factors.
+"""
+
+[cell_line.expression]
+available = false
+source = "DepMap / CCLE (ACH-000551)"
+note = "Not wired in. DepMap publishes RNA-seq for this line."
+
+[cell_line.chromatin]
+available = false
+source = "ENCODE"
+note = "Not loaded. Tier 1 coverage; every common histone mark is available."
+
+[cell_line.tf_occupancy]
+available = false
+source = "ENCODE"
+note = """
+Not wired in, and the single most valuable gap in this registry. The motif panel can only say a \
+sequence matches a matrix. Here, and here most of all, ENCODE could say whether the factor is \
+bound. That would turn a prediction into an observation for one cell type, and make the \
+NOT_ASSAYED status of every other line a measured contrast rather than a blanket.
+"""
+
+[[cell_line]]
+id = "mcf7"
+name = "MCF-7"
+rrid = "CVCL_0031"
+proliferating = true
+source = "Soule et al. 1973"
+locator = "J Natl Cancer Inst 51:1409-1416, PMID 4357757"
+description = """
+Female, 69 years. Invasive breast carcinoma of no special type, from a pleural effusion; \
+oestrogen-receptor positive. One of the three lines in which Li et al. 2006 showed dsP21-322 \
+activating p21, so it is part of the founding evidence that RNAa is not a quirk of one cell type.
+"""
+
+[cell_line.expression]
+available = false
+source = "DepMap / CCLE (ACH-000019)"
+note = "Not wired in. DepMap publishes RNA-seq for this line."
+
+[cell_line.chromatin]
+available = false
+source = "ENCODE"
+note = "Not loaded. ENCODE Tier 2; histone ChIP-seq exists for this line."
+
+[cell_line.tf_occupancy]
+available = false
+source = "ENCODE"
+note = """
+Not wired in. Coverage is substantial but skewed towards nuclear-receptor biology, which is what \
+this line is usually studied for.
+"""
+
+[[cell_line]]
+id = "pc3"
+name = "PC-3"
+rrid = "CVCL_0035"
+proliferating = true
+source = "Kaighn et al. 1979"
+locator = "Invest Urol 17:16-23, PMID 447482"
+description = """
+Male, 62 years. Prostate carcinoma from a bone metastasis. The cell line RNAa was discovered in: \
+Li et al. 2006 activated E-cadherin with dsEcad-215 and dsEcad-302, and p21 with dsP21-322, in \
+PC-3. Any sanity check of this tool against the founding experiment happens in this context.
+"""
+
+[cell_line.expression]
+available = false
+source = "DepMap / CCLE (ACH-000090)"
+note = "Not wired in. DepMap publishes RNA-seq for this line."
+
+[cell_line.chromatin]
+available = false
+source = "ENCODE"
+note = "Not loaded. ENCODE holds some PC-3 data, considerably less than the Tier 1 and 2 lines."
+
+[cell_line.tf_occupancy]
+available = false
+note = """
+No usable panel. PC-3 is well studied in prostate biology but is not one of the lines with broad \
+factor ChIP-seq coverage.
+"""
+
+[[cell_line]]
+id = "sh-sy5y"
+name = "SH-SY5Y"
+rrid = "CVCL_0019"
+proliferating = true
+source = "Biedler et al. 1973"
+locator = "Cancer Res 33:2643-2652; thrice-subcloned from SK-N-SH (CVCL_0531)"
+description = """
+Female, 4 years. Neuroblastoma, a subclone of SK-N-SH, and the neuronal model most laboratories \
+reach for. It is here as the accessible comparator to AF22: both are neural, but this one divides \
+continuously, is a tumour line, and is present in DepMap, so the expression axis that cannot be \
+answered for AF22 can be answered here. Cellosaurus flags it as partially contaminated - some \
+redistributed stocks contain mouse-origin cells - which is worth knowing before treating it as a \
+clean human neuronal context.
+"""
+
+[cell_line.expression]
+available = false
+source = "DepMap / CCLE (ACH-001188)"
+note = """
+Not wired in, and the most useful one to add first. AF22 expression is unavailable publicly, so \
+this line is the nearest route to asking whether a neural context transcribes a target at all - \
+the question that decides whether a saRNA has anything to amplify.
+"""
+
+[cell_line.chromatin]
+available = false
+source = "ENCODE / GEO"
+note = """
+Not loaded. SH-SY5Y is an ENCODE Tier 3 line with limited coverage; GEO holds more, scattered \
+across individual studies with differing protocols, which is a weaker basis than AF22's single \
+consistent series.
+"""
+
+[cell_line.tf_occupancy]
+available = false
+note = """
+Sparse. GATA3 ChIP-seq exists in ENCODE, and MYCN datasets exist for the inducible SH-SY5Y-MYCN \
+derivative rather than the parental line - a derivative is not the same cell, and conflating them \
+would attribute to SH-SY5Y a measurement made in something else.
 """

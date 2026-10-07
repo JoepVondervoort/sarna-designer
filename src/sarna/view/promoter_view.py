@@ -126,6 +126,12 @@ class CellTypePanel:
         return {
             "id": self.cell_type.id,
             "name": self.cell_type.name,
+            # The accession and the citation travel with the panel, not only with the
+            # catalogue: a panel is what a reader actually sees, and a cell line named without
+            # its accession cannot be checked against anybody else's record.
+            "rrid": self.cell_type.rrid,
+            "source": str(self.cell_type.provenance),
+            "experimental_context": self.cell_type.is_experimental_context,
             "description": self.cell_type.description,
             "proliferating": self.cell_type.is_proliferating,
             "status": str(self.status),
@@ -433,8 +439,10 @@ def cell_panels_for(
     """Build cell-type panels, filling in chromatin state where tracks are available.
 
     Args:
-        cell_types: Which cell types to build panels for. Defaults to those this project
-            characterises.
+        cell_types: Which cell types to build panels for. Defaults to the lines this project
+            ran experiments in, which is not the whole registry: the rest are declared for
+            lookup and carry no measurement from this work, so a panel for them would be six
+            identical statements of ignorance crowding out the one line that has data.
         promoter: The promoter being viewed, needed to read signal across it.
         chromatin_reader: An open track reader, or ``None``. It states which cell line its
             tracks belong to, and only that line's panel gets chromatin.
@@ -444,7 +452,11 @@ def cell_panels_for(
         One panel per cell type. A panel with no data is ``NOT_ASSAYED`` and says why, which is
         what stops an interface from rendering an empty panel as "nothing binds here".
     """
-    selected = list(CELL_TYPES.values()) if cell_types is None else list(cell_types)
+    selected = (
+        [cell for cell in CELL_TYPES.values() if cell.is_experimental_context]
+        if cell_types is None
+        else list(cell_types)
+    )
     panels = []
     for cell in selected:
         profile = None
