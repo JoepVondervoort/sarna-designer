@@ -29,6 +29,7 @@ from sarna.genome.ensembl import (
     EnsemblUnavailableError,
     GeneNotFoundError,
 )
+from sarna.offtarget.models import GENOMIC_SCOPE, TRANSCRIPT_SCOPE
 from sarna.regulatory.evidence import CELL_TYPES
 from sarna.rules.catalog import CATALOGUE
 from sarna.rules.resolved import ResolvedRule
@@ -179,6 +180,11 @@ class AppRouter:
                 self.workers.submit(self.service.run, run_id, request)
                 return self._json(202, {"id": run_id})
         parts = path.strip("/").split("/")
+        if method == "GET" and len(parts) == 3 and parts[:2] == ["api", "screenings"]:
+            return self._json(200, self.service.store.screening(parts[2]))
+        if (method == "POST" and len(parts) == 4
+                and parts[:2] == ["api", "runs"] and parts[3] == "screenings"):
+            return self._start_screening(parts[2], body)
         if len(parts) >= 3 and parts[:2] == ["api", "batches"]:
             batch = self.service.store.batch(parts[2])
             if method == "GET" and len(parts) == 3:
@@ -267,7 +273,35 @@ class AppRouter:
                 return 200, "text/csv; charset=utf-8", output.getvalue().encode()
             if len(parts) == 4 and parts[3] == "export.order.csv":
                 return self._order_csv(run_id, snapshot, query)
+            if len(parts) == 4 and parts[3] == "screenings":
+                return self._json(200, self.service.store.screenings_for(run_id))
         return self._json(404, {"detail": "No such local app route."})
+
+
+    def _start_screening(self, run_id: str, body: bytes) -> tuple[int, str, bytes]:
+        """Queue an off-target screening for a finished run.
+
+        Opt-in and asynchronous by design (ADR 0019): the run is already complete and readable,
+        and starting a search sends this run's candidate sequences to NCBI. Returns at once with
+        the screening's id; the interface polls it.
+        """
+        if len(body) > MAX_BODY:
+            raise ValueError("Request is too large.")
+        requested = json.loads(body) if body.strip() else {}
+        scope = requested.get("scope", TRANSCRIPT_SCOPE)
+        if scope not in (TRANSCRIPT_SCOPE, GENOMIC_SCOPE):
+            raise ValueError(
+                f"Unknown screening scope {scope!r}. Choose {TRANSCRIPT_SCOPE!r} for transcript "
+                f"off-targets or {GENOMIC_SCOPE!r} for genomic ones."
+            )
+        snapshot = self.service.store.snapshot(run_id)
+        if not any(c["rank"] is not None for c in snapshot["candidates"]):
+            raise ValueError(
+                "No candidate in this run passed the gates, so there is nothing to screen."
+            )
+        screening_id = self.service.store.start_screening(run_id, scope)
+        self.workers.submit(self.service.screen, screening_id, run_id, scope)
+        return self._json(202, {"id": screening_id, "scope": scope})
 
     @staticmethod
     def _order_csv(

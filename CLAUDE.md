@@ -140,6 +140,7 @@ Read the ADR before reopening its question; each records the alternatives and wh
 | Several promoter references per gene, each its own design context | 0016 |
 | The order-ready duplex: separate export, Python-computed, caveats in the row | 0017 |
 | Apache-2.0, and the bundled data's actual terms | 0018 |
+| Off-target screening: opt-in, remote, dual-scope, reported never filtered | 0019 |
 
 `docs/scientific/`:
 
@@ -233,6 +234,14 @@ Headline results:
 - **`pos19-a` excludes CEBPA**, the duplex in MTL-CEBPA and the first saRNA in human trials.
   The gate stays conformant with Table 1 in the default. Custom roles are now supported and
   retain their departure from the frozen baseline in exports.
+- **Off-target screening exists, and the order export does not yet cite it.**
+  `sarna.offtarget` screens a finished run against RefSeq RNA (could the duplex silence an
+  mRNA?) and the genome (could it act on another promoter?), opt-in and asynchronous, reported
+  as several sortable measures and never as a filter. Genomic hits report distance to the
+  nearest annotated TSS with **no threshold**; the one flag says a hit falls inside the window
+  that run itself used. Screenings are separate dated records, schema v4.
+  [ADR 0019](docs/adr/0019-off-target-screening.md). The remaining join: `export.order.csv`
+  still prints `off-target-screening [not-performed]` because it is built from the run alone.
 - **No factor occupancy anywhere.** AF22 chromatin *accessibility* is measured, which is not the
   same thing. `CELL_TYPE_OBSERVATION` for a transcription factor is still unproduced; ENCODE would
   populate HeLa, and AF22 has no public TF ChIP-seq at all. The asymmetry is permanent-ish: the

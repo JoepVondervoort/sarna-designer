@@ -476,7 +476,14 @@ def test_store_migrates_existing_runs_and_preserves_their_snapshot(tmp_path: Pat
     assert store.status("old")["request"] == {"symbol": "CHD2"}
     assert store.status("old")["error_code"] is None
     with store.connect() as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
+        # 4 since off-target screenings were added as their own dated table (ADR 0019).
+        # Opening an older database must still migrate without touching its runs.
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
+        tables = {
+            row[0]
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        assert {"runs", "batches", "batch_runs", "screenings"} <= tables
 
 
 def test_regulatory_unavailability_does_not_change_sequence_rank(tmp_path: Path):

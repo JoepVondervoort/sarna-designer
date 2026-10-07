@@ -1,6 +1,7 @@
 """Gene lookup and run assembly over the existing engine, with explicit evidence gaps."""
 
 import logging
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,6 +20,7 @@ from sarna.design.candidate import Candidate
 from sarna.design.order import CSV_COLUMNS, csv_row, order_for
 from sarna.design.pipeline import design_sarnas
 from sarna.genome.anchors import PromoterAnchor, load_anchors
+from sarna.genome.coordinates import GenomicInterval
 from sarna.genome.ensembl import (
     EnsemblCacheMissError,
     EnsemblClient,
@@ -29,6 +31,10 @@ from sarna.genome.ensembl import (
 )
 from sarna.genome.promoter import Promoter
 from sarna.genome.tss import TssPosition
+from sarna.offtarget.models import GENOMIC_SCOPE
+from sarna.offtarget.ncbi import BlastClient
+from sarna.offtarget.proximity import TranscriptLookup
+from sarna.offtarget.screening import run_screening, specificity_table
 from sarna.regulatory.chromatin import open_af22_reader
 from sarna.regulatory.evidence import CELL_TYPES
 from sarna.regulatory.features import fetch_regulatory_features
@@ -83,6 +89,84 @@ class DesignService:
     def _gene(client: EnsemblClient, symbol: str) -> Gene:
         # Human symbols are normalised before both cache access and external lookup.
         return client.gene(symbol.strip().upper())
+
+
+    def screen(
+        self,
+        screening_id: str,
+        run_id: str,
+        scope: str,
+        blast_client: BlastClient | None = None,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        """Run an off-target screening for a finished design run, in the background.
+
+        Never raises: a screening is an optional extra, and a failed one must leave the designs
+        and their record untouched. The reason is stored for the researcher to read.
+
+        Args:
+            screening_id: The record to write progress and results into.
+            run_id: The finished design run being screened.
+            scope: ``transcript`` or ``genomic``.
+            blast_client: Injected for tests; a real one is built and closed here otherwise.
+            sleep: Injected for tests. Production waits NCBI's requested interval
+                between polls, which a test must not actually spend.
+        """
+        client = blast_client or BlastClient()
+        try:
+            snapshot = self.store.snapshot(run_id)
+            candidates = snapshot["candidates"]
+            core = len(candidates[0]["target_site_dna"]) if candidates else 19
+            record = run_screening(
+                run_id=run_id,
+                candidates=candidates,
+                scope=scope,
+                core_length=core,
+                client=client,
+                progress=lambda stage: self.store.screening_progress(screening_id, stage),
+                transcripts=self._transcript_lookup() if scope == GENOMIC_SCOPE else None,
+                window=self._run_window(snapshot),
+                sleep=sleep,
+            )
+            self.store.finish_screening(screening_id, {
+                **record.to_dict(),
+                "specificity": specificity_table(record, core),
+            })
+        except Exception as error:
+            LOGGER.warning("screening %s failed: %s", screening_id, error)
+            self.store.fail_screening(screening_id, str(error))
+        finally:
+            if blast_client is None:
+                client.close()
+
+    def _transcript_lookup(self) -> TranscriptLookup:
+        """Return a lookup placing genomic hits against Ensembl's annotated transcripts."""
+        client = self.client_factory(False)
+
+        def lookup(interval: GenomicInterval) -> list[dict[str, Any]]:
+            try:
+                return [dict(t) for t in client.overlap(interval, "transcript")]
+            except Exception as error:
+                LOGGER.warning("could not place a genomic hit: %s", error)
+                return []
+
+        return lookup
+
+    @staticmethod
+    def _run_window(snapshot: dict[str, Any]) -> tuple[int, int] | None:
+        """Return the window this run designed against, for flagging hits inside it.
+
+        ``None`` when the run used no window rule, in which case nothing is flagged: there is no
+        configuration to compare a hit against.
+        """
+        for rule in snapshot.get("configuration", {}).get("rules", []):
+            if rule["id"] != "tss-window":
+                continue
+            values = {p["name"]: p["value"] for p in rule.get("parameters", [])}
+            start, end = values.get("window-start-bp"), values.get("window-end-bp")
+            if isinstance(start, int) and isinstance(end, int):
+                return start, end
+        return None
 
     def lookup(self, symbol: str, offline: bool = False) -> dict[str, Any]:
         """Resolve a human symbol or gene ID and expose every deliberate reference choice."""

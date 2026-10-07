@@ -68,7 +68,26 @@ class RunStore:
                 "FOREIGN KEY(batch_id) REFERENCES batches(id), "
                 "FOREIGN KEY(run_id) REFERENCES runs(id))"
             )
-            connection.execute("PRAGMA user_version=3")
+            # Off-target screenings are separate, dated records rather than columns on a run:
+            # NCBI's databases change week to week, so a result is only meaningful with its own
+            # date, database and parameters, and re-screening must add a record rather than
+            # overwrite one (ADR 0019). The design snapshot stays frozen.
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS screenings ("
+                "id TEXT PRIMARY KEY, run_id TEXT NOT NULL, scope TEXT NOT NULL, "
+                "created TEXT NOT NULL, status TEXT NOT NULL, stage TEXT NOT NULL, "
+                "request_id TEXT, result BLOB, error TEXT, "
+                "FOREIGN KEY(run_id) REFERENCES runs(id))"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS screenings_by_run ON screenings(run_id, created)"
+            )
+            connection.execute("PRAGMA user_version=4")
+            connection.execute(
+                "UPDATE screenings SET status='error', stage='Interrupted', "
+                "error='The application stopped while this screening was running. Start it "
+                "again.' WHERE status='running'"
+            )
             connection.execute(
                 "UPDATE runs SET status='error', error='Application stopped before this run "
                 "completed. Submit it again.', stage='Interrupted' WHERE status='running'"
@@ -223,6 +242,88 @@ class RunStore:
             raise KeyError(run_id)
         result: dict[str, Any] = json.loads(zlib.decompress(row["snapshot"]))
         return result
+
+
+    def start_screening(self, run_id: str, scope: str) -> str:
+        """Record that a screening has begun and return its id.
+
+        Raises:
+            KeyError: If the run does not exist. A screening with no run would be unattributable.
+        """
+        self.status(run_id)
+        screening_id = uuid4().hex
+        with self.connect() as connection:
+            connection.execute(
+                "INSERT INTO screenings(id,run_id,scope,created,status,stage) "
+                "VALUES(?,?,?,?,?,?)",
+                (screening_id, run_id, scope, datetime.now(UTC).isoformat(),
+                 "running", "Submitting to NCBI"),
+            )
+        return screening_id
+
+    def screening_progress(
+        self, screening_id: str, stage: str, request_id: str | None = None
+    ) -> None:
+        """Record how far a screening has got, so the interface can say rather than spin."""
+        with self.connect() as connection:
+            if request_id is None:
+                connection.execute(
+                    "UPDATE screenings SET stage=? WHERE id=?", (stage, screening_id))
+            else:
+                connection.execute(
+                    "UPDATE screenings SET stage=?, request_id=? WHERE id=?",
+                    (stage, request_id, screening_id))
+
+    def finish_screening(self, screening_id: str, result: dict[str, Any]) -> None:
+        """Store a completed screening."""
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE screenings SET status='complete', stage='Complete', result=? WHERE id=?",
+                (zlib.compress(json.dumps(result, separators=(",", ":")).encode(), level=6),
+                 screening_id),
+            )
+
+    def fail_screening(self, screening_id: str, reason: str) -> None:
+        """Record that a screening failed, keeping the reason for the researcher."""
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE screenings SET status='error', stage='Failed', error=? WHERE id=?",
+                (reason, screening_id),
+            )
+
+    def screening(self, screening_id: str) -> dict[str, Any]:
+        """Return one screening, with its result if it has finished.
+
+        Raises:
+            KeyError: If there is no such screening.
+        """
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM screenings WHERE id=?", (screening_id,)).fetchone()
+        if row is None:
+            raise KeyError(f"No screening {screening_id!r} in this local store.")
+        record = {
+            "id": row["id"], "run_id": row["run_id"], "scope": row["scope"],
+            "created": row["created"], "status": row["status"], "stage": row["stage"],
+            "request_id": row["request_id"], "error": row["error"],
+        }
+        if row["result"] is not None:
+            record["result"] = json.loads(zlib.decompress(row["result"]))
+        return record
+
+    def screenings_for(self, run_id: str) -> list[dict[str, Any]]:
+        """Return every screening of one run, newest first, without their full results.
+
+        Several screenings of one run are expected: a transcript search and a genomic one, and
+        a repeat months later when the databases have moved on. None replaces another.
+        """
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT id,run_id,scope,created,status,stage,request_id,error,"
+                "       (result IS NOT NULL) AS has_result "
+                "FROM screenings WHERE run_id=? ORDER BY created DESC", (run_id,)
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def list_runs(self) -> list[dict[str, Any]]:
         """Return recent completed and failed runs, newest first."""

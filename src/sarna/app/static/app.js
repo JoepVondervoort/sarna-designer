@@ -732,6 +732,95 @@ async function printDuplexSheet() {
   } catch (e) { error(e.message); }
 }
 
+
+async function startScreening(scope) {
+  // Opt-in, and the run is already readable: this adds evidence, it never gates the designs.
+  const run = state.result;
+  if (!run || frozen) { error("Screening needs a live run."); return; }
+  for (const id of ["screen-transcript","screen-genomic"]) $(id).disabled = true;
+  $("offtarget-status").textContent = "RUNNING";
+  $("offtarget-progress").textContent = "Starting…";
+  try {
+    const started = await api(`/api/runs/${run.app.run_id}/screenings`,
+      {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({scope})});
+    if (!started.id) throw new Error("The server did not return a screening id.");
+    pollScreening(started.id, run.app.run_id);
+  } catch (e) {
+    error(e.message);
+    $("offtarget-status").textContent = "FAILED";
+    for (const id of ["screen-transcript","screen-genomic"]) $(id).disabled = false;
+  }
+}
+
+async function pollScreening(screeningId, runId) {
+  // The server waits NCBI's requested interval; this is only the interface catching up.
+  try {
+    const record = await api(`/api/screenings/${screeningId}`);
+    if (state.result?.app.run_id !== runId) return;
+    $("offtarget-progress").textContent = record.stage || "";
+    if (record.status === "running") {
+      setTimeout(() => pollScreening(screeningId, runId), 2000);
+      return;
+    }
+    for (const id of ["screen-transcript","screen-genomic"]) $(id).disabled = false;
+    if (record.status === "error") {
+      $("offtarget-status").textContent = "FAILED";
+      $("offtarget-progress").textContent = record.error || "The screening failed.";
+      return;
+    }
+    $("offtarget-status").textContent = "COMPLETE";
+    renderScreening(record);
+  } catch (e) { error(e.message); }
+}
+
+function renderScreening(record) {
+  const result = record.result, rows = result.specificity || [];
+  state.screenings = state.screenings || {};
+  state.screenings[record.scope] = result;
+  state.screeningScope = record.scope;
+  const scopeName = record.scope === "genomic"
+    ? "Promoters (genomic)" : "Transcripts (RefSeq RNA)";
+  const sort = state.screeningSort || "perfect_hits";
+  const ordered = [...rows].sort((a, b) => {
+    const value = r => r[sort] === null ? Number.POSITIVE_INFINITY : r[sort];
+    return sort === "best_evalue" ? value(a) - value(b) : value(b) - value(a);
+  });
+  const header = (key, label, tip) =>
+    `<th><button data-screensort="${key}"${sort === key ? ' class="active"' : ''} `
+    + `data-tip="${escapeHTML(tip)}" tabindex="0">${label} ⇅</button></th>`;
+  const genomic = record.scope === "genomic";
+  $("offtarget-results").innerHTML =
+    `<p class="hint"><b>${escapeHTML(scopeName)}</b> · searched `
+    + `${escapeHTML(new Date(result.searched_at).toLocaleString())} · database `
+    + `${escapeHTML(result.parameters.database)} · word size ${result.parameters.word_size} `
+    + `· ${result.hit_count} alignments across ${rows.length} candidates. `
+    + `Sequence similarity is not measured binding, and nothing here changes a rank.</p>`
+    + (result.notes || []).map(n => `<p class="hint warn">${escapeHTML(n)}</p>`).join("")
+    + `<div class="table-scroll"><table><thead><tr><th>Candidate</th>`
+    + header("perfect_hits", "Perfect matches",
+             "Full-length exact matches elsewhere. One of these is a specific unintended target.")
+    + header("near_perfect_hits", "Near-perfect",
+             "Alignments matching at least 17 of the 19 bases.")
+    + header("longest_complementary_stretch", "Longest match",
+             "The most bases matched in any single alignment.")
+    + header("best_evalue", "Best E-value",
+             "Lowest E-value among the alignments. Smaller means less likely by chance.")
+    + header("hit_count", "Alignments", "How many alignments were returned at all.")
+    + (genomic ? header("in_run_window_hits", "In your window",
+         "Hits inside the same window this run designed against, near another gene's start site.")
+       : "")
+    + `</tr></thead><tbody>`
+    + ordered.map(r => `<tr><td>${escapeHTML(r.candidate)}</td>`
+        + `<td${r.perfect_hits ? ' class="flagged"' : ''}>${r.perfect_hits}</td>`
+        + `<td>${r.near_perfect_hits}</td><td>${r.longest_complementary_stretch}</td>`
+        + `<td>${r.best_evalue === null ? "—" : Number(r.best_evalue).toExponential(1)}</td>`
+        + `<td>${r.hit_count}</td>`
+        + (genomic ? `<td${r.in_run_window_hits ? ' class="flagged"' : ''}>`
+                     + `${r.in_run_window_hits}</td>` : "")
+        + `</tr>`).join("")
+    + `</tbody></table></div>`;
+}
+
 function tooltip(target,event) {
   const text=target?.closest("[data-tip]")?.dataset.tip;
   if (!text) { $("tooltip").hidden=true; return; }
@@ -859,6 +948,15 @@ $("candidate-detail").addEventListener("click",async e=>{const b=e.target.closes
 $("run-evidence").addEventListener("click",renderEvidence);
 for (const type of ["csv","json","html"]) $("export-"+type).addEventListener("click",()=>exportRun(type));
 $("export-order").addEventListener("click",exportOrder);
+$("screen-transcript").addEventListener("click",()=>startScreening("transcript"));
+$("screen-genomic").addEventListener("click",()=>startScreening("genomic"));
+$("offtarget-results").addEventListener("click",event=>{
+  const button=event.target.closest("[data-screensort]");
+  if (!button) return;
+  state.screeningSort=button.dataset.screensort;
+  const scope=state.screeningScope;
+  if (scope) renderScreening({scope,result:state.screenings[scope],status:"complete"});
+});
 document.addEventListener("click", event => {
   const target = event.target.closest("#print-duplex,#inspect-top,#export-order-top");
   if (!target) return;

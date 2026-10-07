@@ -49,3 +49,8 @@ body.frozen .setup,body.frozen .intro-note,body.frozen .saved-label,body.frozen 
     font-size:8.5pt;color:#333}
   @page{margin:16mm}
 }
+
+.offtarget-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 10px}
+.offtarget-actions .hint{flex-basis:100%;margin-top:4px}
+.offtarget-card td.flagged{color:var(--red);font-weight:700}
+.offtarget-card th button.active{border-color:var(--teal);color:var(--teal)}
