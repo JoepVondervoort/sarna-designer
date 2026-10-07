@@ -38,6 +38,8 @@ artifacts = [
     "src/sarna/validation/data/*.csv",
     "src/sarna/regulatory/data/*.json",
     "src/sarna/view/*.html",
+    "src/sarna/genome/data/*.toml",
+    "src/sarna/regulatory/data/*.toml",
 ]
 
 [tool.ruff]

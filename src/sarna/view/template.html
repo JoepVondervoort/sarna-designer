@@ -580,6 +580,23 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
   }
 
   /* ---------------- lower panels ---------------- */
+  function axesBlock(cell) {
+    const axes = cell.data_axes || [];
+    if (!axes.length) return "";
+    const rows = axes.map((a) => {
+      const state = a.available ? "loaded" : (a.reachable ? "reachable" : "no route");
+      const cls = a.available ? "pass" : (a.reachable ? "warn" : "na");
+      return `<div class="markrow" style="grid-template-columns:104px minmax(0,1fr) 78px">
+        <span class="mk">${esc(a.axis)}</span>
+        <span style="font-size:.74rem;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+          title="${esc(a.note)}">${esc(a.question)}</span>
+        <span style="text-align:right"><span class="pill ${cls}">${esc(state)}</span></span>
+      </div>`;
+    }).join("");
+    return `<h3 style="margin-top:14px;font-size:.9rem">What is known in this cell type</h3>
+      <div class="marks">${rows}</div>`;
+  }
+
   function chromatinBlock(cell) {
     const chrom = cell.chromatin;
     if (!chrom) return "";
@@ -637,6 +654,7 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
         <p style="margin:0 0 8px">${esc(cell.description)}</p>
         <dl class="kv"><dt>Dividing</dt><dd>${cell.proliferating ? "yes" : "no"}</dd>
         <dt>Factor binding</dt><dd>${cell.known ? esc(cell.status) : "not assayed"}</dd></dl>
+        ${axesBlock(cell)}
         ${chromatinBlock(cell)}
         ${cell.absence_note ? `<p class="cellnote"><b>What this panel cannot tell you.</b> ${esc(cell.absence_note)}</p>` : ""}
         <p class="cellnote">The ${motifCount} motif ${motifCount === 1 ? "match" : "matches"} drawn above

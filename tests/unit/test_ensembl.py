@@ -16,6 +16,7 @@ from typing import Any, ClassVar, cast
 import httpx
 import pytest
 
+from sarna.genome.anchors import PromoterAnchor, ReferenceKind
 from sarna.genome.coordinates import Assembly, GenomicInterval, Strand
 from sarna.genome.ensembl import (
     AssemblyMismatchResponseError,
@@ -26,6 +27,7 @@ from sarna.genome.ensembl import (
     Transcript,
     promoter_for_symbol,
 )
+from sarna.rules.provenance import Provenance
 
 SCN1A_TSS = 166128019
 """0-based TSS of SCN1A's MANE Select transcript, the highest coordinate of its span."""
@@ -78,6 +80,24 @@ TRANSCRIPTS_PAYLOAD: dict[str, Any] = {
 }
 
 
+AUTO_SEQUENCE = "<auto>"
+"""Sentinel for a sequence route that should size its reply to the region requested.
+
+A fixed-length stub reply makes ``Promoter.from_reference_sequence`` reject any window of another
+length — correctly, since an interval whose length disagrees with its sequence would shift every
+candidate's coordinates. Sizing the reply keeps the tests about the thing under test.
+"""
+
+
+def _sized_sequence(url: str) -> str:
+    """Return a sequence of exactly the length the region in ``url`` asks for."""
+    region = url.split("/sequence/region/homo_sapiens/")[1].split("?")[0]
+    _, span = region.split(":")
+    start, end = span.split("..")
+    length = int(end) - int(start) + 1
+    return ("AAAC" * (length // 4 + 1))[:length]
+
+
 class StubTransport:
     """Serves recorded payloads by URL fragment, and records what was asked for.
 
@@ -97,6 +117,8 @@ class StubTransport:
             if fragment in url:
                 if isinstance(payload, int):
                     return httpx.Response(payload, text="<html>error</html>")
+                if isinstance(payload, dict) and payload.get("seq") == AUTO_SEQUENCE:
+                    return httpx.Response(200, json={"seq": _sized_sequence(url)})
                 return httpx.Response(200, json=payload)
         return httpx.Response(404, json={"error": "not found"})
 
@@ -631,3 +653,61 @@ class TestOverlapQueries:
         before = len(requests_made(client))
         assert client.overlap(interval, "regulatory") == self.REGULATORY
         assert len(requests_made(client)) == before
+
+
+@pytest.mark.strand
+class TestDesigningAgainstADeclaredPromoter:
+    """Anchors are why chapter 2's SCN1A designs are reproducible at all."""
+
+    SEQUENCE: ClassVar[dict[str, str]] = {"seq": AUTO_SEQUENCE}
+
+    def client(self) -> EnsemblClient:
+        return client_for({**DEFAULT_ROUTES, "/sequence/region/": self.SEQUENCE})
+
+    @staticmethod
+    def declared(reference: int | None, kind: ReferenceKind) -> PromoterAnchor:
+        return PromoterAnchor(
+            id="scn1a-test",
+            gene="SCN1A",
+            interval=GenomicInterval(
+                Assembly.GRCH38, "2", 166_078_692, 166_080_192, Strand.MINUS
+            ),
+            reference_point=reference,
+            reference_kind=kind,
+            provenance=Provenance.citation("Dong et al. 2014", "Mol Neurobiol 50(2):438-448"),
+            note="A declared promoter with no annotated transcript nearby.",
+        )
+
+    def test_a_declared_promoter_yields_a_tss_anchored_window(self) -> None:
+        anchor = self.declared(166_079_092, ReferenceKind.INFERRED)
+        promoter = self.client().promoter_for_anchor(anchor, 600, 600)
+        assert promoter.tss_start is not None
+        assert promoter.tss_start.value == -600
+        assert promoter.interval is not None
+        assert promoter.interval.end == 166_079_092 + 600 + 1
+
+    def test_an_anchor_with_no_reference_point_yields_a_promoter_with_no_tss(self) -> None:
+        # The honest degradation: TSS rules then report not-applicable rather than measuring
+        # from an origin nobody established.
+        anchor = self.declared(None, ReferenceKind.NONE)
+        promoter = self.client().promoter_for_anchor(anchor, region_padding_bp=0)
+        assert promoter.tss_start is None
+        assert promoter.length == 1500
+
+    def test_a_minus_strand_declared_promoter_is_reverse_complemented(self) -> None:
+        anchor = self.declared(166_079_092, ReferenceKind.INFERRED)
+        promoter = self.client().promoter_for_anchor(anchor, 600, 600)
+        assert promoter.sequence.bases.startswith("GTTT")
+
+    def test_an_anchor_on_another_assembly_is_refused(self) -> None:
+        anchor = PromoterAnchor(
+            id="wrong-assembly",
+            gene="SCN1A",
+            interval=GenomicInterval(Assembly.GRCH37, "2", 1000, 2000, Strand.MINUS),
+            reference_point=1500,
+            reference_kind=ReferenceKind.ANNOTATED_TSS,
+            provenance=Provenance.citation("x", "y"),
+            note="n",
+        )
+        with pytest.raises(ValueError, match="this client serves GRCh38"):
+            self.client().promoter_for_anchor(anchor)

@@ -45,10 +45,19 @@ project and must never be conflated.
 The first transcribed base of a given **Transcript**, as annotated by the chosen annotation
 source. A TSS belongs to a transcript, never to a gene. Written **+1**; there is no position 0.
 
+**Promoter anchor**
+What a **promoter window** is measured from. Usually a **TSS**, but not always: a promoter mapped
+in a publication may have no annotated transcript at all. Chapter 2 of the thesis designed SCN1A
+against promoters from Dong et al. 2014 and Long et al. 2008, and the Dong distal region — which
+produced two of three SCN1A activators — has no Ensembl transcript within 5.5 kb. Every anchor
+carries its citation and a **reference kind** saying how well its zero point is established:
+`annotated-tss`, `mapped-tss`, `inferred`, or `none`. An anchor of kind `none` has no zero point,
+so no offset can be computed from it and the TSS rules report *not-applicable*.
+
 **Promoter window**
-A half-open interval defined **relative to a specific TSS**, e.g. `-1000 … -100`. Negative
-numbers are upstream, positive downstream. A promoter window is meaningless without the TSS it
-is relative to, and the TSS is meaningless without its transcript.
+A half-open interval defined **relative to a specific promoter anchor**, e.g. `-1000 … -100`.
+Negative numbers are upstream, positive downstream. A promoter window is meaningless without the
+anchor it is relative to, and an offset is only as trustworthy as its anchor's reference kind.
 
 **Assembly**
 A named genome build, e.g. `GRCh38`, `GRCh37`. Every genomic coordinate in this project carries
@@ -152,7 +161,15 @@ Kept conceptually and visually separate even when they describe the same thing.
 **Cell type / cell line**
 The biological context a regulatory dataset was generated in. Every regulatory track names its
 cell context and dataset. When no dataset exists for the chosen context, the application says so
-rather than substituting another.
+rather than substituting another. Cell lines are **data, not code**: they are declared in
+`cell_lines.toml` with a citation, and a user adds more through `SARNA_CELL_LINES`.
+
+**Data axis**
+One of the three kinds of evidence a cell line may have, each answering a different question:
+**expression** (is the gene transcribed here at all?), **chromatin** (is the promoter accessible?)
+and **TF occupancy** (which factors are bound?). Expression is asked first, because a saRNA
+enhances transcription from a locus that already has some rather than switching a silent gene on.
+"Not available" is a first-class answer and stays visible.
 
 ---
 

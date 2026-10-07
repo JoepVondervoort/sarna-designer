@@ -1,0 +1,80 @@
+# Promoter anchors: named, cited regions to design against.
+#
+# A gene needs an entry here only where the annotation is not enough. Most genes do not: the
+# annotated MANE Select TSS is the anchor, built on the fly by PromoterAnchor.from_transcript.
+#
+# Add your own by pointing SARNA_ANCHORS at a file or a directory of files in this format. Every
+# entry must cite a source and explain itself; `reference_kind` says how far to trust its zero
+# point, and `none` is a permitted, visible answer.
+#
+#   reference_kind = "annotated-tss"  a TSS from the genome annotation
+#                    "mapped-tss"     a start site mapped in the cited publication
+#                    "inferred"       deduced; the note must say how, and how uncertain
+#                    "none"           a region with no start site; no offsets computable
+
+[[anchor]]
+id = "scn1a-long-2008"
+gene = "SCN1A"
+assembly = "GRCh38"
+contig = "2"
+start = 166148213
+end = 166150213
+strand = "-"
+reference_point = 166149213
+reference_kind = "annotated-tss"
+source = "Long et al. 2008"
+locator = "J Neurosci Res 86(15):3375-3381, doi:10.1002/jnr.21790"
+note = """
+One of the SCN1A promoters chapter 2 designed against, which it attributes to Long et al. 2008 \
+(identification of the promoter region and the 5'-untranslated exons of SCN1A). The reference point \
+is the annotated TSS shared by ENST00000409050 and three other transcripts, which lies inside the \
+region and reproduces the chapter's own design offsets: SCN1A-6 to SCN1A-10 fall at -124 to -744 \
+from it. SCN1A-10 activated its target. The region bounds are the reference point plus or minus \
+1 kb, not boundaries read from the publication.
+"""
+
+[[anchor]]
+id = "scn1a-dong-2014-proximal"
+gene = "SCN1A"
+assembly = "GRCh38"
+contig = "2"
+start = 166072669
+end = 166074669
+strand = "-"
+reference_point = 166073669
+reference_kind = "annotated-tss"
+source = "Dong et al. 2014"
+locator = "Mol Neurobiol 50(2):438-448, doi:10.1007/s12035-014-8633-9"
+note = """
+The proximal SCN1A promoter of chapter 2's two Dong et al. 2014 target regions. The reference point \
+is the annotated TSS of ENST00000640036, which reproduces the chapter's design offsets: SCN1A-1 to \
+SCN1A-5 fall at -224 to -778 from it. None of those five activated. The region bounds are the \
+reference point plus or minus 1 kb, not boundaries read from the publication.
+"""
+
+[[anchor]]
+id = "scn1a-dong-2014-distal"
+gene = "SCN1A"
+assembly = "GRCh38"
+contig = "2"
+start = 166078692
+end = 166080192
+strand = "-"
+reference_point = 166079092
+reference_kind = "inferred"
+source = "Dong et al. 2014"
+locator = "Mol Neurobiol 50(2):438-448, doi:10.1007/s12035-014-8633-9"
+note = """
+The most productive SCN1A promoter in this project, and the one Ensembl does not annotate: the \
+nearest annotated TSS is 5.5 kb away. Chapter 2 targeted it as the distal member of its \
+"most proximal and distal promoters", citing Dong et al. 2014. SCN1A-12 and SCN1A-14 activated \
+their target; SCN1A-11, -13 and -15 did not.
+
+THE REFERENCE POINT IS INFERRED AND SHOULD BE CORRECTED FROM THE PUBLICATION. It is derived by \
+assuming the chapter's five designs obey Wang's -1000 to -100 window: their 5' ends sit at \
+chr2:166,079,192 to 166,079,679, which constrains the start site only to the roughly 410 bp \
+between 166,078,679 and 166,079,092. The value used is the upper bound, under which the five \
+designs fall at -100 to -587. Every offset from this anchor therefore carries up to about 400 bp \
+of uncertainty. Replace `reference_point` with the mapped site from Dong et al. 2014 and set \
+`reference_kind = "mapped-tss"`.
+"""

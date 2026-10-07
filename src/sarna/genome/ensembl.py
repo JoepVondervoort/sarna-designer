@@ -33,9 +33,10 @@ from typing import Any
 
 import httpx
 
+from sarna.genome.anchors import DEFAULT_REGION_PADDING_BP as ANCHOR_REGION_PADDING_BP
+from sarna.genome.anchors import PromoterAnchor
 from sarna.genome.coordinates import Assembly, GenomicInterval, Strand
 from sarna.genome.promoter import Promoter
-from sarna.genome.tss import TssPosition
 from sarna.sequence.alphabet import Nucleic
 from sarna.sequence.nucleic import NucleicSequence
 
@@ -493,38 +494,44 @@ class EnsemblClient:
         Raises:
             ValueError: If the window is empty or runs off the end of the contig.
             EnsemblUnavailableError: If Ensembl cannot be reached.
-        """
-        if upstream_bp < 0 or downstream_bp < 0:
-            raise ValueError(
-                f"window sizes are magnitudes and must not be negative; got "
-                f"upstream={upstream_bp}, downstream={downstream_bp}"
-            )
-        if upstream_bp + downstream_bp == 0:
-            raise ValueError("a promoter window of zero length contains no candidates")
 
-        tss = transcript.tss_coordinate
-        if transcript.strand is Strand.PLUS:
-            start, end = tss - upstream_bp, tss + downstream_bp
-        else:
-            # Upstream is toward *higher* coordinates on the minus strand. This is the only
-            # strand arithmetic in this module, and it mirrors Promoter.genomic_interval.
-            start, end = tss - downstream_bp + 1, tss + upstream_bp + 1
-        if start < 0:
-            raise ValueError(
-                f"the promoter window starts at {start}, before the beginning of contig "
-                f"{transcript.contig}; reduce upstream_bp"
-            )
-        interval = GenomicInterval(
-            assembly=self.assembly,
-            contig=transcript.contig,
-            start=start,
-            end=end,
-            strand=transcript.strand,
+        Note:
+            A thin wrapper over :meth:`promoter_for_anchor`. An annotated TSS is one kind of
+            promoter anchor, so routing both through the same code keeps the strand arithmetic in
+            one place instead of two that have to be kept in step.
+        """
+        return self.promoter_for_anchor(
+            anchor_for_transcript(transcript), upstream_bp, downstream_bp
         )
+
+    def promoter_for_anchor(
+        self,
+        anchor: PromoterAnchor,
+        upstream_bp: int = DEFAULT_UPSTREAM_BP,
+        downstream_bp: int = DEFAULT_DOWNSTREAM_BP,
+        region_padding_bp: int = ANCHOR_REGION_PADDING_BP,
+    ) -> Promoter:
+        """Fetch the promoter a :class:`~sarna.genome.anchors.PromoterAnchor` describes.
+
+        The general form of :meth:`promoter_for`, which is the special case where the anchor is an
+        annotated transcript's TSS. An anchor with no reference point yields a promoter with no
+        ``tss_start``, so the TSS rules report not-applicable instead of measuring from an invented
+        origin.
+
+        Raises:
+            ValueError: If the anchor is on another assembly, or its window runs off the contig.
+            EnsemblUnavailableError: If Ensembl cannot be reached.
+        """
+        if anchor.interval.assembly is not self.assembly:
+            raise ValueError(
+                f"anchor {anchor.id!r} is on {anchor.interval.assembly} but this client serves "
+                f"{self.assembly}"
+            )
+        window = anchor.window(upstream_bp, downstream_bp, region_padding_bp)
         return Promoter.from_reference_sequence(
-            reference_sequence=self.sequence(interval),
-            interval=interval,
-            tss_start=TssPosition.from_offset(-upstream_bp),
+            reference_sequence=self.sequence(window.interval),
+            interval=window.interval,
+            tss_start=window.tss_start,
         )
 
     def _interval_from(self, payload: Mapping[str, Any]) -> GenomicInterval:
@@ -572,6 +579,21 @@ def _refseq_match(entry: Mapping[str, Any]) -> str | None:
     return None
 
 
+def anchor_for_transcript(transcript: Transcript) -> PromoterAnchor:
+    """Return the promoter anchor an annotated transcript's TSS defines.
+
+    The bridge between the ordinary path and the general one: a transcript's TSS is one kind of
+    anchor, and expressing it as one means :meth:`EnsemblClient.promoter_for` and
+    :meth:`EnsemblClient.promoter_for_anchor` share their window arithmetic.
+    """
+    return PromoterAnchor.from_transcript(
+        gene=transcript.ensembl_id,
+        transcript_id=transcript.ensembl_id,
+        tss=transcript.tss_coordinate,
+        interval=transcript.interval,
+    )
+
+
 def _is_mane_select(entry: Mapping[str, Any]) -> bool:
     """Return whether an Ensembl transcript record is MANE Select.
 
@@ -611,6 +633,7 @@ def promoter_for_symbol(
 
 
 __all__ = [
+    "ANCHOR_REGION_PADDING_BP",
     "DEFAULT_DOWNSTREAM_BP",
     "DEFAULT_UPSTREAM_BP",
     "HOSTS",
@@ -622,5 +645,6 @@ __all__ = [
     "GeneNotFoundError",
     "NoManeSelectTranscriptError",
     "Transcript",
+    "anchor_for_transcript",
     "promoter_for_symbol",
 ]

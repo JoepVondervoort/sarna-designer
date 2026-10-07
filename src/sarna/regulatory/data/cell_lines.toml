@@ -1,0 +1,88 @@
+# Cell lines and the evidence that exists for each.
+#
+# Three axes, because they answer different questions and are rarely all available:
+#
+#   expression     is the target gene transcribed here at all? The first question, because a
+#                  saRNA enhances transcription from a locus that already has some — it does not
+#                  switch a silent gene on.
+#   chromatin      is the promoter accessible here? Histone marks.
+#   tf_occupancy   which factors are actually bound here? ChIP-seq.
+#
+# `available = false` is a first-class answer and must stay visible: an empty panel means nobody
+# looked, not that nothing is there. Add your own lines by pointing SARNA_CELL_LINES at a file or
+# a directory of files in this format.
+
+[[cell_line]]
+id = "hela"
+name = "HeLa"
+proliferating = true
+source = "van de Vondervoort 2026"
+locator = "chapters 2 and 4, Material and methods - cell culture"
+description = """
+Cervical adenocarcinoma line, continuously proliferating, with globally open and transcriptionally \
+active chromatin. The permissive comparator for RNAa: chapter 4's P21 positive control activates \
+reliably here, up to 14-fold on some plates.
+"""
+
+[cell_line.expression]
+available = false
+source = "DepMap / CCLE"
+note = """
+Not wired in. DepMap publishes RNA-seq for HeLa among about 1,400 cancer lines, so this axis is \
+reachable for this line with an adapter and no new experiments.
+"""
+
+[cell_line.chromatin]
+available = false
+source = "ENCODE"
+note = """
+Not loaded. ENCODE has extensive histone ChIP-seq for HeLa-S3, so this is reachable; the project \
+simply holds no HeLa tracks locally, unlike AF22.
+"""
+
+[cell_line.tf_occupancy]
+available = false
+source = "ENCODE"
+note = """
+Not wired in. HeLa-S3 is one of the most-assayed lines in existence, with hundreds of factors in \
+ENCODE, so this is the cell line where occupancy could actually be answered properly.
+"""
+
+[[cell_line]]
+id = "af22"
+name = "AF22 (lt-NES)"
+proliferating = false
+source = "Falk et al. 2012"
+locator = "PLOS ONE 7(1):e29597, capture of neuroepithelial-like stem cells"
+description = """
+Long-term neuroepithelial-like stem cells derived from human iPSCs. Divide slowly, retain tighter \
+epigenetic control over lineage-specific genes, and carry fewer active histone marks at many \
+promoters. Chapter 4 found no saRNA activated any locus here, including the P21 control, which is \
+the largest single effect in that screen and is a property of the cell rather than of any sequence.
+"""
+
+[cell_line.expression]
+available = false
+note = """
+Not available publicly: AF22 is an iPSC-derived research line and is absent from DepMap and GTEx. \
+The lab's own RNA-seq, if it exists, is the only route. This is the axis that would most change \
+what the tool can say, because it decides whether a target has the baseline transcription a saRNA \
+needs in these cells.
+"""
+
+[cell_line.chromatin]
+available = true
+source = "GSE108506"
+note = """
+Six histone marks loaded from local bigWigs: H3K4me3, H3K27ac, H3K4me1, H3K27me3, H3K9me3 and \
+H3K36me3, at 50 bp bins on GRCh37/hg19. Converted per query to GRCh38 (defect B15, ADR 0004). \
+Measured consequence: every chapter 4 target promoter is open here, while SCN1A's are closed.
+"""
+
+[cell_line.tf_occupancy]
+available = false
+note = """
+No public ChIP-seq exists for this line for any transcription factor, and none is likely to. The \
+asymmetry is worth stating: the tool will always know more about HeLa than about the \
+disease-relevant model.
+"""

@@ -25,8 +25,14 @@ combinations are in the third state, and a UI that renders absence of data the s
 binding converts ignorance into a negative finding.
 """
 
-from dataclasses import dataclass
+import os
+import tomllib
+from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import dataclass, field
 from enum import Enum
+from importlib import resources
+from pathlib import Path
+from typing import Any
 
 from sarna.rules.provenance import Provenance
 
@@ -86,6 +92,73 @@ class CellTypeStatus(Enum):
         return self is not CellTypeStatus.NOT_ASSAYED
 
 
+class DataAxis(Enum):
+    """A kind of evidence a cell line may or may not have, and what it answers."""
+
+    EXPRESSION = "expression"
+    """Is the target gene transcribed here at all? The first question to ask."""
+
+    CHROMATIN = "chromatin"
+    """Is the promoter accessible here? Histone marks."""
+
+    TF_OCCUPANCY = "tf-occupancy"
+    """Which factors are actually bound here? ChIP-seq."""
+
+    def __str__(self) -> str:
+        """Return the axis label."""
+        return self.value
+
+    @property
+    def toml_key(self) -> str:
+        """Return the key this axis is declared under in a cell-line file.
+
+        Separate from :attr:`value` because the label uses a hyphen and TOML keys here use an
+        underscore. Reading one as the other silently drops the axis, which is how this started:
+        ``tf_occupancy`` was declared, looked for as ``tf-occupancy``, and never found.
+        """
+        return self.value.replace("-", "_")
+
+    @property
+    def question(self) -> str:
+        """Return the question this axis answers, for a UI to label it with."""
+        return {
+            DataAxis.EXPRESSION: "Is this gene transcribed in these cells?",
+            DataAxis.CHROMATIN: "Is this promoter accessible in these cells?",
+            DataAxis.TF_OCCUPANCY: "Which factors are bound here in these cells?",
+        }[self]
+
+
+@dataclass(frozen=True, slots=True)
+class DataAvailability:
+    """Whether one axis of evidence exists for one cell line, and what to do about it.
+
+    ``available = False`` is a first-class answer that must stay visible. An empty panel means
+    nobody looked, which is not the same as nothing being there, and the ``note`` says which.
+    """
+
+    axis: DataAxis
+    available: bool
+    note: str
+    source: str | None = None
+    """Where the data is or would come from, e.g. ``ENCODE``. ``None`` if there is no route."""
+
+    @property
+    def is_reachable(self) -> bool:
+        """Return whether a source exists that could supply this, even if unwired."""
+        return self.available or self.source is not None
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the availability as JSON-serialisable data."""
+        return {
+            "axis": str(self.axis),
+            "question": self.axis.question,
+            "available": self.available,
+            "reachable": self.is_reachable,
+            "source": self.source,
+            "note": self.note,
+        }
+
+
 @dataclass(frozen=True, slots=True)
 class CellType:
     """A cell line or primary cell type an annotation can be scoped to."""
@@ -101,44 +174,126 @@ class CellType:
     """Whether the cells divide. Bears directly on chromatin accessibility and RNAa competence."""
 
     provenance: Provenance
+    data: Mapping[DataAxis, DataAvailability] = field(default_factory=dict)
+    """What evidence exists, per axis. A missing axis is treated as unavailable with no route."""
+
+    def availability(self, axis: DataAxis) -> DataAvailability:
+        """Return what is known along one axis, defaulting to "nothing, and no route"."""
+        known = self.data.get(axis)
+        if known is not None:
+            return known
+        return DataAvailability(
+            axis=axis,
+            available=False,
+            note=f"No {axis} data is declared for {self.name}.",
+        )
+
+    @property
+    def available_axes(self) -> tuple[DataAxis, ...]:
+        """Return the axes with data loaded, in declaration order."""
+        return tuple(axis for axis in DataAxis if self.availability(axis).available)
 
     def __str__(self) -> str:
         """Return the display name."""
         return self.name
 
+    def to_dict(self) -> dict[str, object]:
+        """Return the cell type as JSON-serialisable data."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "proliferating": self.is_proliferating,
+            "provenance": str(self.provenance),
+            "data": [self.availability(axis).to_dict() for axis in DataAxis],
+        }
 
-HELA = CellType(
-    id="hela",
-    name="HeLa",
-    description=(
-        "Cervical adenocarcinoma line, continuously proliferating, with globally open and "
-        "transcriptionally active chromatin. The permissive comparator for RNAa: chapter 4's "
-        "P21 positive control activates reliably here, up to 14-fold on some plates."
-    ),
-    is_proliferating=True,
-    provenance=Provenance.citation(
-        "van de Vondervoort 2026", "chapter 4, Material and methods — cell culture"
-    ),
-)
 
-AF22 = CellType(
-    id="af22",
-    name="AF22 (lt-NES)",
-    description=(
-        "Long-term neuroepithelial-like stem cells derived from human iPSCs (Falk et al. 2012). "
-        "Divide slowly, retain tighter epigenetic control over lineage-specific genes, and carry "
-        "fewer active histone marks at many promoters. Chapter 4 found no saRNA activated any "
-        "locus here, including the P21 control, which is the largest single effect in that "
-        "screen and is a property of the cell rather than of any sequence."
-    ),
-    is_proliferating=False,
-    provenance=Provenance.citation(
-        "Falk et al. 2012", "PLOS ONE 7(1):e29597, capture of neuroepithelial-like stem cells"
-    ),
-)
+DATA_PACKAGE = "sarna.regulatory.data"
+CELL_LINES_FILENAME = "cell_lines.toml"
+CELL_LINES_ENVIRONMENT_VARIABLE = "SARNA_CELL_LINES"
 
-CELL_TYPES: dict[str, CellType] = {cell.id: cell for cell in (HELA, AF22)}
+
+def cell_line_paths(extra: Sequence[Path] | None = None) -> tuple[Path, ...]:
+    """Return extra TOML files of cell lines to load, from arguments and the environment."""
+    paths = [Path(candidate) for candidate in extra or ()]
+    override = os.environ.get(CELL_LINES_ENVIRONMENT_VARIABLE)
+    if override:
+        location = Path(override)
+        if location.is_dir():
+            paths.extend(sorted(location.glob("*.toml")))
+        elif location.exists():
+            paths.append(location)
+    return tuple(paths)
+
+
+def load_cell_types(extra: Sequence[Path] | None = None) -> dict[str, CellType]:
+    """Load the shipped cell lines plus any the user has added.
+
+    Raises:
+        ValueError: If a file is malformed or two lines share an id.
+    """
+    source = resources.files(DATA_PACKAGE).joinpath(CELL_LINES_FILENAME)
+    with resources.as_file(source) as path:
+        loaded = list(_read_cell_lines(path))
+    for path in cell_line_paths(extra):
+        loaded.extend(_read_cell_lines(path))
+    registry: dict[str, CellType] = {}
+    for cell in loaded:
+        if cell.id in registry:
+            raise ValueError(
+                f"duplicate cell line id {cell.id!r}; ids appear in exports and must be unique"
+            )
+        registry[cell.id] = cell
+    return registry
+
+
+def _read_cell_lines(path: Path) -> Iterator[CellType]:
+    """Read one TOML file of cell lines.
+
+    Raises:
+        ValueError: If the file cannot be parsed or an entry is missing a required field.
+    """
+    try:
+        with path.open("rb") as handle:
+            payload = tomllib.load(handle)
+    except tomllib.TOMLDecodeError as error:
+        raise ValueError(f"{path} is not valid TOML: {error}") from error
+    for index, entry in enumerate(payload.get("cell_line", []), start=1):
+        try:
+            yield _cell_type_from(entry)
+        except (KeyError, ValueError) as error:
+            raise ValueError(f"{path}, cell_line {index}: {error}") from error
+
+
+def _cell_type_from(entry: dict[str, Any]) -> CellType:
+    """Build one cell type from a parsed TOML table."""
+    data = {}
+    for axis in DataAxis:
+        declared = entry.get(axis.toml_key)
+        if declared is None:
+            continue
+        data[axis] = DataAvailability(
+            axis=axis,
+            available=bool(declared["available"]),
+            note=str(declared.get("note", "")).strip(),
+            source=declared.get("source"),
+        )
+    return CellType(
+        id=entry["id"],
+        name=entry["name"],
+        description=str(entry["description"]).strip(),
+        is_proliferating=bool(entry["proliferating"]),
+        provenance=Provenance.citation(entry["source"], entry["locator"]),
+        data=data,
+    )
+
+
+CELL_TYPES: dict[str, CellType] = load_cell_types()
 """The cell types this project has data or published characterisation for."""
+
+HELA = CELL_TYPES["hela"]
+AF22 = CELL_TYPES["af22"]
 
 
 def cell_type(cell_type_id: str) -> CellType:
@@ -152,8 +307,9 @@ def cell_type(cell_type_id: str) -> CellType:
     except KeyError:
         raise KeyError(
             f"unknown cell type {cell_type_id!r}; this project characterises "
-            f"{', '.join(sorted(CELL_TYPES))}. Add one in sarna.regulatory.evidence rather than "
-            f"passing a bare string, so its properties and provenance travel with it."
+            f"{', '.join(sorted(CELL_TYPES))}. Add one by pointing "
+            f"{CELL_LINES_ENVIRONMENT_VARIABLE} at a TOML file, so its properties and provenance "
+            f"travel with it."
         ) from None
 
 
@@ -242,14 +398,19 @@ def observed_in(
 
 __all__ = [
     "AF22",
+    "CELL_LINES_ENVIRONMENT_VARIABLE",
     "CELL_TYPES",
     "HELA",
     "CellType",
     "CellTypeStatus",
+    "DataAvailability",
+    "DataAxis",
     "Evidence",
     "EvidenceKind",
     "aggregated_annotation",
+    "cell_line_paths",
     "cell_type",
+    "load_cell_types",
     "motif_prediction",
     "observed_in",
 ]

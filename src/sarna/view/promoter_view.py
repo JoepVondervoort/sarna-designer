@@ -29,7 +29,13 @@ from sarna.design.pipeline import DesignResult
 from sarna.genome.ensembl import Gene, Transcript
 from sarna.genome.promoter import Promoter
 from sarna.regulatory.chromatin import Af22ChromatinReader, ChromatinProfile
-from sarna.regulatory.evidence import AF22, CELL_TYPES, CellType, CellTypeStatus
+from sarna.regulatory.evidence import (
+    AF22,
+    CELL_TYPES,
+    CellType,
+    CellTypeStatus,
+    DataAxis,
+)
 from sarna.regulatory.features import RegulatoryAnnotation
 from sarna.regulatory.motifs import MotifScan
 
@@ -127,6 +133,9 @@ class CellTypePanel:
             "known": self.status.is_known,
             "observations": [span.to_dict() for span in self.observations],
             "absence_note": self.absence_note,
+            "data_axes": [
+                self.cell_type.availability(axis).to_dict() for axis in DataAxis
+            ],
             "chromatin": self.chromatin.to_dict() if self.chromatin else None,
             "signal_tracks": {
                 mark: [round(value, 3) for value in values]
