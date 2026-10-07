@@ -65,6 +65,98 @@ def signed_distance(position: int, tss: int, strand: int) -> int:
     return -offset if strand == -1 else offset
 
 
+BLOCK_SIZE = 1_000_000
+"""How much genome one cached transcript query covers.
+
+Chosen by measurement over simulated screenings, counting requests against placing each hit
+directly. Smaller blocks lose: at 100 kb a hit's own 20 kb interval straddles a boundary often
+enough that scattered hits cost **more** requests than no cache at all.
+
+    block     scattered hits      clustered hits
+    100 kb        -6%                 +61%
+    250 kb       +18%                 +67%
+    500 kb       +37%                 +68%
+      1 Mb       +57%                 +70%
+      2 Mb       +76%                 +74%
+
+1 Mb is where the scattered case is comfortably positive while one response stays a modest
+number of transcripts; Ensembl's overlap endpoint accepts up to 5 Mb, so there is headroom if
+a later measurement wants it. Real screenings sit nearer the clustered column, because the
+candidates of one run share a promoter and draw repeated alignments to the same loci.
+
+Snapping to a grid is also what makes the client's on-disk response cache work across runs:
+per-hit intervals are all different and never hit it twice, while block boundaries repeat.
+"""
+
+
+def _overlaps(transcript: dict[str, Any], interval: GenomicInterval) -> bool:
+    """Return whether an Ensembl transcript record overlaps a half-open interval.
+
+    Ensembl reports 1-based inclusive coordinates and :class:`GenomicInterval` is 0-based
+    half-open, which is the conversion the whole adapter layer exists to keep in one place.
+    """
+    start, end = transcript.get("start"), transcript.get("end")
+    if not isinstance(start, int) or not isinstance(end, int):
+        return False
+    return start - 1 < interval.end and end > interval.start
+
+
+class BlockedTranscripts:
+    """Answer many small overlap queries out of a few large ones.
+
+    Placing genomic hits was an N+1: :func:`place_hit` asks for the transcripts around one hit,
+    and a screening returning the full five hundred alignments therefore made five hundred
+    sequential Ensembl requests. Ensembl rate-limits, so that is both slow and close to rude.
+
+    Queries are snapped to a fixed grid and each block fetched once. **The result is filtered
+    back down to exactly the interval that was asked for**, so this is a caching layer and not
+    a change to which transcripts are considered; a test asserts the two agree hit for hit.
+    """
+
+    __slots__ = ("_block", "_blocks", "_lookup", "requests")
+
+    def __init__(self, lookup: TranscriptLookup, block: int = BLOCK_SIZE) -> None:
+        """Wrap ``lookup``, caching whole blocks of ``block`` bases."""
+        self._lookup = lookup
+        self._block = block
+        self._blocks: dict[tuple[str, int], list[dict[str, Any]]] = {}
+        self.requests = 0
+        """Underlying lookups performed, so the saving can be measured rather than claimed."""
+
+    def __call__(self, interval: GenomicInterval) -> list[dict[str, Any]]:
+        """Return the transcripts overlapping ``interval``, from cached blocks."""
+        first = max(0, interval.start) // self._block
+        last = max(first, (max(0, interval.end) - 1) // self._block)
+        seen: dict[str, dict[str, Any]] = {}
+        for index in range(first, last + 1):
+            for transcript in self._block_at(interval, index):
+                # A transcript spanning a block boundary comes back from both blocks.
+                key = str(transcript.get("id") or (transcript.get("start"),
+                                                   transcript.get("end")))
+                seen[key] = transcript
+        return [t for t in seen.values() if _overlaps(t, interval)]
+
+    def _block_at(self, interval: GenomicInterval, index: int) -> list[dict[str, Any]]:
+        """Return one cached block of transcripts, fetching it if this is the first ask.
+
+        The block is clipped to the contig. A fixed grid's last block always ends past the end
+        of the chromosome, and ``GenomicInterval`` refuses that, so a hit near a telomere --
+        ordinary in BLAST output -- would otherwise have failed the whole screening.
+        """
+        key = (interval.contig, index)
+        cached = self._blocks.get(key)
+        if cached is None:
+            limit = interval.assembly.contig_length(interval.contig)
+            start = min(index * self._block, max(0, limit - 1))
+            end = min((index + 1) * self._block, limit)
+            self.requests += 1
+            cached = list(self._lookup(GenomicInterval(
+                interval.assembly, interval.contig, start, end, Strand.PLUS,
+            )))
+            self._blocks[key] = cached
+        return cached
+
+
 def place_hit(
     hit: OffTargetHit,
     lookup: TranscriptLookup,
@@ -91,9 +183,15 @@ def place_hit(
             hit=hit, contig=hit.accession, position=position, nearest_gene=None,
             nearest_transcript=None, distance_to_tss=None, inside_run_window=False,
         )
+    # Both ends are clipped to the contig. The low end always was; the high end was not, so a
+    # hit within search_radius of a telomere built an interval past the end of the chromosome
+    # and GenomicInterval refused it -- failing the entire screening over one alignment.
+    limit = Assembly.GRCH38.contig_length(contig)
     interval = GenomicInterval(
         Assembly.GRCH38, contig,
-        max(0, position - search_radius), position + search_radius, Strand.PLUS,
+        max(0, min(position - search_radius, limit - 1)),
+        min(position + search_radius, limit),
+        Strand.PLUS,
     )
     nearest: dict[str, Any] | None = None
     nearest_distance: int | None = None

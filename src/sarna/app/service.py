@@ -33,7 +33,7 @@ from sarna.genome.promoter import Promoter
 from sarna.genome.tss import TssPosition
 from sarna.offtarget.models import GENOMIC_SCOPE
 from sarna.offtarget.ncbi import BlastClient
-from sarna.offtarget.proximity import TranscriptLookup
+from sarna.offtarget.proximity import BlockedTranscripts
 from sarna.offtarget.screening import run_screening, specificity_table
 from sarna.regulatory.chromatin import open_af22_reader
 from sarna.regulatory.evidence import CELL_TYPES
@@ -151,8 +151,13 @@ class DesignService:
             if blast_client is None:
                 client.close()
 
-    def _transcript_lookup(self) -> TranscriptLookup:
-        """Return a lookup placing genomic hits against Ensembl's annotated transcripts."""
+    def _transcript_lookup(self) -> BlockedTranscripts:
+        """Return a lookup placing genomic hits against Ensembl's annotated transcripts.
+
+        Wrapped in :class:`BlockedTranscripts` because this was an N+1: one Ensembl request per
+        alignment, and a screening may return five hundred. The wrapper is a cache and not a
+        change of answer -- it filters each block back to the interval that was asked for.
+        """
         client = self.client_factory(False)
 
         def lookup(interval: GenomicInterval) -> list[dict[str, Any]]:
@@ -162,7 +167,7 @@ class DesignService:
                 LOGGER.warning("could not place a genomic hit: %s", error)
                 return []
 
-        return lookup
+        return BlockedTranscripts(lookup)
 
     @staticmethod
     def _run_window(snapshot: dict[str, Any]) -> tuple[int, int] | None:
