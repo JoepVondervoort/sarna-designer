@@ -18,6 +18,7 @@ from sarna.design.presets import LEGACY_SCANNER, WANG_2015
 from sarna.genome.coordinates import Assembly, GenomicInterval, Strand
 from sarna.genome.promoter import Promoter
 from sarna.genome.tss import TssPosition
+from sarna.rules.catalog import CATALOGUE
 from sarna.rules.results import RuleOutcome
 from sarna.sequence.nucleic import NucleicSequence
 
@@ -390,6 +391,30 @@ class TestCandidateAccessors:
         config = DesignConfig.of(["target-length-19", "gc-content", "start-1-gc"])
         result = design_sarnas(sequence_only(), config)
         assert [c.rank for c in result.ranked] == list(range(1, len(result.ranked) + 1))
+
+
+class TestDeclaredParameterRangesAreReachable:
+    """A declared range is a promise to the user, so every value in it must run.
+
+    ``target-length`` advertised 18-21 while 20 and 21 raised ``ValueError`` out of
+    ``flank_base_at``: the flank preferences are registered at literal positions 20-23 and
+    collide with the target as it lengthens. Nothing caught it because no test ran the engine
+    at a non-default length. A range nobody exercises is a range nobody has checked.
+    """
+
+    def test_every_declared_target_length_produces_candidates(self) -> None:
+        parameter = CATALOGUE["target-length-19"].parameter("target-length")
+        assert parameter.minimum is not None and parameter.maximum is not None
+        for length in range(int(parameter.minimum), int(parameter.maximum) + 1):
+            config = WANG_2015.resolve({"target-length-19": {"target-length": length}})
+            result = design_sarnas(sequence_only(), config)
+            assert result.generated, f"target-length {length} produced no candidates"
+
+    def test_the_default_lies_inside_the_declared_range(self) -> None:
+        parameter = CATALOGUE["target-length-19"].parameter("target-length")
+        assert parameter.minimum is not None
+        assert parameter.maximum is not None
+        assert float(parameter.minimum) <= float(parameter.default) <= float(parameter.maximum)
 
 
 class TestEmptyRun:

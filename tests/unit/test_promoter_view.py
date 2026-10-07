@@ -18,6 +18,7 @@ from sarna.genome.ensembl import Gene, Transcript
 from sarna.genome.promoter import Promoter
 from sarna.genome.tss import TssPosition
 from sarna.regulatory.chromatin import (
+    GSE108506,
     BackgroundModel,
     ChromatinProfile,
     ChromatinSignal,
@@ -235,11 +236,17 @@ class TestMotifTrack:
 
 
 class _StubChromatinReader:
-    """Stands in for the AF22 reader so the view can be tested without 890 MB of bigWigs."""
+    """Stands in for the AF22 reader so the view can be tested without 890 MB of bigWigs.
+
+    Declares ``cell_type`` because the real reader does: the view asks the reader whose tracks
+    it holds rather than testing identity against AF22.
+    """
 
     marks = (HistoneMark.H3K4ME3, HistoneMark.H3K27ME3)
+    cell_type = AF22
+    provenance = GSE108506
 
-    def profile(self, interval: GenomicInterval, cell: object = None) -> ChromatinProfile:
+    def profile(self, interval: GenomicInterval) -> ChromatinProfile:
         """Return a profile with one enriched activating mark."""
         background = BackgroundModel(
             contig=interval.contig,
@@ -253,12 +260,15 @@ class _StubChromatinReader:
         signal = ChromatinSignal(
             mark=HistoneMark.H3K4ME3,
             cell_type=AF22,
+            provenance=GSE108506,
             mean=50.0,
             maximum=90.0,
             background=background,
             source_interval=interval,
         )
-        return ChromatinProfile(interval=interval, cell_type=AF22, signals=(signal,))
+        return ChromatinProfile(
+            interval=interval, cell_type=AF22, signals=(signal,), provenance=GSE108506
+        )
 
     def signal_track(
         self, interval: GenomicInterval, mark: HistoneMark, bins: int = 200

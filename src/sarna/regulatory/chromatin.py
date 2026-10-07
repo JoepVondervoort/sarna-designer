@@ -208,6 +208,10 @@ class ChromatinSignal:
     source_interval: GenomicInterval
     """The interval actually read, on the **track's** assembly, after conversion."""
 
+    provenance: Provenance
+    """Where this track came from. Carried per signal rather than read from a module constant,
+    so a reader over another cell line's tracks cannot cite AF22's accession."""
+
     @property
     def fold_over_background(self) -> float:
         """Return the mean signal as a multiple of random same-contig windows."""
@@ -232,7 +236,7 @@ class ChromatinSignal:
         """
         return observed_in(
             self.cell_type,
-            GSE108506,
+            self.provenance,
             CellTypeStatus.OBSERVED_BOUND
             if self.is_present
             else CellTypeStatus.ASSAYED_NOT_BOUND,
@@ -268,6 +272,9 @@ class ChromatinProfile:
 
     cell_type: CellType
     signals: tuple[ChromatinSignal, ...]
+    provenance: Provenance
+    """Where these tracks came from, stated by the reader that produced the profile."""
+
     problem: LiftoverProblem | None = None
     problem_detail: str = ""
 
@@ -344,7 +351,7 @@ class ChromatinProfile:
             "problem": str(self.problem) if self.problem else None,
             "problem_detail": self.problem_detail or None,
             "summary": self.summary,
-            "provenance": str(GSE108506),
+            "provenance": str(self.provenance),
             "assembly_note": (
                 "Tracks are GRCh37/hg19 and queries are GRCh38; coordinates are converted per "
                 "request and the conversion is checked for splits, contig changes and strand "
@@ -438,25 +445,46 @@ def _single(
 
 
 class Af22ChromatinReader:
-    """Reads AF22 histone signal for GRCh38 intervals, converting at the boundary."""
+    """Reads one cell line's histone signal for GRCh38 intervals, converting at the boundary.
 
-    __slots__ = ("_backgrounds", "_converter", "_readers", "track_assembly")
+    The cell line and its source are constructor state, not per-call arguments: a set of tracks
+    belongs to one cell line, and letting a caller name a different one at the point of use is
+    how a HeLa profile came to cite AF22's accession.
+    """
+
+    __slots__ = (
+        "_backgrounds",
+        "_converter",
+        "_readers",
+        "cell_type",
+        "provenance",
+        "track_assembly",
+    )
 
     def __init__(
         self,
         readers: Mapping[HistoneMark, SignalReader],
         converter: CoordinateConverter,
+        *,
+        cell_type: CellType,
+        provenance: Provenance,
         track_assembly: Assembly = Assembly.GRCH37,
     ) -> None:
         """Build a reader over already-opened tracks.
 
         Args:
             readers: One signal reader per available mark.
-            converter: A GRCh38-to-GRCh37 liftover chain.
+            converter: A liftover chain from the engine's assembly to ``track_assembly``.
+            cell_type: The cell line these tracks were measured in. Required, because every
+                signal this reader produces is labelled with it.
+            provenance: Where the tracks came from. Required for the same reason: it is cited
+                on every signal and in every export.
             track_assembly: The assembly the tracks are on. Stated, never inferred.
         """
         self._readers = dict(readers)
         self._converter = converter
+        self.cell_type = cell_type
+        self.provenance = provenance
         self.track_assembly = track_assembly
         self._backgrounds: dict[tuple[str, HistoneMark, int], BackgroundModel] = {}
 
@@ -465,14 +493,14 @@ class Af22ChromatinReader:
         """Return the marks this reader has tracks for, in enum order."""
         return tuple(mark for mark in HistoneMark if mark in self._readers)
 
-    def profile(
-        self, interval: GenomicInterval, cell_type: CellType = AF22
-    ) -> ChromatinProfile:
+    def profile(self, interval: GenomicInterval) -> ChromatinProfile:
         """Return every available mark's signal over ``interval``.
+
+        The cell type is this reader's own, set when it was built, so a profile cannot be
+        attributed to a cell line whose tracks it does not hold.
 
         Args:
             interval: The region to read, on the engine's assembly.
-            cell_type: The cell type the tracks describe.
 
         Returns:
             The profile. If conversion failed, it carries the reason and no signals rather than
@@ -492,20 +520,22 @@ class Af22ChromatinReader:
         except LiftoverError as error:
             return ChromatinProfile(
                 interval=interval,
-                cell_type=cell_type,
+                cell_type=self.cell_type,
                 signals=(),
+                provenance=self.provenance,
                 problem=error.problem,
                 problem_detail=str(error).split(": ", 1)[-1],
             )
         signals = []
         for mark, reader in self._readers.items():
-            signal = self._read(reader, mark, converted, cell_type)
+            signal = self._read(reader, mark, converted)
             if signal is not None:
                 signals.append(signal)
         return ChromatinProfile(
             interval=interval,
-            cell_type=cell_type,
+            cell_type=self.cell_type,
             signals=tuple(sorted(signals, key=lambda s: list(HistoneMark).index(s.mark))),
+            provenance=self.provenance,
         )
 
     def _read(
@@ -513,7 +543,6 @@ class Af22ChromatinReader:
         reader: SignalReader,
         mark: HistoneMark,
         interval: GenomicInterval,
-        cell_type: CellType,
     ) -> ChromatinSignal | None:
         """Read one mark over a converted interval, or ``None`` if the contig is absent."""
         contig = f"chr{interval.contig}"
@@ -527,7 +556,8 @@ class Af22ChromatinReader:
         maximum = reader.stats(contig, interval.start, end, type="max", nBins=1)[0] or 0.0
         return ChromatinSignal(
             mark=mark,
-            cell_type=cell_type,
+            cell_type=self.cell_type,
+            provenance=self.provenance,
             mean=float(mean),
             maximum=float(maximum),
             background=self.background(reader, mark, contig, end - interval.start),
@@ -661,7 +691,12 @@ def open_af22_reader(directory: Path | None = None) -> Af22ChromatinReader | Non
             f'is not installed. Run: pip install -e ".[genomics]"'
         ) from error
     readers = {mark: pyBigWig.open(str(path)) for mark, path in paths.items()}
-    return Af22ChromatinReader(readers=readers, converter=LiftOver("hg38", "hg19"))
+    return Af22ChromatinReader(
+        readers=readers,
+        converter=LiftOver("hg38", "hg19"),
+        cell_type=AF22,
+        provenance=GSE108506,
+    )
 
 
 __all__ = [

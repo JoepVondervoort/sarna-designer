@@ -30,7 +30,6 @@ from sarna.genome.ensembl import Gene, Transcript
 from sarna.genome.promoter import Promoter
 from sarna.regulatory.chromatin import Af22ChromatinReader, ChromatinProfile
 from sarna.regulatory.evidence import (
-    AF22,
     CELL_TYPES,
     CellType,
     CellTypeStatus,
@@ -437,7 +436,8 @@ def cell_panels_for(
         cell_types: Which cell types to build panels for. Defaults to those this project
             characterises.
         promoter: The promoter being viewed, needed to read signal across it.
-        chromatin_reader: An open AF22 track reader, or ``None``.
+        chromatin_reader: An open track reader, or ``None``. It states which cell line its
+            tracks belong to, and only that line's panel gets chromatin.
         bins: How many slices to read the signal in, for drawing.
 
     Returns:
@@ -453,9 +453,12 @@ def cell_panels_for(
             chromatin_reader is not None
             and promoter is not None
             and promoter.interval is not None
-            and cell is AF22
+            # The reader states which cell line its tracks belong to, so ask it rather than
+            # testing identity against AF22. One reader still means one cell line can carry
+            # chromatin; a mapping of cell type to reader is what lifts that.
+            and cell is chromatin_reader.cell_type
         ):
-            profile = chromatin_reader.profile(promoter.interval, cell)
+            profile = chromatin_reader.profile(promoter.interval)
             for mark in chromatin_reader.marks:
                 values = chromatin_reader.signal_track(promoter.interval, mark, bins)
                 if values is not None:

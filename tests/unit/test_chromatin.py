@@ -17,20 +17,44 @@ import pytest
 from sarna.genome.coordinates import Assembly, GenomicInterval, Strand
 from sarna.regulatory.chromatin import (
     ENRICHMENT_THRESHOLD,
+    GSE108506,
     Af22ChromatinReader,
     BackgroundModel,
+    CoordinateConverter,
     HistoneMark,
     LiftoverError,
     LiftoverProblem,
+    SignalReader,
     convert_interval,
     find_tracks,
     open_af22_reader,
     track_directory,
 )
-from sarna.regulatory.evidence import AF22, CellTypeStatus, EvidenceKind
+from sarna.regulatory.evidence import AF22, HELA, CellTypeStatus, EvidenceKind
+from sarna.rules.provenance import Provenance
 
 GRCH38_SHIFT = 856_510
 """Measured offset between GRCh38 and hg19 at SCN1A's MANE Select TSS. The size of defect B15."""
+
+
+def af22_reader(
+    readers: Mapping[HistoneMark, SignalReader],
+    converter: CoordinateConverter,
+    track_assembly: Assembly = Assembly.GRCH37,
+) -> Af22ChromatinReader:
+    """Build a reader over AF22 stubs, naming the cell line and source the real factory names.
+
+    The constructor requires both, so that a reader can never label another cell line's tracks
+    with AF22's accession. These tests are about AF22 behaviour, so they say so once here.
+    """
+    return Af22ChromatinReader(
+        readers,
+        converter,
+        cell_type=AF22,
+        provenance=GSE108506,
+        track_assembly=track_assembly,
+    )
+
 
 
 class StubConverter:
@@ -166,6 +190,46 @@ class TestConversionRefusesWhatItCannotGuarantee:
         assert converted.length == PROMOTER_38.length + 10
 
 
+class TestWhoseDataItIsBelongsToTheReader:
+    """A reader cannot label one cell line's tracks with another's accession.
+
+    ``profile()`` used to take ``cell_type`` per call while provenance came from the module-level
+    ``GSE108506`` constant, so asking an AF22 reader for a HeLa profile returned HeLa-labelled
+    signal citing AF22's accession. The evidence model exists to stop exactly that class of
+    mislabelling, so the cell type and its source are now constructor state: a reader reads one
+    cell line's tracks, which is a property of the reader and not of the call.
+    """
+
+    def tracks(self) -> dict[HistoneMark, StubTrack]:
+        peak = (166_127_520 + GRCH38_SHIFT, 166_130_020 + GRCH38_SHIFT)
+        return {HistoneMark.H3K4ME3: StubTrack(peak_span=peak, peak_value=100.0)}
+
+    def test_a_signal_cites_the_source_its_reader_declared(self) -> None:
+        source = Provenance.citation("ENCODE HeLa-S3 H3K4me3", "ENCSR000AOC")
+        reader = Af22ChromatinReader(
+            self.tracks(), StubConverter(), cell_type=HELA, provenance=source
+        )
+        signal = reader.profile(PROMOTER_38).signals[0]
+        assert signal.cell_type is HELA
+        assert signal.evidence.provenance == source
+        assert "GSE108506" not in str(signal.evidence.provenance)
+
+    def test_the_exported_profile_cites_the_same_source(self) -> None:
+        source = Provenance.citation("ENCODE HeLa-S3 H3K4me3", "ENCSR000AOC")
+        reader = Af22ChromatinReader(
+            self.tracks(), StubConverter(), cell_type=HELA, provenance=source
+        )
+        exported = reader.profile(PROMOTER_38).to_dict()
+        assert exported["provenance"] == str(source)
+        assert exported["cell_type"] == HELA.id
+
+    def test_a_reader_cannot_be_built_without_saying_whose_data_it_is(self) -> None:
+        # Required, not defaulted: a default would let a caller forget, which is how the
+        # mislabelling happened in the first place.
+        with pytest.raises(TypeError):
+            Af22ChromatinReader(self.tracks(), StubConverter())  # type: ignore[call-arg]
+
+
 class TestTheReaderReportsReasonsNotNumbers:
     def tracks(self, **kwargs: object) -> dict[HistoneMark, StubTrack]:
         peak = (166_127_520 + GRCH38_SHIFT, 166_130_020 + GRCH38_SHIFT)
@@ -175,7 +239,7 @@ class TestTheReaderReportsReasonsNotNumbers:
         }
 
     def test_an_unconvertible_interval_yields_a_problem_and_no_signals(self) -> None:
-        reader = Af22ChromatinReader(
+        reader = af22_reader(
             self.tracks(), StubConverter(unmapped=frozenset({PROMOTER_38.start}))
         )
         profile = reader.profile(PROMOTER_38)
@@ -185,7 +249,7 @@ class TestTheReaderReportsReasonsNotNumbers:
         assert "could not be read" in profile.summary
 
     def test_a_readable_interval_yields_one_signal_per_track(self) -> None:
-        reader = Af22ChromatinReader(self.tracks(), StubConverter())
+        reader = af22_reader(self.tracks(), StubConverter())
         profile = reader.profile(PROMOTER_38)
         assert profile.is_readable
         assert {s.mark for s in profile.signals} == {
@@ -195,25 +259,25 @@ class TestTheReaderReportsReasonsNotNumbers:
 
     def test_an_interval_already_on_the_track_assembly_is_an_error(self) -> None:
         # Being handed one means an assembly was mixed up upstream, which is defect B15 again.
-        reader = Af22ChromatinReader(self.tracks(), StubConverter())
+        reader = af22_reader(self.tracks(), StubConverter())
         already = GenomicInterval(Assembly.GRCH37, "2", 1000, 2000)
         with pytest.raises(ValueError, match="mixed up upstream"):
             reader.profile(already)
 
     def test_a_contig_absent_from_a_track_is_skipped_not_guessed(self) -> None:
         tracks = {HistoneMark.H3K4ME3: StubTrack(contigs={"chr1": 249_250_621})}
-        reader = Af22ChromatinReader(tracks, StubConverter())
+        reader = af22_reader(tracks, StubConverter())
         assert reader.profile(PROMOTER_38).signals == ()
 
     def test_the_signal_records_where_it_was_actually_read(self) -> None:
         # So a reader can check the conversion rather than trust it.
-        reader = Af22ChromatinReader(self.tracks(), StubConverter())
+        reader = af22_reader(self.tracks(), StubConverter())
         signal = reader.profile(PROMOTER_38).signals[0]
         assert signal.source_interval.assembly is Assembly.GRCH37
         assert signal.source_interval.start == PROMOTER_38.start + GRCH38_SHIFT
 
     def test_marks_are_reported_in_a_stable_order(self) -> None:
-        reader = Af22ChromatinReader(self.tracks(), StubConverter())
+        reader = af22_reader(self.tracks(), StubConverter())
         order = [s.mark for s in reader.profile(PROMOTER_38).signals]
         assert order == sorted(order, key=lambda m: list(HistoneMark).index(m))
 
@@ -224,7 +288,7 @@ class TestEnrichmentNotRawSignal:
     def test_a_peak_is_called_present(self) -> None:
         peak = (166_127_520 + GRCH38_SHIFT, 166_130_020 + GRCH38_SHIFT)
         tracks = {HistoneMark.H3K4ME3: StubTrack(peak_span=peak, peak_value=100.0)}
-        reader = Af22ChromatinReader(tracks, StubConverter())
+        reader = af22_reader(tracks, StubConverter())
         signal = reader.profile(PROMOTER_38).signals[0]
         assert signal.fold_over_background == pytest.approx(100.0)
         assert signal.is_present
@@ -232,7 +296,7 @@ class TestEnrichmentNotRawSignal:
     def test_background_level_signal_is_not_called_present(self) -> None:
         # The case the raw test got wrong: every mark reads about 1.0 everywhere.
         tracks = {HistoneMark.H3K4ME3: StubTrack(peak_span=None, background_value=1.0)}
-        reader = Af22ChromatinReader(tracks, StubConverter())
+        reader = af22_reader(tracks, StubConverter())
         signal = reader.profile(PROMOTER_38).signals[0]
         assert signal.fold_over_background == pytest.approx(1.0)
         assert not signal.is_present
@@ -250,7 +314,7 @@ class TestEnrichmentNotRawSignal:
                 Counting.calls += 1
                 return super().stats(chromosome, start, end, type, nBins)
 
-        reader = Af22ChromatinReader({HistoneMark.H3K4ME3: Counting()}, StubConverter())
+        reader = af22_reader({HistoneMark.H3K4ME3: Counting()}, StubConverter())
         reader.profile(PROMOTER_38)
         after_first = Counting.calls
         reader.profile(PROMOTER_38)
@@ -258,7 +322,7 @@ class TestEnrichmentNotRawSignal:
         assert Counting.calls - after_first == 2
 
     def test_the_background_model_records_how_it_was_built(self) -> None:
-        reader = Af22ChromatinReader({HistoneMark.H3K4ME3: StubTrack()}, StubConverter())
+        reader = af22_reader({HistoneMark.H3K4ME3: StubTrack()}, StubConverter())
         background = reader.profile(PROMOTER_38).signals[0].background
         assert background.windows == 250
         assert background.seed == 11
@@ -290,7 +354,7 @@ class TestInterpretation:
         }
 
     def profile(self, active: bool, repressive: bool) -> object:
-        reader = Af22ChromatinReader(self.peak_tracks(active, repressive), StubConverter())
+        reader = af22_reader(self.peak_tracks(active, repressive), StubConverter())
         return reader.profile(PROMOTER_38)
 
     def test_active_only_reads_as_accessible(self) -> None:
@@ -327,7 +391,7 @@ class TestEvidenceTier:
         # The only cell-type-specific evidence this project has.
         peak = (166_127_520 + GRCH38_SHIFT, 166_130_020 + GRCH38_SHIFT)
         tracks = {HistoneMark.H3K4ME3: StubTrack(peak_span=peak, peak_value=100.0)}
-        reader = Af22ChromatinReader(tracks, StubConverter())
+        reader = af22_reader(tracks, StubConverter())
         evidence = reader.profile(PROMOTER_38).signals[0].evidence
         assert evidence.kind is EvidenceKind.CELL_TYPE_OBSERVATION
         assert evidence.cell_type is AF22
@@ -336,13 +400,13 @@ class TestEvidenceTier:
     def test_an_absent_mark_is_assayed_not_bound_rather_than_not_assayed(self) -> None:
         # The track was read and reported nothing, which is a measurement.
         tracks = {HistoneMark.H3K4ME3: StubTrack(peak_span=None)}
-        reader = Af22ChromatinReader(tracks, StubConverter())
+        reader = af22_reader(tracks, StubConverter())
         evidence = reader.profile(PROMOTER_38).signals[0].evidence
         assert evidence.status is CellTypeStatus.ASSAYED_NOT_BOUND
         assert evidence.status.is_known
 
     def test_the_export_carries_the_assembly_caveat(self) -> None:
-        reader = Af22ChromatinReader({HistoneMark.H3K4ME3: StubTrack()}, StubConverter())
+        reader = af22_reader({HistoneMark.H3K4ME3: StubTrack()}, StubConverter())
         exported = reader.profile(PROMOTER_38).to_dict()
         assert "GRCh37" in exported["assembly_note"]
         assert "B15" in exported["assembly_note"]
@@ -350,11 +414,11 @@ class TestEvidenceTier:
     def test_the_export_is_json_serialisable(self) -> None:
         import json
 
-        reader = Af22ChromatinReader({HistoneMark.H3K4ME3: StubTrack()}, StubConverter())
+        reader = af22_reader({HistoneMark.H3K4ME3: StubTrack()}, StubConverter())
         json.dumps(reader.profile(PROMOTER_38).to_dict())
 
     def test_an_unreadable_profile_exports_its_reason(self) -> None:
-        reader = Af22ChromatinReader(
+        reader = af22_reader(
             {HistoneMark.H3K4ME3: StubTrack()},
             StubConverter(unmapped=frozenset({PROMOTER_38.start})),
         )
@@ -453,13 +517,13 @@ class TestAgainstTheRealTracks:
 class TestProfileAccessors:
     def test_asking_for_a_mark_with_no_track_returns_none(self) -> None:
         # Distinct from "the mark is absent": no track was available to look in.
-        reader = Af22ChromatinReader({HistoneMark.H3K4ME3: StubTrack()}, StubConverter())
+        reader = af22_reader({HistoneMark.H3K4ME3: StubTrack()}, StubConverter())
         profile = reader.profile(PROMOTER_38)
         assert profile.signal(HistoneMark.H3K4ME3) is not None
         assert profile.signal(HistoneMark.H3K9ME3) is None
 
     def test_a_reader_with_no_tracks_says_so_rather_than_reading_nothing(self) -> None:
-        reader = Af22ChromatinReader({}, StubConverter())
+        reader = af22_reader({}, StubConverter())
         profile = reader.profile(PROMOTER_38)
         assert profile.is_readable
         assert profile.signals == ()
@@ -469,7 +533,7 @@ class TestProfileAccessors:
         # The track's contig is shorter than the converted coordinates, so there is nothing to
         # read. Returning no signal is right; returning zero would be a measurement.
         tracks = {HistoneMark.H3K4ME3: StubTrack(contigs={"chr2": 1000})}
-        reader = Af22ChromatinReader(tracks, StubConverter())
+        reader = af22_reader(tracks, StubConverter())
         assert reader.profile(PROMOTER_38).signals == ()
 
 
@@ -486,7 +550,7 @@ class TestSignalTracks:
             return [float(index) for index in range(nBins)]
 
     def reader(self) -> Af22ChromatinReader:
-        return Af22ChromatinReader({HistoneMark.H3K4ME3: self.Ramp()}, StubConverter())
+        return af22_reader({HistoneMark.H3K4ME3: self.Ramp()}, StubConverter())
 
     def test_a_plus_strand_track_is_returned_in_reference_order(self) -> None:
         plus = GenomicInterval(Assembly.GRCH38, "2", 166_127_520, 166_130_020, Strand.PLUS)
@@ -505,20 +569,20 @@ class TestSignalTracks:
         assert self.reader().signal_track(PROMOTER_38, HistoneMark.H3K9ME3, bins=5) is None
 
     def test_an_unconvertible_interval_returns_none(self) -> None:
-        reader = Af22ChromatinReader(
+        reader = af22_reader(
             {HistoneMark.H3K4ME3: self.Ramp()},
             StubConverter(unmapped=frozenset({PROMOTER_38.start})),
         )
         assert reader.signal_track(PROMOTER_38, HistoneMark.H3K4ME3, bins=5) is None
 
     def test_a_contig_absent_from_the_track_returns_none(self) -> None:
-        reader = Af22ChromatinReader(
+        reader = af22_reader(
             {HistoneMark.H3K4ME3: StubTrack(contigs={"chr1": 249_250_621})}, StubConverter()
         )
         assert reader.signal_track(PROMOTER_38, HistoneMark.H3K4ME3, bins=5) is None
 
     def test_an_interval_past_the_contig_end_returns_none(self) -> None:
-        reader = Af22ChromatinReader(
+        reader = af22_reader(
             {HistoneMark.H3K4ME3: StubTrack(contigs={"chr2": 1000})}, StubConverter()
         )
         assert reader.signal_track(PROMOTER_38, HistoneMark.H3K4ME3, bins=5) is None

@@ -4,15 +4,16 @@ Positions are Table 1's positions, counted from 1 at the target's 5' end, and co
 the target into the promoter for the 20-23 flank. The context owns that numbering, so nothing
 here does index arithmetic.
 
-**A known ambiguity, stated rather than hidden.** Table 1's position rules are written for a
-19 nt target: position 18 is the second-to-last base and position 19 the last. Because target
-length is configurable (18-21 nt), "position 18" could mean the eighteenth base or the
-second-to-last. These evaluators use the **literal** position, which is what Table 1 says, and
-report not-applicable where the target is too short to have it. For a 21-mer that means position
-19 is no longer the 3' terminal base, so the thermodynamic reasoning behind ``pos19-a`` — an A
-there puts a U at the guide's 5' end — no longer holds. Changing target length away from 19
-therefore changes what these rules mean, and the project has not decided which reading is
-intended. Until it does, leave the length at 19.
+**A resolved ambiguity, recorded rather than forgotten.** Table 1's position rules are written
+for a 19 nt target: position 18 is the second-to-last base and position 19 the last. For a
+longer target "position 18" could mean the eighteenth base or the second-to-last, and the two
+readings disagree about mechanism — at 21 nt, position 19 is no longer the 3' terminal base, so
+the reasoning behind ``pos19-a`` (an A there puts a U at the guide's 5' end) stops holding.
+
+The project has now settled the question from the other end: its duplexes are 19 nt cores with
+dTdT overhangs, so ``target-length`` is capped at 19 and the ambiguity cannot arise. These
+evaluators therefore use the **literal** position, which is what Table 1 says, and report
+not-applicable where a shorter target does not reach it.
 """
 
 from collections.abc import Callable

@@ -46,21 +46,28 @@ TARGET_LENGTH = _gate(
     "Target length is 19 nucleotides",
     EvidenceClass.ESTABLISHED,
     rationale=(
-        "A 19 nt core carrying a 3' UU overhang on both strands is the standard siRNA/saRNA "
+        "A 19 nt core carrying a 2 nt 3' overhang on both strands is the standard siRNA/saRNA "
         "duplex geometry that RISC loads efficiently. Shorter cores lose specificity; longer "
-        "ones are processed inconsistently."
+        "ones are processed inconsistently. This project's own duplexes use dTdT overhangs "
+        "rather than ribo-UU, which is a synthesis choice and does not change the 19 nt core."
     ),
     consequence=(
         "This defines the candidate window itself, so changing it changes every candidate. "
         "It also moves the goalposts for every position-based rule: 'position 18' and the "
-        "20-23 flank only mean what they mean because the target is 19 long."
+        "20-23 flank only mean what they mean because the target is 19 long. At 18 nt the "
+        "position-19 gate becomes not-applicable, so a run at that length silently loses the "
+        "strongest sequence filter the engine has."
     ),
     parameters=(
         RuleParameter(
             name="target-length",
             default=19,
             minimum=18,
-            maximum=21,
+            # Capped at 19, not 21. The flank preferences are registered at literal positions
+            # 20-23, so a 20 nt target collides with flank-20-au and the run raises. Declaring
+            # a range that crashes is worse than declaring a narrow one, and 19 nt is the
+            # settled chemistry for this project's duplexes rather than a convenience.
+            maximum=19,
             unit="nt",
             description="Length of the targeted promoter subsequence.",
         ),
