@@ -422,6 +422,7 @@ function showResult(result) {
   $("metric-best").textContent = first ? `${first.rating.met}/${first.rating.evaluated}` : "—";
   $("metric-length").textContent = `${fmt(result.promoter.length)} bp`;
   renderRankingPerformance(result.ranking_performance);
+  renderMotifPanel(result);
   renderTopResult(result);
   const cell = result.cell_types.find(c => [c.id,c.name.toLowerCase()].includes(result.app.cell_line.toLowerCase()));
   const chromatin = cell?.chromatin;
@@ -445,6 +446,13 @@ function renderDiff(previous,current) {
   $("diff-notice").textContent = `Compared with run ${previous.app.run_id.slice(0,8)} on the same promoter: ${added} newly passing, ${removed} no longer passing, ${moved} shared candidates changed rank. Both records remain saved.`;
 }
 function positionText(c) { return c.tss_span ? `${signed(c.tss_span[0])}…${signed(c.tss_span[1])}` : `${c.offset+1}…${c.offset+c.target_site_dna.length}`; }
+function ruleName(id) {
+  // A rule's human name, falling back to its id. "6/7" is a number without a name; this is
+  // what turns it into "missed: Position 2 is G or C".
+  const rules = state.result?.configuration?.rules || [];
+  return (rules.find(r => r.id === id) || {}).name || id;
+}
+
 function ratingText(c) { return c.rating.evaluated ? `${c.rating.met}/${c.rating.evaluated}` : "Not evaluated"; }
 function filteredCandidates() {
   const search = $("candidate-search").value.trim().toUpperCase();
@@ -461,7 +469,7 @@ function renderTable() {
   state.page = Math.min(state.page,pages-1);
   const page = values.slice(state.page*50,(state.page+1)*50);
   $("visible-count").textContent = `· ${fmt(values.length)}`;
-  $("candidate-rows").innerHTML = page.length ? page.map(c => `<tr data-candidate="${c.id}" class="${state.selected===c.id?"selected":""}" tabindex="0" aria-label="Inspect ${c.id}"><td><input type="checkbox" data-check="${c.id}" ${state.checked.has(c.id)?"checked":""} aria-label="Select ${c.id} for export"></td><td>${c.rank || "—"}</td><td><span class="dna">${escapeHTML(c.target_site_dna)}</span><p class="candidate-id">${c.id}${c.rank===null?` · ${c.excluded_by.length} failed gates`:""}</p></td><td>${escapeHTML(positionText(c))}</td><td>${c.gc_percent}%</td><td><div class="rating-cell"><b>${ratingText(c)}</b><span class="rating-bar"><i style="width:${c.rating.percent ?? 0}%"></i></span></div>${c.rating.unavailable?`<p class="candidate-id">${c.rating.unavailable} unavailable</p>`:""}${c.rating.unchecked_gates.length?`<p class="candidate-id">${c.rating.unchecked_gates.length} unchecked gates</p>`:""}</td><td><span class="guide-badge ${escapeHTML(c.rating.guide || "unknown")}">${escapeHTML(c.rating.guide || "unknown")}</span>${!c.rating.models_agree?'<p class="disagreement">Models disagree</p>':""}</td></tr>`).join("") : '<tr><td colspan="7" style="padding:30px;text-align:center;color:var(--muted)">No candidates match this view. Inspect excluded targets or adjust your criteria and run again.</td></tr>';
+  $("candidate-rows").innerHTML = page.length ? page.map(c => `<tr data-candidate="${c.id}" class="${state.selected===c.id?"selected":""}" tabindex="0" aria-label="Inspect ${c.id}"><td><input type="checkbox" data-check="${c.id}" ${state.checked.has(c.id)?"checked":""} aria-label="Select ${c.id} for export"></td><td>${c.rank || "—"}</td><td><span class="dna">${escapeHTML(c.target_site_dna)}</span><p class="candidate-id">${c.id}${c.rank===null?` · ${c.excluded_by.length} failed gates`:""}</p></td><td>${escapeHTML(positionText(c))}</td><td>${c.gc_percent}%</td><td><div class="rating-cell"><b>${ratingText(c)}</b><span class="rating-bar"><i style="width:${c.rating.percent ?? 0}%"></i></span></div>${c.rating.unavailable?`<p class="candidate-id">${c.rating.unavailable} unavailable</p>`:""}${c.rating.unchecked_gates.length?`<p class="candidate-id">${c.rating.unchecked_gates.length} unchecked gates</p>`:""}${(c.rating.missed||[]).length?`<p class="missed-chip">missed: ${c.rating.missed.map(id=>escapeHTML(ruleName(id))).join(", ")}</p>`:""}</td><td><span class="guide-badge ${escapeHTML(c.rating.guide || "unknown")}">${escapeHTML(c.rating.guide || "unknown")}</span>${!c.rating.models_agree?'<p class="disagreement">Models disagree</p>':""}</td></tr>`).join("") : '<tr><td colspan="7" style="padding:30px;text-align:center;color:var(--muted)">No candidates match this view. Inspect excluded targets or adjust your criteria and run again.</td></tr>';
   $("page-label").textContent = values.length ? `${fmt(state.page*50+1)}–${fmt(Math.min((state.page+1)*50,values.length))} of ${fmt(values.length)} · page ${state.page+1}/${pages}` : "0 candidates";
   $("page-previous").disabled = state.page===0; $("page-next").disabled = state.page>=pages-1;
   $("select-page").checked = page.length>0 && page.every(c=>state.checked.has(c.id));
@@ -484,7 +492,35 @@ async function selectCandidate(id) {
 }
 function ruleVerdict(verdict,config) {
   const def = config.rules.find(r=>r.id===verdict.id);
-  return `<details class="verdict"><summary><span class="outcome ${verdict.outcome}">${verdict.outcome==="not-applicable"?"N/A":verdict.outcome.toUpperCase()}</span><span>${escapeHTML(def?.name || verdict.id)}</span><span class="muted">${roleName[verdict.kind]}</span></summary><p>${escapeHTML(verdict.detail)}</p>${def?`<p class="source">${escapeHTML(def.provenance.display)} · ${escapeHTML(def.evidence_class)}</p><p><b>Why this rule:</b> ${escapeHTML(def.rationale)}</p><p><b>Changing it:</b> ${escapeHTML(def.consequence)}</p><p><b>Saved values:</b> ${def.parameters.map(p=>`${escapeHTML(p.name)} = ${escapeHTML(p.value)} (${escapeHTML(p.origin)})`).join("; ") || "No adjustable numeric parameters"}</p>`:""}</details>`;
+  return `<details class="verdict"><summary><span class="outcome ${verdict.outcome}">${verdict.outcome==="not-applicable"?"N/A":verdict.outcome.toUpperCase()}</span><span>${escapeHTML(def?.name || verdict.id)}</span><span class="muted">${roleName[verdict.kind]}</span><span class="why">why \u203a</span></summary><p>${escapeHTML(verdict.detail)}</p>${def?`<p class="source">${escapeHTML(def.provenance.display)} · ${escapeHTML(def.evidence_class)}</p><p><b>Why this rule:</b> ${escapeHTML(def.rationale)}</p><p><b>Changing it:</b> ${escapeHTML(def.consequence)}</p><p><b>Saved values:</b> ${def.parameters.map(p=>`${escapeHTML(p.name)} = ${escapeHTML(p.value)} (${escapeHTML(p.origin)})`).join("; ") || "No adjustable numeric parameters"}</p>`:""}</details>`;
+}
+
+const REJECTION_COLOURS = ["#b4714a","#7a93c2","#6f9e7a","#b2608f","#8d8248"];
+const OTHER_REJECTION = "#9aa8a4";
+
+function rejectionPalette(result) {
+  // Colour the excluded track by the rule that rejected each candidate, most common first.
+  // A single grey band hid which rule is doing the work; the breakdown already knew.
+  const palette = new Map();
+  (result.rejection_breakdown || []).slice(0, REJECTION_COLOURS.length)
+    .forEach((entry, i) => palette.set(entry.rule, REJECTION_COLOURS[i]));
+  return palette;
+}
+
+function renderRejectionLegend(result) {
+  // Says which rule is actually constraining this promoter, in the same move as the colours.
+  const breakdown = result.rejection_breakdown || [];
+  const legend = $("rejection-legend");
+  if (!legend) return;
+  if (!breakdown.length) { legend.innerHTML = ""; return; }
+  const palette = rejectionPalette(result);
+  legend.innerHTML = "<span>Excluded by:</span>"
+    + breakdown.slice(0, REJECTION_COLOURS.length).map(entry =>
+        `<span><i style="background:${palette.get(entry.rule)}"></i>`
+        + `${escapeHTML(ruleName(entry.rule))} \u00b7 ${entry.percent_of_generated}%</span>`).join("")
+    + (breakdown.length > REJECTION_COLOURS.length
+        ? `<span><i style="background:${OTHER_REJECTION}"></i>other</span>` : "")
+    + `<small>A candidate is counted against the first rule that excluded it.</small>`;
 }
 
 function renderMap() {
@@ -494,7 +530,10 @@ function renderMap() {
   const inView = (start,end) => end>state.start && start<state.end;
   const tip = text => `data-tip="${escapeHTML(text)}" tabindex="0" aria-label="${escapeHTML(text)}"`;
   const parts = ['<defs><clipPath id="map-clip"><rect x="133" y="20" width="832" height="265"/></clipPath></defs>'];
-  const label = (text,y,help) => parts.push(`<text class="track-label" x="12" y="${y}" ${tip(help)}>${escapeHTML(text)}</text>`);
+  const label = (text,y,help) => parts.push(`<text class="track-label" x="12" y="${y}" `
+    + `${tip(help)}>${escapeHTML(text)}</text>`);
+  const emptyNote = (y, text) => parts.push(
+    `<text class="track-empty" x="${left + 6}" y="${y}">${escapeHTML(text)}</text>`);
   const rect = (start,end,y,height,color,help,attrs="") => {
     if (!inView(start,end)) return;
     const x1=scale(Math.max(start,state.start)), x2=scale(Math.min(end,state.end));
@@ -529,15 +568,47 @@ function renderMap() {
     rect(p.tss_offset+a,p.tss_offset+b+1,id==="tss-window"?84:99,11,id==="tss-window"?"#c2dfd2":"#75bfa7",`${roleName[rule.kind]}: ${rule.name}. ${signed(a)} to ${signed(b)}. Whole target containment is required. ${rule.provenance.display}`);
   }
   for (const t of r.tracks.cpg_islands) rect(t.start,t.end,134,14,"#aac7c9",t.detail);
-  for (const t of r.tracks.regulatory) rect(t.start,t.end,165,14,t.kind.includes("promoter")?"#ddb370":"#efcf99",`${t.label}: ${t.detail}`);
-  r.tracks.motifs.forEach((t,i)=>rect(t.start,t.end,197+(i%3)*5,4,"#a798d2",t.detail));
-  for (const c of r.candidates.filter(c=>c.rank===null)) rect(c.offset,c.offset+c.target_site_dna.length,264+(c.offset%3)*3,3,"#dae2df",`${c.id}: excluded by ${c.excluded_by.join(", ")}. Position ${positionText(c)}. Click for details.`,`data-candidate="${c.id}"`);
+  if (!r.tracks.cpg_islands.length) emptyNote(145,
+    "No CpG island met the configured length, GC and observed/expected thresholds in this window.");
+  for (const t of r.tracks.regulatory) rect(t.start,t.end,165,14,
+    t.kind.includes("promoter")?"#ddb370":"#efcf99",`${t.label}: ${t.detail}`);
+  if (!r.tracks.regulatory.length) emptyNote(176, r.app.request.regulatory === false
+    ? "Not retrieved \u2014 Ensembl regulatory annotations were switched off for this run."
+    : "No Ensembl Regulatory Build feature overlaps this window.");
+  const focused = state.motifFocus;
+  r.tracks.motifs.forEach((t,i)=>{
+    // Exact label match: a prefix test would make SP1 claim SP100 if one were bundled.
+    const mine = !focused || t.label === focused;
+    rect(t.start,t.end,197+(i%3)*5,mine?6:3,mine?"#6a5ca8":"#d7d1ea",t.detail);
+  });
+  if (!r.tracks.motifs.length) emptyNote(212, r.app.request.motifs === false
+    ? "Not scanned \u2014 motif prediction was switched off for this run."
+    : "No bundled matrix matched above its threshold in this window.");
+  const rejectionColours = rejectionPalette(r);
+  for (const c of r.candidates.filter(c=>c.rank===null)) {
+    const cause = c.rating?.excluded_by_first || c.excluded_by[0];
+    rect(c.offset,c.offset+c.target_site_dna.length,264+(c.offset%3)*3,3,
+      rejectionColours.get(cause) || OTHER_REJECTION,
+      `${c.id}: excluded by ${c.excluded_by.join(", ")}. Position ${positionText(c)}. `
+      + `Click for details.`,`data-candidate="${c.id}"`);
+  }
   for (const c of r.candidates.filter(c=>c.rank!==null)) rect(c.offset,c.offset+c.target_site_dna.length,232+((c.rank-1)%3)*5,7,"#087e80",`${c.id} · rank ${c.rank} · ${ratingText(c)} evaluated preferences · ${c.rating.guide || "unknown"} guide (${c.rating.guide_model}). Position ${positionText(c)}. Click for details.`,`data-candidate="${c.id}"`);
   if (state.selected) {
     const c=r.candidates.find(c=>c.id===state.selected);
     rect(c.offset,c.offset+c.target_site_dna.length,c.rank===null?261:228,c.rank===null?19:25,"none",`${c.id} selected`,`stroke="#b97a2b" stroke-width="2" data-candidate="${c.id}"`);
   }
   parts.push('</g>'); $("promoter-map").innerHTML=parts.join("");
+  renderRejectionLegend(r);
+  const note = $("unevaluated-note");
+  if (note) {
+    const missing = r.unevaluated_rules || [];
+    note.hidden = !missing.length;
+    note.textContent = missing.length
+      ? `${missing.length} rule${missing.length === 1 ? "" : "s"} could not be evaluated for any `
+        + `candidate in this run: ${missing.map(ruleName).join(", ")}. `
+        + `These counted neither for nor against anything \u2014 they are not failures.`
+      : "";
+  }
 }
 function viewport(factor,pan=0) {
   if (!state.result) return;
@@ -821,6 +892,55 @@ function renderScreening(record) {
     + `</tbody></table></div>`;
 }
 
+
+function foldText(scan) {
+  // A matrix with no sites has no fold to report: 0 found against 0 expected is undefined, not
+  // zero, and printing "null" or "0x" would each claim more than the scan knows.
+  if (!scan.sites && !scan.expected) return "no sites found";
+  if (scan.enrichment === null || scan.enrichment === undefined) return "\u2014";
+  return `${scan.enrichment}\u00d7${scan.exceeds_chance ? "" : " (within chance)"}`;
+}
+
+function renderMotifPanel(result) {
+  // The map draws 144 identical marks, which honestly says "motifs are everywhere" and is
+  // useless for finding one. The signal the scan already computed -- how many sites a factor
+  // has against how many a shuffled background predicts -- was in the record and on no screen.
+  const panel = $("motif-panel");
+  if (!panel) return;
+  const scans = result.motif_scans || [];
+  if (!scans.length) { panel.hidden = true; panel.innerHTML = ""; return; }
+  const ranked = [...scans].sort((a, b) =>
+    (b.exceeds_chance - a.exceeds_chance) || (b.enrichment - a.enrichment) || (b.sites - a.sites));
+  const focused = state.motifFocus;
+  panel.hidden = false;
+  panel.innerHTML =
+    `<h3>Transcription factor motifs <span class="muted">· ${scans.length} matrices scanned`
+    + `</span></h3>`
+    + `<p class="hint">Sites found against sites expected from ${result.app.request.motif_shuffles} `
+    + `shuffled backgrounds of the same composition. A match is a sequence match: most are not `
+    + `bound in any given cell type, and none of this is a measurement in your cell line. `
+    + `Select a row to show only that factor on the map.</p>`
+    + `<div class="table-scroll"><table><thead><tr><th>Factor</th><th>Matrix</th><th>Sites</th>`
+    + `<th>Expected</th><th>Fold</th><th>Assay</th><th>Why this matrix is bundled</th></tr></thead>`
+    + `<tbody>` + ranked.map(m => {
+        const on = focused === m.motif;
+        return `<tr data-motif="${escapeHTML(m.motif)}" class="${on ? "selected" : ""}" `
+          + `tabindex="0" aria-label="Show only ${escapeHTML(m.motif)} on the map">`
+          + `<td><b>${escapeHTML(m.motif)}</b></td>`
+          + `<td class="chance">${escapeHTML(m.matrix_id)}</td>`
+          + `<td>${m.sites}</td><td class="chance">${m.expected}</td>`
+          + `<td class="${m.exceeds_chance ? "enriched" : "chance"}">`
+          + `${foldText(m)}</td>`
+          + `<td class="chance">${escapeHTML(m.data_type || "—")}`
+          + `${m.in_vivo ? "" : " (in vitro)"}</td>`
+          + `<td class="relevance">${escapeHTML(m.relevance || "")}</td></tr>`;
+      }).join("")
+    + `</tbody></table></div>`
+    + (focused ? `<p class="hint"><b>Showing ${escapeHTML(focused)} only.</b> `
+        + `<button type="button" class="text-button" id="clear-motif-focus">Show all factors`
+        + `</button></p>` : "");
+}
+
 function tooltip(target,event) {
   const text=target?.closest("[data-tip]")?.dataset.tip;
   if (!text) { $("tooltip").hidden=true; return; }
@@ -948,6 +1068,22 @@ $("candidate-detail").addEventListener("click",async e=>{const b=e.target.closes
 $("run-evidence").addEventListener("click",renderEvidence);
 for (const type of ["csv","json","html"]) $("export-"+type).addEventListener("click",()=>exportRun(type));
 $("export-order").addEventListener("click",exportOrder);
+$("motif-panel").addEventListener("click",event=>{
+  if (event.target.closest("#clear-motif-focus")) {
+    state.motifFocus=null; renderMotifPanel(state.result); renderMap(); return;
+  }
+  const row=event.target.closest("[data-motif]");
+  if (!row) return;
+  state.motifFocus = state.motifFocus===row.dataset.motif ? null : row.dataset.motif;
+  renderMotifPanel(state.result); renderMap();
+});
+$("motif-panel").addEventListener("keydown",event=>{
+  const row=event.target.closest("[data-motif]");
+  if (!row || (event.key!=="Enter" && event.key!==" ")) return;
+  event.preventDefault();
+  state.motifFocus = state.motifFocus===row.dataset.motif ? null : row.dataset.motif;
+  renderMotifPanel(state.result); renderMap();
+});
 $("screen-transcript").addEventListener("click",()=>startScreening("transcript"));
 $("screen-genomic").addEventListener("click",()=>startScreening("genomic"));
 $("offtarget-results").addEventListener("click",event=>{

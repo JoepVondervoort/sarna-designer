@@ -67,6 +67,18 @@ def candidate_record(candidate: Candidate, model: str, end_length: int) -> dict[
         ],
         "guide": str(primary.predicted_guide) if primary else None,
         "guide_model": model, "models_agree": candidate.guide_comparison.tables_agree,
+        # Which preferences this candidate missed, by name. "6/7" is a number without a name,
+        # and the obvious next question is which one -- which otherwise costs a click into the
+        # candidate and a second click to open its verdicts.
+        "missed": [
+            r.rule_id for r in candidate.results
+            if str(r.kind) == "preference" and r.outcome is RuleOutcome.FAIL
+        ],
+        # The rule that excluded this candidate, so the map can colour a rejection by its cause
+        # without carrying every verdict for 2,000 candidates.
+        "excluded_by_first": (
+            candidate.excluded_by[0].rule_id if candidate.excluded_by else None
+        ),
     }
     return record
 

@@ -185,6 +185,22 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     assert browser.evaluate("!document.getElementById('ranking-performance').hidden") is True
     assert "does not beat chance" in str(browser.evaluate(
         "document.getElementById('ranking-performance').textContent"))
+    # A rule row must look openable. `display:flex` on a <summary> drops Chrome's native
+    # marker, and for a while these seventeen rows looked like a static checklist while the
+    # explanation -- the measured value, the citation, the rationale -- sat one invisible
+    # click away. The affordance is now drawn, and this asserts the content behind it.
+    opened = str(browser.evaluate("""(()=>{
+      // Scoped to the rule list: the guide-prediction disclosure shares the .verdict class.
+      const rows=[...document.querySelectorAll('#candidate-detail .rule-verdicts .verdict')];
+      if (!rows.length) return "NO RULE ROWS";
+      const marker = getComputedStyle(rows[0].querySelector('summary'), '::before').content;
+      rows[0].open = true;
+      return marker + "|" + rows[0].innerText;})()"""))
+    assert not opened.startswith("NO RULE ROWS")
+    assert not opened.startswith("none|"), "the rule rows have no disclosure affordance"
+    assert "why" in opened.lower()
+    # The explanation itself, not just the verdict.
+    assert "Why this rule:" in opened and "Changing it:" in opened, opened[:300]
     # The results open on the answer: how many survived and what to order.
     assert browser.evaluate("!document.getElementById('top-result').hidden") is True
     top = str(browser.evaluate("document.getElementById('top-result').textContent"))
