@@ -496,7 +496,7 @@ function ruleVerdict(verdict,config) {
 }
 
 const REJECTION_COLOURS = ["#b4714a","#7a93c2","#6f9e7a","#b2608f","#8d8248"];
-const OTHER_REJECTION = "#9aa8a4";
+const OTHER_REJECTION = "#6e7d79";  // 3.9:1 on white; the previous grey was 2.47:1
 
 function rejectionPalette(result) {
   // Colour the excluded track by the rule that rejected each candidate, most common first.
