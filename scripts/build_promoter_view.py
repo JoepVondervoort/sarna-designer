@@ -18,12 +18,14 @@ from pathlib import Path
 
 from sarna.design.pipeline import design_sarnas
 from sarna.design.presets import PRESETS, preset
+from sarna.genome.anchors import load_anchors
 from sarna.genome.ensembl import (
     DEFAULT_DOWNSTREAM_BP,
     DEFAULT_UPSTREAM_BP,
     EnsemblClient,
     EnsemblError,
     NoManeSelectTranscriptError,
+    Transcript,
 )
 from sarna.regulatory.chromatin import open_af22_reader
 from sarna.regulatory.features import fetch_regulatory_features
@@ -42,9 +44,47 @@ def main(argv: list[str] | None = None) -> int:
     """Build and write a promoter view. Returns a process exit code."""
     args = _parse(argv)
     client = EnsemblClient(cache_dir=CACHE)
+    anchors = load_anchors()
+
+    if args.list_anchors:
+        declared = anchors.for_gene(args.symbol)
+        if not declared:
+            print(
+                f"No promoter anchor is declared for {args.symbol}; the annotated MANE Select TSS "
+                f"will be used. Genes with declared anchors: "
+                f"{', '.join(anchors.genes) or 'none'}."
+            )
+            return 0
+        for entry in declared:
+            print(f"{entry.id}  [{entry.reference_kind}]  {entry.provenance}")
+            if entry.reference_kind.caveat:
+                print(f"    {entry.reference_kind.caveat}")
+        return 0
+
     try:
         gene = client.gene(args.symbol)
-        transcript = client.select_transcript(gene)
+        transcript: Transcript | None = None
+        if args.anchor:
+            anchor = anchors[args.anchor]
+            if anchor.gene.upper() != gene.symbol.upper():
+                print(
+                    f"anchor {anchor.id!r} belongs to {anchor.gene}, not {gene.symbol}",
+                    file=sys.stderr,
+                )
+                return 2
+            promoter = client.promoter_for_anchor(anchor, args.upstream, args.downstream)
+            print(f"  anchored on {anchor.id} [{anchor.reference_kind}]: {anchor.provenance}")
+            if anchor.reference_kind.caveat:
+                print(f"  CAVEAT {anchor.reference_kind.caveat}")
+        else:
+            transcript = client.select_transcript(gene)
+            promoter = client.promoter_for(transcript, args.upstream, args.downstream)
+            others = anchors.for_gene(gene.symbol)
+            if others:
+                print(
+                    f"  note: {len(others)} literature promoter(s) are declared for "
+                    f"{gene.symbol} and were NOT used. Run with --list-anchors to see them."
+                )
     except NoManeSelectTranscriptError as error:
         # A question, not a failure: the promoter depends on a choice the tool will not make.
         print(error, file=sys.stderr)
@@ -53,12 +93,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Ensembl: {error}", file=sys.stderr)
         return 1
 
-    promoter = client.promoter_for(transcript, args.upstream, args.downstream)
     config = preset(args.preset).resolve()
     result = design_sarnas(promoter, config)
 
     print(f"{gene.symbol} {gene.ensembl_id}  chr{gene.contig} strand {gene.strand}")
-    print(f"  transcript {transcript.ensembl_id} ({transcript.refseq_match}), MANE Select")
+    if transcript is not None:
+        print(f"  transcript {transcript.ensembl_id} ({transcript.refseq_match}), MANE Select")
     print(f"  promoter {promoter.length} bp, {promoter.sequence.gc_percent:.1f}% GC")
     print(
         f"  {len(result.generated)} candidates generated, {len(result.passing)} passing, "
@@ -166,6 +206,19 @@ def _parse(argv: list[str] | None) -> argparse.Namespace:
         "--no-chromatin",
         action="store_true",
         help="skip AF22 histone tracks even if they are present",
+    )
+    parser.add_argument(
+        "--anchor",
+        default=None,
+        help=(
+            "design against a declared promoter anchor by id instead of the MANE Select TSS. "
+            "Use --list-anchors to see what is declared for a gene."
+        ),
+    )
+    parser.add_argument(
+        "--list-anchors",
+        action="store_true",
+        help="list the promoter anchors declared for this gene and exit",
     )
     parser.add_argument("--out", type=Path, default=None, help="output JSON path")
     parser.add_argument(

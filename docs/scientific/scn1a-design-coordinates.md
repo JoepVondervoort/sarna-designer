@@ -127,3 +127,40 @@ chemistry in this project's own practice, and it is what an order-ready export s
   preferences become testable against measured activity for 15 of the 125 sequences — currently
   five of seven preferences cannot be evaluated at all
   (`docs/scientific/empirical-validation.md`).
+
+## Designing against the declared anchors reproduces chapter 2 — and finds an edge effect
+
+With the three promoters declared as anchors (`sarna.genome.anchors`), the engine can be pointed at
+the same regions chapter 2 used. All 15 designs are then generated, and most pass:
+
+| Anchor | Chapter 2's designs, as the engine judges them |
+|---|---|
+| `scn1a-long-2008` | SCN1A-7, -8, -9 and **-10 (activator)** pass. SCN1A-6 fails `no-homopolymer-run`. |
+| `scn1a-dong-2014-proximal` | SCN1A-3, -4, -5 pass. SCN1A-1 fails `pos18-at`, SCN1A-2 fails `pos19-a`. |
+| `scn1a-dong-2014-distal` | **SCN1A-12 (activator)** and SCN1A-13 pass. SCN1A-11 fails `pos19-a`. **SCN1A-14 (activator)** and SCN1A-15 fail `tss-window`. |
+
+Before anchors existed, SCN1A-12 and SCN1A-14 were rejected for being 5.5 kb from any annotated
+TSS. Anchored properly, SCN1A-12 passes and SCN1A-14 fails for a quite different and much narrower
+reason.
+
+### Total containment costs 2% of candidates, and one of them worked
+
+SCN1A-14 sits at −107. Its 19-mer therefore spans **−107 to −89**, and ADR 0008 requires the
+*whole* target inside the window, so the 7 bases past −100 exclude it. SCN1A-15 at −100 spans
+−100 to −82 and goes the same way.
+
+Measured over the distal anchor's 1,382 candidates: 901 have their start inside −1000…−100 and 883
+have the whole target inside. **Total containment costs 18 candidates, 2.0%**, all of them
+straddling one of the two edges — 36 bp of a 900 bp window, which is about what the arithmetic
+predicts.
+
+Two percent is a small price and ADR 0008's reasoning for it still stands: a target half outside
+the window is half outside the promoter region the rule is about. But one of the 14 duplexes known
+to activate its target falls in that 2%, which is worth knowing before trusting a rejection at the
+window edge.
+
+**Caveat on the number, not the mechanism.** SCN1A-14's −107 depends on this anchor's *inferred*
+reference point, which chapter 2's designs constrain only to a ~410 bp range. Under a different
+value within that range SCN1A-14 could sit comfortably inside the window. The edge effect itself is
+a property of the rule and does not depend on the anchor: a 19-mer whose start is within 18 bases
+of either edge is excluded, wherever the edges are.
