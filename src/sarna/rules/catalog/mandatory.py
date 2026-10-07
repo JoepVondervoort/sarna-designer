@@ -374,7 +374,7 @@ TSS_WINDOW = _gate(
             name="window-start-bp",
             default=-1000,
             minimum=-10_000,
-            maximum=0,
+            maximum=-1,
             unit="bp",
             description="Furthest upstream edge of the permitted window, relative to the TSS.",
         ),
@@ -382,7 +382,7 @@ TSS_WINDOW = _gate(
             name="window-end-bp",
             default=-100,
             minimum=-10_000,
-            maximum=0,
+            maximum=-1,
             unit="bp",
             description="Nearest edge of the permitted window, relative to the TSS.",
         ),
@@ -403,24 +403,22 @@ TSS_WINDOW = _gate(
         ),
         RuleOption(
             id="vondervoort-2026",
-            label="-2000 to +500 bp (thesis chapter 4)",
+            label="-2000 to -1 bp (upstream part of thesis chapter 4 window)",
             provenance=Provenance.citation(
                 "van de Vondervoort 2026",
                 "chapter 4, Material and methods — saRNA design, promoter defined as -2000 to "
                 "+500 bp of the MANE Select TSS",
             ),
-            values={"window-start-bp": -2000, "window-end-bp": 0},
+            values={"window-start-bp": -2000, "window-end-bp": -1},
             note=(
-                "The window the thesis designed in, and it matters because activation was "
-                "measured outside Wang's. Of the 14 duplexes known to activate their target, "
-                "Wang's window admits 6 and this one admits 10, taking the most generous TSS "
-                "anchor for each (docs/scientific/empirical-validation.md). KLF4 worked at -45, "
+                "The thesis defined its promoter as -2000 to +500 bp. This option implements "
+                "only its upstream portion, -2000 to -1; it does not reproduce the full thesis "
+                "window. Activation was measured outside Wang's window: KLF4 worked at -45, "
                 "closer than Wang's -100 edge, and CEBPA — in human clinical trials — at -1088, "
                 "just beyond the -1000 edge. Choose this to avoid excluding candidates like "
-                "those; it admits roughly twice as many candidates, so expect a longer list with "
-                "weaker average evidence. Note the parameter cannot express the +500 half: the "
-                "window's edges are capped at 0, because a target downstream of the TSS overlaps "
-                "the transcript and the rule's own rationale stops applying there."
+                "those; expect a longer candidate list, without evidence that the added "
+                "candidates are more effective. Downstream targeting is not expressed by this "
+                "upstream-window rule. The last upstream base is -1: there is no TSS position 0."
             ),
         ),
     ),

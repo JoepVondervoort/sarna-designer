@@ -31,6 +31,9 @@ af22_data/
 .cache/
 cache/
 
+# Generated local previews and exports
+/out/
+
 # Node (added once the frontend stack is decided)
 node_modules/
 dist/

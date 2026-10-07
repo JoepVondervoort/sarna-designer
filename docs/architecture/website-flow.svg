@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="2120" viewBox="0 0 1280 2120" role="img" aria-labelledby="flow-title">
+  <title id="flow-title">saRNA Designer multi-promoter local workflow and remaining continuation</title>
+  <desc>Human gene or DNA input, exact-start grouping, researcher references and per-reference criteria feed separate Python runs. Saved groups and frozen exports retain separate ranks. Remaining evidence and bench delivery are shown below.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#748b87" />
+    </marker>
+  </defs>
+  <rect width="1280" height="2120" fill="#f6f9f7" />
+  <g font-family="system-ui,sans-serif">
+    <text x="60" y="70" fill="#183932" font-size="24" font-weight="600">Local workbench: design deliberately across promoter references</text>
+    <text x="60" y="117" fill="#617974" font-size="14" font-weight="400">Browser controls → separate Python runs → saved local comparison</text>
+    <polyline points="400,220 460,220" fill="none" stroke="#748b87" stroke-width="1.7" marker-end="url(#arrow)" />
+    <text x="430" y="208" fill="#617974" font-size="11" font-weight="400" text-anchor="middle">gene</text>
+    <polyline points="400,245 425,245 425,640 460,640" fill="none" stroke="#748b87" stroke-width="1.7" marker-end="url(#arrow)" />
+    <text x="413" y="237" fill="#617974" font-size="11" font-weight="400">DNA</text>
+    <polyline points="800,220 860,220" fill="none" stroke="#748b87" stroke-width="1.7" marker-end="url(#arrow)" />
+    <polyline points="1030,280 1030,335 630,335 630,370" fill="none" stroke="#748b87" stroke-width="1.7" marker-end="url(#arrow)" />
+    <polyline points="860,430 800,430" fill="none" stroke="#748b87" stroke-width="1.7" marker-end="url(#arrow)" />
+    <polyline points="400,430 460,430" fill="none" stroke="#748b87" stroke-width="1.7" marker-end="url(#arrow)" />
+    <polyline points="630,490 630,580" fill="none" stroke="#748b87" stroke-width="1.7" marker-end="url(#arrow)" />
+    <polyline points="860,640 800,640" fill="none" stroke="#748b87" stroke-width="1.7" marker-end="url(#arrow)" stroke-dasharray="6 5" />
+    <polyline points="630,700 630,790" fill="none" stroke="#748b87" stroke-width="1.7" marker-end="url(#arrow)" />
+    <polyline points="800,665 830,665 830,850 860,850" fill="none" stroke="#748b87" stroke-width="1.7" marker-end="url(#arrow)" />
+    <polyline points="860,875 800,875" fill="none" stroke="#748b87" stroke-width="1.7" marker-end="url(#arrow)" />
+    <polyline points="460,850 400,850" fill="none" stroke="#748b87" stroke-width="1.7" marker-end="url(#arrow)" />
+    <polyline points="230,790 230,490" fill="none" stroke="#748b87" stroke-width="1.7" marker-end="url(#arrow)" />
+    <text x="242" y="655" fill="#617974" font-size="11" font-weight="400">apply changes</text>
+    <polyline points="1030,910 1030,1000" fill="none" stroke="#748b87" stroke-width="1.7" marker-end="url(#arrow)" />
+    <rect x="60" y="160" width="340" height="120" rx="12" fill="#ffffff" stroke="#bdd7cc" />
+    <text x="230.0" y="198" fill="#183932" font-size="14" font-weight="600" text-anchor="middle">Choose input</text>
+    <text x="230.0" y="219" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Human gene symbol or Ensembl gene ID</text>
+    <text x="230.0" y="240" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">or your promoter DNA / one FASTA</text>
+    <rect x="460" y="160" width="340" height="120" rx="12" fill="#ffffff" stroke="#bdd7cc" />
+    <text x="630.0" y="198" fill="#183932" font-size="14" font-weight="600" text-anchor="middle">Confirm the gene</text>
+    <text x="630.0" y="219" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Ensembl GRCh38 · cached or online</text>
+    <text x="630.0" y="240" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Gene contig, strand and transcripts</text>
+    <rect x="860" y="160" width="340" height="120" rx="12" fill="#ffffff" stroke="#bdd7cc" />
+    <text x="1030.0" y="198" fill="#183932" font-size="14" font-weight="600" text-anchor="middle">Whole-gene reference overview</text>
+    <text x="1030.0" y="219" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Exact shared TSSs retain transcript IDs</text>
+    <text x="1030.0" y="240" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Literature anchors keep source / caveats</text>
+    <rect x="60" y="370" width="340" height="120" rx="12" fill="#ffffff" stroke="#bdd7cc" />
+    <text x="230.0" y="408" fill="#183932" font-size="14" font-weight="600" text-anchor="middle">Explain and adjust supported criteria</text>
+    <text x="230.0" y="429" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Wang defaults · alternatives · citations</text>
+    <text x="230.0" y="450" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Gate / preference / off · equal points</text>
+    <rect x="460" y="370" width="340" height="120" rx="12" fill="#ffffff" stroke="#bdd7cc" />
+    <text x="630.0" y="408" fill="#183932" font-size="14" font-weight="600" text-anchor="middle">Select one or several references</text>
+    <text x="630.0" y="429" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Shared or pinned criteria per reference</text>
+    <text x="630.0" y="450" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Own upstream / downstream retrieval span</text>
+    <rect x="860" y="370" width="340" height="120" rx="12" fill="#ffffff" stroke="#bdd7cc" />
+    <text x="1030.0" y="400" fill="#183932" font-size="14" font-weight="600" text-anchor="middle">Add your genomic reference</text>
+    <text x="1030.0" y="421" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">GRCh38 +1 base entered 1-based</text>
+    <text x="1030.0" y="442" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Source, name and uncertainty recorded</text>
+    <text x="1030.0" y="463" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Researcher-supplied / inferred</text>
+    <rect x="460" y="580" width="340" height="120" rx="12" fill="#ffffff" stroke="#bdd7cc" />
+    <text x="630.0" y="610" fill="#183932" font-size="14" font-weight="600" text-anchor="middle">Run Python separately per reference</text>
+    <text x="630.0" y="631" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Generate, evaluate, gate and rank</text>
+    <text x="630.0" y="652" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Named guide models · explained ratings</text>
+    <text x="630.0" y="673" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">One ranked context per reference</text>
+    <rect x="860" y="580" width="340" height="120" rx="12" fill="#ffffff" stroke="#bdd7cc" />
+    <text x="1030.0" y="610" fill="#183932" font-size="14" font-weight="600" text-anchor="middle">Optional evidence context</text>
+    <text x="1030.0" y="631" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Regulatory build · motif predictions</text>
+    <text x="1030.0" y="652" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">AF22 local tracks · missing data explicit</text>
+    <text x="1030.0" y="673" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">No expression / activity inference</text>
+    <rect x="60" y="790" width="340" height="120" rx="12" fill="#ffffff" stroke="#bdd7cc" />
+    <text x="230.0" y="820" fill="#183932" font-size="14" font-weight="600" text-anchor="middle">Edit and rerun</text>
+    <text x="230.0" y="841" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Inspect reference and configuration first</text>
+    <text x="230.0" y="862" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Same-reference admission / rank diff</text>
+    <text x="230.0" y="883" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Earlier records remain saved</text>
+    <rect x="460" y="790" width="340" height="120" rx="12" fill="#ffffff" stroke="#bdd7cc" />
+    <text x="630.0" y="820" fill="#183932" font-size="14" font-weight="600" text-anchor="middle">Inspect the promoter comparison</text>
+    <text x="630.0" y="841" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Progress / failures per reference</text>
+    <text x="630.0" y="862" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Open each map, RNA cores and verdicts</text>
+    <text x="630.0" y="883" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Separate ranks · no pooled best score</text>
+    <rect x="860" y="790" width="340" height="120" rx="12" fill="#ffffff" stroke="#bdd7cc" />
+    <text x="1030.0" y="820" fill="#183932" font-size="14" font-weight="600" text-anchor="middle">Save / reopen locally</text>
+    <text x="1030.0" y="841" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">SQLite group links complete child runs</text>
+    <text x="1030.0" y="862" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Reopen without recomputing</text>
+    <text x="1030.0" y="883" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Successes survive another child failure</text>
+    <rect x="860" y="1000" width="340" height="120" rx="12" fill="#ffffff" stroke="#bdd7cc" />
+    <text x="1030.0" y="1030" fill="#183932" font-size="14" font-weight="600" text-anchor="middle">Export a frozen research record</text>
+    <text x="1030.0" y="1051" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Group offline HTML and full JSON</text>
+    <text x="1030.0" y="1072" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Individual core CSV / HTML / JSON</text>
+    <text x="1030.0" y="1093" fill="#617974" font-size="12" font-weight="400" text-anchor="middle">Core CSV is not order-ready</text>
+    <text x="60" y="1025" fill="#617974" font-size="13" font-weight="400">Start-site groups and researcher references do not establish promoter activity.</text>
+    <text x="60" y="1050" fill="#617974" font-size="13" font-weight="400">Ratings count evaluated criteria, not activation probability.</text>
+    <text x="60" y="1075" fill="#617974" font-size="13" font-weight="400">The same duplex can retain different offsets and verdicts under different references.</text>
+  </g>
+  <g transform="translate(60,1180)" font-family="system-ui,sans-serif">
+    <text x="50" y="68" fill="#183932" font-size="24" font-weight="600">Next: richer source evidence and bench-ready delivery</text>
+    <text x="50" y="112" fill="#617974" font-size="13">Planned work · existing design engine, workbench and local snapshots remain the foundation</text>
+    <polyline points="370,225 420,225" fill="none" stroke="#748b87" stroke-width="1.7" marker-end="url(#arrow)" stroke-dasharray="6 5" />
+    <polyline points="740,225 790,225" fill="none" stroke="#748b87" stroke-width="1.7" marker-end="url(#arrow)" stroke-dasharray="6 5" />
+    <polyline points="950,285 950,390" fill="none" stroke="#748b87" stroke-width="1.7" marker-end="url(#arrow)" stroke-dasharray="6 5" />
+    <polyline points="580,285 580,390" fill="none" stroke="#748b87" stroke-width="1.7" marker-end="url(#arrow)" stroke-dasharray="6 5" />
+    <polyline points="210,285 210,390" fill="none" stroke="#748b87" stroke-width="1.7" marker-end="url(#arrow)" stroke-dasharray="6 5" />
+    <polyline points="210,510 210,695 420,695" fill="none" stroke="#748b87" stroke-width="1.7" marker-end="url(#arrow)" stroke-dasharray="6 5" />
+    <polyline points="580,510 580,635" fill="none" stroke="#748b87" stroke-width="1.7" marker-end="url(#arrow)" stroke-dasharray="6 5" />
+    <polyline points="950,510 950,695 740,695" fill="none" stroke="#748b87" stroke-width="1.7" marker-end="url(#arrow)" stroke-dasharray="6 5" />
+    <rect x="50" y="165" width="320" height="120" rx="12" fill="#fff6e4" stroke="#cba668" stroke-dasharray="6 4" />
+    <text x="210.0" y="191" text-anchor="middle" fill="#183932" font-size="14" font-weight="600">Evidence adapters</text>
+    <text x="210.0" y="211" text-anchor="middle" fill="#617974" font-size="12" font-weight="400">Pinned archived EPDnew → DepMap</text>
+    <text x="210.0" y="231" text-anchor="middle" fill="#617974" font-size="12" font-weight="400">FANTOM5 → ENCODE</text>
+    <text x="210.0" y="251" text-anchor="middle" fill="#617974" font-size="12" font-weight="400">Local data and arbitrary cell tracks</text>
+    <rect x="420" y="165" width="320" height="120" rx="12" fill="#fff6e4" stroke="#cba668" stroke-dasharray="6 4" />
+    <text x="580.0" y="191" text-anchor="middle" fill="#183932" font-size="14" font-weight="600">Source provenance</text>
+    <text x="580.0" y="211" text-anchor="middle" fill="#617974" font-size="12" font-weight="400">Dataset versions · sample identity</text>
+    <text x="580.0" y="231" text-anchor="middle" fill="#617974" font-size="12" font-weight="400">Licence / attribution audit</text>
+    <text x="580.0" y="251" text-anchor="middle" fill="#617974" font-size="12" font-weight="400">Availability is not a measurement</text>
+    <rect x="790" y="165" width="320" height="120" rx="12" fill="#fff6e4" stroke="#cba668" stroke-dasharray="6 4" />
+    <text x="950.0" y="191" text-anchor="middle" fill="#183932" font-size="14" font-weight="600">Promoter context assessment</text>
+    <text x="950.0" y="211" text-anchor="middle" fill="#617974" font-size="12" font-weight="400">Activity, unknown, or low evidence</text>
+    <text x="950.0" y="231" text-anchor="middle" fill="#617974" font-size="12" font-weight="400">Named sources and editable conventions</text>
+    <text x="950.0" y="251" text-anchor="middle" fill="#617974" font-size="12" font-weight="400">Never a candidate score</text>
+    <rect x="50" y="390" width="320" height="120" rx="12" fill="#fff6e4" stroke="#cba668" stroke-dasharray="6 4" />
+    <text x="210.0" y="416" text-anchor="middle" fill="#183932" font-size="14" font-weight="600">Bench exports</text>
+    <text x="210.0" y="436" text-anchor="middle" fill="#617974" font-size="12" font-weight="400">19 nt cores + dTdT chemistry</text>
+    <text x="210.0" y="456" text-anchor="middle" fill="#617974" font-size="12" font-weight="400">Order CSV + sanity report</text>
+    <text x="210.0" y="476" text-anchor="middle" fill="#617974" font-size="12" font-weight="400">Promoter off-target findings reported</text>
+    <rect x="420" y="390" width="320" height="120" rx="12" fill="#fff6e4" stroke="#cba668" stroke-dasharray="6 4" />
+    <text x="580.0" y="416" text-anchor="middle" fill="#183932" font-size="14" font-weight="600">Per-run methods document</text>
+    <text x="580.0" y="436" text-anchor="middle" fill="#617974" font-size="12" font-weight="400">Effective rules and source versions</text>
+    <text x="580.0" y="456" text-anchor="middle" fill="#617974" font-size="12" font-weight="400">Default departures and known exceptions</text>
+    <text x="580.0" y="476" text-anchor="middle" fill="#617974" font-size="12" font-weight="400">Citable record of the experiment</text>
+    <rect x="790" y="390" width="320" height="120" rx="12" fill="#fff6e4" stroke="#cba668" stroke-dasharray="6 4" />
+    <text x="950.0" y="416" text-anchor="middle" fill="#183932" font-size="14" font-weight="600">Researcher installation</text>
+    <text x="950.0" y="436" text-anchor="middle" fill="#617974" font-size="12" font-weight="400">Windows / macOS / Linux feasibility</text>
+    <text x="950.0" y="456" text-anchor="middle" fill="#617974" font-size="12" font-weight="400">Test clean installs, upgrades and restore</text>
+    <text x="950.0" y="476" text-anchor="middle" fill="#617974" font-size="12" font-weight="400">No large mandatory track downloads</text>
+    <rect x="420" y="635" width="320" height="120" rx="12" fill="#fff6e4" stroke="#cba668" stroke-dasharray="6 4" />
+    <text x="580.0" y="661" text-anchor="middle" fill="#183932" font-size="14" font-weight="600">Validation and release</text>
+    <text x="580.0" y="681" text-anchor="middle" fill="#617974" font-size="12" font-weight="400">Independent checks of scientific claims</text>
+    <text x="580.0" y="701" text-anchor="middle" fill="#617974" font-size="12" font-weight="400">Browser and reproducibility checks</text>
+    <text x="580.0" y="721" text-anchor="middle" fill="#617974" font-size="12" font-weight="400">New empirical data, without overclaiming</text>
+  </g>
+</svg>

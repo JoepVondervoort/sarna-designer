@@ -6,9 +6,23 @@ traceability outranks clean code: every rule carries a citation, every verdict c
 **State:** gene symbol → promoter → ranked candidates → interactive page all work.
 `design_sarnas(promoter, config)` is the engine; `EnsemblClient` resolves a gene to a promoter;
 `sarna.regulatory` annotates it; `sarna.view.html.render` writes a self-contained browser.
-1,300 tests passed, eight live-network tests excluded; mypy strict and Ruff clean. Coverage was
-not remeasured. **No HTTP API** — the library and its
-scripts are the only interfaces.
+1,327 tests passed, eight live-network tests excluded; mypy strict and Ruff clean.
+The earlier combined statement/branch coverage measurement was **97%**; socket/launcher paths
+are additionally
+exercised by separate browser checks, which are not part of that coverage measurement.
+
+**`src/sarna/app/` is now an exercised local workbench.** Gene lookup, adjustable supported
+rules, Python jobs, draft/rerun diff, SQLite snapshots and JSON/HTML/core-CSV exports work.
+`tests/unit/test_app.py` covers recorded sources, coordinate/strand invariants, configuration,
+storage and exports. `scripts/verify_workbench_browser.py` uses a supplied Chromium binary:
+pasted DNA and cached SCN1A checks passed, including saved reopening, tooltips, mobile layout
+and complete excluded-candidate verdicts in an offline HTML file. Desktop/mobile screenshots
+were inspected. Fresh-cache live Ensembl browser runs also passed for lowercase `chd2` and
+`kcnq2`, with 13 and 9 candidates passing Wang defaults. Cache-only mode is visible; missing
+records offer an explicit online retry, while environment-forced offline remains enforced.
+Fresh Windows/macOS installations remain unverified.
+Read `docs/development/local-workbench.md` and ADR 0015. Earlier mid-session review observations
+in the continuation plan are historical; its final verification update supersedes them.
 
 ## Accepted continuation decisions — 2026-10-07
 
@@ -18,7 +32,7 @@ includes [ADR 0013](docs/adr/0013-researchers-can-adjust-rule-roles.md): researc
 scientific rules between mandatory, preference and off in advanced custom configurations.
 `pos19-a` stays mandatory in the default, while custom configurations may change its role.
 Explain defaults, alternatives and consequences, and record all custom departures. This is an
-accepted requirement; engine support is implemented, while the interactive editor is pending.
+accepted requirement; engine support and the interactive editor are implemented.
 [ADR 0014](docs/adr/0014-local-delivery-and-wang-default.md) records the latest clarification:
 local installation is the delivery target, Wang remains the default including its window gate,
 and other papers inform optional recommendations rather than universal rules. This supersedes
@@ -29,7 +43,7 @@ the earlier proposal to change the default window to a preference.
 Use `.venv/bin/python`; there is a miniconda base environment that must stay untouched.
 
 ```bash
-.venv/bin/python -m pytest -q                      # 1300 tests, ~17 s
+.venv/bin/python -m pytest -q                      # 1327 tests; excludes live network
 .venv/bin/python -m pytest -m network              # 8 live-Ensembl tests, excluded by default
 .venv/bin/python -m pytest -m tracks               # needs the AF22 bigWigs; skips if absent
 .venv/bin/python -m mypy src tests scripts         # strict
@@ -48,7 +62,18 @@ scripts/locate_scn1a_designs.py            # needs network; maps the thesis's de
 scripts/af22_chromatin_at_targets.py       # needs network + AF22 tracks; controls included
 scripts/locate_dataset_designs.py          # needs network; already run, its CSV is committed
 scripts/build_promoter_view.py SCN1A --html out.html    # needs network the first time
+scripts/build_demo_views.py                # offline synthetic default/custom preview pages
 ```
+
+The local app; inspect explanations and data gaps, not just the rank:
+
+```bash
+.venv/bin/python -m sarna.app --port 8001            # then open http://localhost:8001/
+curl -s localhost:8001/api/catalogue | head -c 200   # rules, presets and cell lines
+```
+
+`AppRouter.dispatch(method, target, body)` exercises every route without a socket, which is how
+the app's tests should be written.
 
 ## Invariants
 
@@ -175,7 +200,8 @@ Headline results:
   Preserve explicit uncertainty when adding measured alternatives. See
   `docs/scientific/scn1a-design-coordinates.md`.
 - **Local application and installers.** `sarna.view.html.render` produces a self-contained page;
-  a local Python service, interactive editor and tested installation paths remain to be built.
+  the local Python service, editor, run snapshots and frozen workbench export now exist.
+  Tested cross-platform installation paths and packaged installers remain to be built.
 - **Position 18/19 when target length ≠ 19.** Evaluators use the literal Table 1 position and
   report `not-applicable` if the target is shorter. For a 21-mer, position 19 stops being the 3'
   terminal base and `pos19-a`'s mechanism no longer holds. Maximum is already 19; the library
@@ -188,7 +214,8 @@ Headline results:
   Wang's −1000…−100 it rejects 64% of candidates on a real promoter and 10 of the 14 known
   activators, including KLF4 at −45 and CEBPA (in human trials) at −1088. As a preference it would
   admit all 14 and lose the strongest filter the engine has. The rule now offers the thesis's own
-  −2000…+500 window as a sourced option, with implementation restricted to an end of 0.
+  -2000…+500 window as a sourced upstream-only option, actually -2000…-1, with the restriction
+  stated in its label and note. Zero cannot be a TSS coordinate.
   Wang's gate remains the default; custom configurations can change its role or disable it.
 - **`pos19-a` excludes CEBPA**, the duplex in MTL-CEBPA and the first saRNA in human trials.
   The gate stays conformant with Table 1 in the default. Custom roles are now supported and
@@ -204,11 +231,22 @@ Headline results:
 
 ## Next
 
-Follow the continuation plan. No further scientific/default confirmation is required for its
-next slice. Complete browser checks, source/licence metadata reconciliation and configuration
-versioning; generalise context readers and add pinned archived EPDnew, then DepMap, FANTOM5 and
-ENCODE. Build frozen local run storage, the settings-to-rerun workbench path and tested installers.
-Keep optional source retrieval explicit and include cached/offline use.
+The first `src/sarna/app/` slice is implemented and exercised: gene-to-promoter lookup,
+editable rules, visible guide predictions and ratings, hover explanations, reruns with diff,
+local persistence and frozen exports. Repeat its browser check when changing UI paths that
+carry scientific claims; use `AppRouter.dispatch` for offline route/store/source tests.
+
+Continue the continuation plan: source/licence metadata reconciliation and
+configuration versioning; generalise context readers and add pinned archived EPDnew, then DepMap,
+FANTOM5 and ENCODE; methods/order exports and tested installers. The current diff compares a
+new run against the previously displayed run; arbitrary saved-run comparison remains an extension.
+No further scientific/default confirmation is required for that slice. Keep optional source
+retrieval explicit and include cached/offline use.
+
+The user's 7 October interface feedback refines milestone 6's acceptance criteria and is recorded
+there: pre-assigned demos are not the deliverable, the promoter visualisation needs hover
+explanations of what each element means, the rating and the predicted guide strand must be
+visible per candidate, and every setting must be adjustable from the browser.
 
 Low active-mark enrichment in AF22 is a contextual observation, not a direct transcription
 measurement or proof of the cause of a null result. HeLa expression remains unverified. Keep

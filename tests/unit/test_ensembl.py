@@ -21,6 +21,7 @@ from sarna.genome.anchors import PromoterAnchor, ReferenceKind
 from sarna.genome.coordinates import Assembly, GenomicInterval, Strand
 from sarna.genome.ensembl import (
     AssemblyMismatchResponseError,
+    EnsemblCacheMissError,
     EnsemblClient,
     EnsemblUnavailableError,
     GeneNotFoundError,
@@ -481,8 +482,10 @@ class TestOfflineMode:
 
     def test_a_cache_miss_refuses_rather_than_fetching(self, tmp_path: Path) -> None:
         offline = client_for(DEFAULT_ROUTES, cache_dir=tmp_path, offline=True)
-        with pytest.raises(EnsemblUnavailableError, match="SARNA_OFFLINE"):
+        with pytest.raises(EnsemblCacheMissError, match="Cache-only mode") as failure:
             offline.gene("SCN1A")
+        assert "SARNA_OFFLINE" not in str(failure.value)
+        assert "offline=False" in str(failure.value)
         assert requests_made(offline) == []
 
     def test_the_refusal_names_what_was_missing(self, tmp_path: Path) -> None:
@@ -526,7 +529,7 @@ class TestOfflineMode:
         # Guarding only the object path would leave annotation quietly reaching the network.
         interval = GenomicInterval(Assembly.GRCH38, "2", 166_127_500, 166_129_000)
         offline = client_for(DEFAULT_ROUTES, cache_dir=tmp_path, offline=True)
-        with pytest.raises(EnsemblUnavailableError, match=settings.OFFLINE_VARIABLE):
+        with pytest.raises(EnsemblCacheMissError, match="Cache-only mode"):
             offline.overlap(interval, "regulatory")
         assert requests_made(offline) == []
 

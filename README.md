@@ -4,12 +4,13 @@ An internal research application for designing promoter-targeting **small activa
 (saRNAs), taking a researcher from a gene symbol or a pasted promoter sequence through to
 ranked, annotated, exportable duplex candidates.
 
-> **Status: Phase 3 — gene symbol to annotated, browsable design run.**
+> **Status: local research workbench.**
 > A gene symbol resolves to a promoter through Ensembl, the engine designs and ranks candidates
 > on either strand and explains every verdict, the promoter is annotated with CpG islands,
 > regulatory features and TF motif predictions, and the whole run renders as one self-contained
-> interactive HTML page. **There is no HTTP API and no hosted UI**; the library, four scripts and
-> the generated page are the interfaces.
+> interactive HTML page. The local app adds gene lookup, browser-editable rules, Python reruns,
+> saved runs, and exports. Launch with `.venv/bin/python -m sarna.app`; open
+> **http://localhost:8001/**. The earlier `http.server` previews serve static files.
 >
 > The engine is now validated against measured activity for the first time — 125 assayed
 > sequences, 14 of them activators. The position-19 gate excludes CEBPA, a known activator;
@@ -81,6 +82,13 @@ gene, **~70 % have no effect**, and **5–10 % suppress** it. A high rank from t
 prioritisation aid, not a prediction of activity.
 
 ## Using the engine
+
+To use the adjustable app, follow the [local workbench guide](docs/development/local-workbench.md).
+It retrieves supported human genes through Ensembl and accepts pasted DNA. New genes/windows need
+internet; cached responses support offline runs. The earlier generated pages remain described in
+the [preview guide](docs/development/trying-the-browser.md). An editable
+[flow diagram](docs/architecture/website-flow.drawio) and
+[SVG preview](docs/architecture/website-flow.svg) show the workbench and remaining work.
 
 ```python
 from sarna.design.pipeline import design_sarnas
@@ -158,9 +166,11 @@ for lost in report.rejected_activators:        # duplexes that worked and the ga
 
 ## Current limitations
 
-- **No local app service or packaged installers yet.** The library, scripts and generated HTML
-  are the current interfaces. A local workbench with tested installation paths for supported
-  Windows, macOS and Linux systems is the accepted delivery target; see the
+- **The workbench is an initial local release.** Automated offline tests cover jobs, scientific
+  configuration, coordinates, persistence and exports; Chromium checks cover cached SCN1A,
+  fresh live-Ensembl CHD2/KCNQ2 designs, custom reruns and explicit cache-miss recovery.
+  Windows/macOS installers were not verified in this environment. Packaged installers remain
+  to be built; see the
   [continuation plan](docs/development/continuation-plan.md).
 - **3' overhangs are not modelled.** Candidates are 19 nt cores; what a researcher orders is a
   21-mer with a 3' dTdT overhang on both strands. Order-ready CSV and chemistry validation

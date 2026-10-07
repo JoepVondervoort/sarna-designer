@@ -15,6 +15,8 @@ authors = [{ name = "Joep Vondervoort" }]
 dependencies = ["pydantic>=2.7,<3"]
 
 [project.optional-dependencies]
+# Browser workbench and Ensembl lookups; no platform-specific histone reader is required.
+app = ["httpx>=0.27,<1"]
 # Genomics/epigenomics adapters. Separated so the engine stays installable without them.
 genomics = [
     "httpx>=0.27,<1",     # Ensembl REST client
@@ -30,6 +32,9 @@ dev = [
     "ruff>=0.5",
 ]
 
+[project.scripts]
+sarna-designer = "sarna.app.__main__:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/sarna"]
 # Reference datasets are part of the library, not test scaffolding: the validation harness
@@ -38,6 +43,7 @@ artifacts = [
     "src/sarna/validation/data/*.csv",
     "src/sarna/regulatory/data/*.json",
     "src/sarna/view/*.html",
+    "src/sarna/app/static/*",
     "src/sarna/genome/data/*.toml",
     "src/sarna/regulatory/data/*.toml",
 ]

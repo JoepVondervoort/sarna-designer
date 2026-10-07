@@ -25,6 +25,7 @@ testable with no external dependency.
 """
 
 import json
+import re
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -95,6 +96,10 @@ class EnsemblError(RuntimeError):
 
 class EnsemblUnavailableError(EnsemblError):
     """Raised when Ensembl cannot be reached or returns an error status."""
+
+
+class EnsemblCacheMissError(EnsemblUnavailableError):
+    """A required response is absent while external requests are disabled."""
 
 
 class GeneNotFoundError(EnsemblError):
@@ -208,6 +213,7 @@ class EnsemblClient:
     __slots__ = (
         "_backoff",
         "_client",
+        "_offline_from_environment",
         "_timeout",
         "assembly",
         "base_url",
@@ -241,6 +247,7 @@ class EnsemblClient:
         self.base_url = HOSTS[assembly]
         self.cache_dir = cache_dir
         self.offline = settings.is_offline() if offline is None else offline
+        self._offline_from_environment = offline is None and self.offline
         self._timeout = timeout
         self._client = client
         self._backoff = backoff_seconds
@@ -368,16 +375,22 @@ class EnsemblClient:
         """Raise rather than reach the network, naming what was missing.
 
         Raises:
-            EnsemblUnavailableError: Always. Only called once a cache miss is established.
+            EnsemblCacheMissError: Always. Only called once a cache miss is established.
         """
         where = (
             "no cache is configured, so nothing can be served"
             if self.cache_dir is None
             else f"it is not in the cache at {self.cache_dir}"
         )
-        raise EnsemblUnavailableError(
-            f"{settings.OFFLINE_VARIABLE} is set, so {path} was not requested, and {where}. "
-            f"Either unset it to fetch, or run the query once online to populate the cache."
+        recovery = (
+            f"{settings.OFFLINE_VARIABLE} forces this mode. Unset it and restart the app "
+            "to allow online retrieval."
+            if self._offline_from_environment else
+            "Turn off 'Use cached Ensembl data only' in the app, or set offline=False "
+            "in the client, then retry to fetch and cache this response."
+        )
+        raise EnsemblCacheMissError(
+            f"Cache-only mode: {path} was not requested, and {where}. {recovery}"
         )
 
     def _get_array(self, path: str) -> JsonArray:
@@ -413,10 +426,12 @@ class EnsemblClient:
             )
 
     def gene(self, symbol: str) -> Gene:
-        """Look up a gene by its HGNC symbol.
+        """Look up a gene by its HGNC symbol or human Ensembl stable gene ID.
 
         Args:
-            symbol: The gene symbol, e.g. ``"SCN1A"``. Case-sensitive at Ensembl.
+            symbol: The gene symbol, e.g. ``"SCN1A"``, or ``ENSG`` stable ID. Gene
+                symbols are case-sensitive at Ensembl; a gene-ID version suffix is accepted
+                but resolves the current record, rather than pinning an annotation release.
 
         Returns:
             The gene, with its span on this client's assembly.
@@ -426,6 +441,8 @@ class EnsemblClient:
             AssemblyMismatchResponseError: If Ensembl reports a different assembly.
             EnsemblUnavailableError: If Ensembl cannot be reached.
         """
+        if re.fullmatch(r"ENSG\d{11}(?:\.\d+)?", symbol):
+            return self.gene_by_id(symbol)
         payload = self._get(f"/lookup/symbol/homo_sapiens/{symbol}?expand=0")
         self._check_assembly(payload.get("assembly_name"), f"gene {symbol}")
         return Gene(
@@ -433,6 +450,30 @@ class EnsemblClient:
             symbol=payload.get("display_name", symbol),
             interval=self._interval_from(payload),
             description=payload.get("description") or "",
+        )
+
+    def gene_by_id(self, identifier: str) -> Gene:
+        """Resolve a human stable gene ID, refusing other species or feature types.
+
+        A version suffix identifies the input but does not freeze the annotation release:
+        the unversioned stable ID is looked up on this client's assembly endpoint.
+        """
+        if not re.fullmatch(r"ENSG\d{11}(?:\.\d+)?", identifier):
+            raise ValueError("Enter a human Ensembl gene ID such as ENSG00000144285.")
+        stable_id = identifier.split(".", 1)[0]
+        payload = self._get(f"/lookup/id/{stable_id}?expand=0")
+        if payload.get("species") != "homo_sapiens" or payload.get("object_type") != "Gene":
+            raise ValueError("The Ensembl ID must identify a human Gene record.")
+        if payload.get("id") != stable_id:
+            raise EnsemblUnavailableError(
+                f"requested gene {stable_id} but Ensembl returned {payload.get('id')!r}"
+            )
+        if not payload.get("assembly_name"):
+            raise EnsemblUnavailableError(f"Ensembl omitted the assembly for gene {stable_id}.")
+        self._check_assembly(payload["assembly_name"], f"gene {stable_id}")
+        return Gene(
+            ensembl_id=stable_id, symbol=payload.get("display_name") or stable_id,
+            interval=self._interval_from(payload), description=payload.get("description") or "",
         )
 
     def transcripts(self, gene: Gene) -> tuple[Transcript, ...]:

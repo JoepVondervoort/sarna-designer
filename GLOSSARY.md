@@ -23,12 +23,16 @@ project; prefer **passenger** when discussing strand *fate*, **sense** when disc
 **Antisense strand** / **Guide strand**
 The duplex strand complementary to the Target, and the strand intended to be loaded into RISC.
 Prefer **guide** when discussing strand *fate*, **antisense** when discussing *sequence
-identity*. See *Guide prediction* — in this project guide fate is enforced, not predicted
-per-candidate.
+identity*. The duplex is *designed* so that the antisense strand is the guide; see
+*Guide prediction* for what a thermodynamic model expects for a given candidate, which is
+reported alongside that intent and can disagree with it.
 
 **Duplex**
-The deliverable: a 19 bp Target/antisense core plus a 2 nt `UU` 3' overhang on **both** strands,
-i.e. two 21-mers. The overhang is not part of the Target and is never scanned or scored.
+The deliverable: a 19 bp Target/antisense core plus a 2 nt **dTdT** 3' overhang on **both**
+strands, i.e. two 21-mers. The overhang is deoxythymidine, not ribo-`UU` — chapter 2's
+supplementary material settles that for this project's own duplexes. It is a synthesis choice
+and does not change the 19 nt core, which is what every rule is evaluated against. The overhang
+is not part of the Target and is never scanned or scored.
 
 **Complement** vs **reverse complement**
 **Complement** maps each base to its partner, preserving index order. **Reverse complement**
@@ -114,6 +118,65 @@ Exactly one of **generated** (window enumerated), **rejected** (failed ≥1 filt
 (all filters satisfied), **ranked** (passing, with a rank assigned). Statuses are cumulative
 stages, not independent labels.
 
+**Rating**
+What a ranked candidate reports to a reader: **preferences met out of preferences evaluated**,
+itemised, plus the gates that could not be checked. The denominator is the number of preferences
+that could actually be evaluated for *this* candidate, never the number configured, because a
+*not-applicable* preference is not a failed one. A rating is a count of criteria, not a
+probability of activation, and two configurations with different preference sets produce ratings
+that are not comparable with each other.
+
+---
+
+## Configuration and runs
+
+**Rule role**
+Whether a rule acts as a **filter**, a **score term** or not at all, *in one configuration*.
+Two roles are distinguished and both travel with a run: the **catalogue role**, which is the
+role the rule declares and which no run may change, and the **effective role**, which is the
+role this configuration resolved it to. A rule's effective role reaches gating, preference
+counting, ranking, candidate verdicts and exports together, or it has not been changed at all.
+
+**Off**
+A rule a configuration has deliberately removed. *Off* is not *failed* and not
+*not-applicable*: the rule produced no result because it was not evaluated, and the run records
+that the omission was a choice. See *Three outcomes* in `CLAUDE.md`.
+
+**Custom configuration**
+A configuration that departs from its base preset in any way — a parameter value, a selected
+option or an effective role. A custom configuration is labelled as custom wherever it appears,
+and it carries its **frozen baseline** so a reader can see what it departed from.
+
+**Frozen baseline**
+The complete resolved configuration of the base preset *as it was when the run happened*, stored
+with the run. A preset definition can change between versions, so naming the preset is not
+enough to reconstruct what was run.
+
+**Departure**
+One recorded difference between a custom configuration and its frozen baseline, naming the rule,
+what changed and the **choice origin**: preset default, named sourced option, or researcher
+custom value. A value that merely happens to equal a published option's value does not acquire
+that option's provenance — origin is declared, never inferred from a number.
+
+**Run**
+One execution of the engine over one promoter with one resolved configuration, with its inputs,
+evidence snapshot, candidates, verdicts and ranks. A run is the unit that gets saved, reopened,
+exported and compared.
+
+**Run snapshot**
+The frozen record of a completed run. Reopening a snapshot consults no preset definition, no
+remote source and no current software default; everything needed to interpret it is inside it.
+
+**Derived run**
+A run produced by changing a setting on an earlier run, linked to its parent so the difference
+can be explained. Candidates are compared across runs by sequence, location and orientation —
+never by rank or display id, which both move.
+
+**Viewer** vs **workbench**
+A **viewer** displays one finished run and cannot change it; the self-contained HTML page is a
+viewer. A **workbench** is the local application in which a researcher chooses a gene, adjusts
+settings and starts new runs. A viewer is what a workbench exports.
+
 ---
 
 ## Thermodynamics
@@ -134,6 +197,18 @@ preserved from the legacy script deliberately.
 **Thermodynamic asymmetry**
 The principle that the duplex strand whose 5' end is less stably paired is preferentially loaded
 into RISC. The basis of filters R4, R6, R7 and R8.
+
+**Nearest-neighbour table**
+One published set of stacking free energies, e.g. `rna-xia-1998`. Tables disagree, so every
+thermodynamic number names the table it came from.
+
+**Guide prediction**
+Which strand of a designed duplex a nearest-neighbour table expects RISC to retain. Distinct
+from design *intent*: the duplex is built so that the antisense strand is the guide, and for a
+given candidate the prediction can disagree with that intent. Predictions are reported **per
+table and never averaged**, because 13% of candidates flip between tables
+(`docs/scientific/guide-prediction-divergence.md`). A displayed prediction always names its
+table, and disagreement between tables is shown rather than resolved.
 
 ---
 
@@ -181,3 +256,10 @@ enhances transcription from a locus that already has some rather than switching 
 **genomic coordinate**.
 **"The promoter sequence"** for a pasted input — that is an **input sequence**; it becomes a
 promoter window only once a TSS is known.
+**"Target strand"** — ambiguous between three different things: the DNA strand the Target is
+read from, the duplex strand complementary to the Target, and the strand RISC retains. Say
+**sense strand** or **antisense strand** for sequence identity, **guide strand** for strand
+fate, **predicted guide** for a model's expectation, and **genomic strand** for the locus.
+**"X% match"**, **"confidence"** or **"likelihood of activation"** for a rating — the rating
+counts criteria met out of criteria evaluated. Nothing in this project estimates a probability
+of activation, and no ranking here has been shown to beat chance.

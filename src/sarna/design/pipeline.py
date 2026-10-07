@@ -202,16 +202,26 @@ def _build(
         tss_span=context.tss_span,
         interval=context.interval,
         results=results,
-        guide_comparison=_compare(context, comparison_tables),
+        guide_comparison=_compare(context, comparison_tables, config),
         max_preference_points=config.max_preference_points,
     )
 
 
 def _compare(
-    context: CandidateContext, tables: tuple[NearestNeighbourTable, ...]
+    context: CandidateContext, tables: tuple[NearestNeighbourTable, ...], config: DesignConfig,
 ) -> AsymmetryComparison:
-    """Return the per-table guide predictions reported beside a candidate."""
-    return compare_asymmetry(context.target, tables)
+    """Compare tables using the selected asymmetry rule's end length, or the default.
+
+    The gate takes precedence over the optional ranking tiebreak. Comparing four bases while
+    evaluating an explicitly chosen different end length could report the opposite strand.
+    """
+    selected = next((config.rule(key) for key in (
+        "thermodynamic-asymmetry", "asymmetry-margin"
+    ) if key in config), None)
+    return compare_asymmetry(
+        context.target, tables,
+        end_length=selected.integer("end-length-nt") if selected else 4,
+    )
 
 
 def _rank(passing: tuple[Candidate, ...]) -> tuple[Candidate, ...]:

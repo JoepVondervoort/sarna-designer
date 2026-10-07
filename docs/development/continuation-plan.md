@@ -38,9 +38,12 @@ Read the existing ADRs, glossary and scientific notes before changing their cont
 - An existing uncommitted change in `src/sarna/view/template.html` adds visible rule sources,
   reasoning, thresholds, alternatives and configuration-derived window bands. Preserve it,
   review it and exercise it in a browser before counting the transparency work as complete.
-- Local verification: 1,279 tests passed, eight live-network tests deselected; strict mypy over
-  `src tests scripts` and `ruff check .` passed. This does not establish coverage, live-source
-  correctness, browser behavior or availability of the actual histone tracks.
+  *Committed since, and loaded in a browser by the user. See the status section below.*
+- Local verification at the time this plan was written: 1,279 tests passed, eight live-network
+  tests deselected; strict mypy over `src tests scripts` and `ruff check .` passed. This does not
+  establish coverage, live-source correctness, browser behavior or availability of the actual
+  histone tracks. *Superseded: 1,300 pass, mypy is clean, `ruff check .` now fails with 9 errors
+  and coverage is 89%, both because of `src/sarna/app/`. See the status section below.*
 - The subsequent custom-configuration slice implements effective roles and frozen baseline/choice
   metadata, with benchmark and browser checks recorded in
   [configuration verification](custom-configuration-verification.md). Full milestone 1 and the
@@ -56,6 +59,121 @@ reconciliation; historical passages sometimes precede later corrections.
 The supplied discussion mentions “seven defects” without enumerating them. Do not invent their
 identity or equate them with the 18 legacy defects. Establish an explicit current defect list
 from code, tests and rendered output during the first milestone.
+
+## Status — 7 October 2026, 13:33
+
+**Read this section's timestamp before trusting its numbers.** The local-app slice was being
+written by a second agent *while this review ran*: `src/sarna/app/static/` did not exist at
+13:19, appeared at 13:28, and `app.js`, `service.py` and `models.py` changed again at 13:32.
+Nine `ruff` errors present at 13:25 were gone by 13:32. Re-run the checks rather than trusting
+what follows.
+
+Measured at 13:33: `1300 passed, 8 deselected`; `mypy` strict clean over 108 source files;
+`ruff check .` clean; statement coverage **89%**, and **every one of the 399 uncovered statements
+is in `src/sarna/app/`**, which is at 0%.
+
+### What is done
+
+- **Milestone 1, transparency half.** The page now renders what the rule records carry. Three
+  commits landed the export layer (`Provenance.to_dict`, `RuleParameter.to_dict`,
+  `RuleOption.to_dict`, `Rule.to_dict`, `DesignConfig.to_dict` joining by rule id) and the
+  template that reads it: per-rule citation, evidence class, rationale, consequence, thresholds
+  with units and legal ranges, the sourced alternatives not chosen, and context bands derived
+  from the configured window rather than hard-coded to Wang's. A generated page carries 18 rule
+  records with `rationale`, `consequence`, structured `provenance` and valued parameters; the
+  footer's claim about provenance is now true of the data behind it.
+- **Milestone 1, defects half.** A declared `target-length` range that crashed at 20 and 21 is
+  capped at 19; chromatin signals carry their own `Provenance` so a HeLa profile can no longer
+  cite AF22's accession; the cell-line dispatch asks the reader which line its tracks describe
+  instead of testing identity against AF22; `src/sarna/settings.py` owns the environment
+  contract and the three documented-but-dead registry variables now work; `--full-rules` reaches
+  the HTML as well as the JSON.
+- **Milestone 2, engine and export.** `Preset.resolve` takes `role_overrides` and `option_ids`.
+  Effective roles reach gating, preference counting, ranking, candidate verdicts and exports
+  together; the frozen preset baseline, disabled rules, deliberate option identity and custom
+  departures all survive into the record. [ADR 0013](../adr/0013-researchers-can-adjust-rule-roles.md)
+  and [ADR 0014](../adr/0014-local-delivery-and-wang-default.md) record the accepted policy, and
+  [configuration verification](custom-configuration-verification.md) records the hand-computed
+  expectations.
+- **Browser check, manual.** `scripts/build_demo_views.py` writes offline default and custom
+  previews; `out/scn1a.html` is a real cached SCN1A record. The user served `out/` over
+  `http.server` and confirmed all three pages load. No automated browser check exists: Playwright
+  has no Chromium installed in this environment, so page behaviour is covered by data-level
+  assertions in `tests/unit/test_html_render.py` and by manual inspection only.
+
+### What exists but is unexercised
+
+`src/sarna/app/` is a local workbench with both halves present as of 13:33: a backend and the
+static interface it serves.
+
+The backend is real and was verified end-to-end by hand, offline, through `AppRouter.dispatch`
+with no socket: `GET /api/genes/SCN1A?offline=true` returns 30 transcripts with
+`ENST00000674923` as the unique MANE Select and the three declared SCN1A literature anchors;
+a submitted run completes through its progress stages to 2,482 generated and 14 passing; rank 1
+(`saRNA-1549`) reports `6/7 evaluated preferences` with `antisense` as the predicted guide under
+`rna-xia-1998` and both tables agreeing; `export.csv` writes the 14 ranked rows with both strands
+5′→3′; `export.json` and `export.html` both answer. An out-of-cache window fails with an error
+that names the exact query, the cache path and the two ways to fix it, which is the behaviour the
+offline contract promises.
+
+`RunStore` persists to one SQLite file with progress stages, compresses each snapshot, and marks
+runs interrupted by a restart. `DesignRequest` validates input and resolves the configuration
+through the same Python path as the library, so an invalid custom configuration is rejected before
+a job is queued. The server binds loopback only and checks `Host` and `Origin`.
+
+**What is missing is the evidence that any of it is right.** The five Python modules have no tests
+— 399 statements at 0% coverage, the whole of the project's coverage shortfall — and `app.js`,
+`app.css` and `index.html` have none either. Nobody has opened the interface in a browser;
+Playwright has no Chromium in this environment, so that check is manual and has not been done.
+
+A second agent also changed `src/sarna/design/pipeline.py`: `_compare` now reads the selected
+asymmetry rule's `end-length-nt` instead of hard-coding 4, on the stated reasoning that comparing
+four bases while a run evaluates a different end length could report the opposite strand. The
+reasoning is sound and `end_length` is well covered at the thermodynamic level, but **no test
+names this pipeline path**, so a regression in it would be silent. It is a scientific output
+path and needs a test that fails when the wiring is removed.
+
+### Defect list with dispositions
+
+Milestone 1 requires an explicit current defect list. These are confirmed by running the code,
+not inferred.
+
+| # | Defect | Evidence | Disposition |
+|---|---|---|---|
+| D1 | `src/sarna/app/` has no tests — 399 uncovered statements across five modules, plus untested `app.js` | `pytest --cov`: every app module 0% | Fix first. `AppRouter.dispatch` takes a method and a target and needs no socket, which is what it is for |
+| D2 | The interface has never been opened in a browser | No Chromium for Playwright here; no manual check recorded | Open it against cached SCN1A and read what it shows, including rejected candidates and the rating |
+| D3 | `_compare` reading `end-length-nt` from the configuration has no test | `grep end_length tests/` finds thermodynamic coverage only | Add a pipeline test that fails if the wiring is reverted |
+| D4 | The generated viewer and the app's interface are now two separate renderers of the same run | `src/sarna/view/template.html` (1,074 lines) and `src/sarna/app/static/app.js` (38 KB); `export.html` inlines the latter | Needs a decision, not a fix — see the open question below |
+| D5 | The frozen `export.html` is 18.9 MB for SCN1A against 2.1 MB for the same gene from `template.html`; it embeds every rule verdict for all 2,482 candidates with no abbreviation | Measured 7 October | Apply the same abbreviation the view payload uses, or state why an archive should carry everything |
+| D6 | `export.html` still references `/favicon.svg` and links to `/`, both of which break once the file is archived away from a running app | Measured 7 October: those are the only two external references left | Inline the favicon and drop or neutralise the back-link |
+| D7 | `app.css` sets `font-family:Inter` with no `@font-face` and no stylesheet link, so Inter never loads and the page silently falls back to the system UI font | `grep -c "@font-face\|fonts.googleapis" app.css` → 0 | Bundle the font locally, which also keeps the frozen export dependency-free, or choose a system stack deliberately |
+| D8 | `tss-window` offers an option labelled "−2000 to +500 bp" whose effective `window-end-bp` is 0 | Recorded earlier in this plan; still open | Display the implemented range and explain the restriction |
+| D9 | `GLOSSARY.md` defined the duplex overhang as `UU`, contradicting the settled dTdT chemistry | Glossary versus constraint 4 and `docs/scientific/` | Fixed 7 October alongside this status update |
+
+### Open question this status raises
+
+There are now two independent renderers for one run: the self-contained
+`src/sarna/view/template.html`, which carries the committed transparency work and has data-level
+tests, and `src/sarna/app/static/app.js`, which the workbench serves and which `export.html`
+inlines to produce a frozen page. Two renderers means every transparency guarantee has to be
+built and kept true twice, and the two can disagree about the same run. Converging on one is a
+decision with a real cost either way and belongs in an ADR.
+
+### The user's interface feedback, 7 October
+
+Recorded verbatim in substance, because it sets milestone 6's acceptance criteria and contradicts
+nothing already accepted:
+
+1. A researcher chooses **any supported human gene**; the tool looks up its promoter and designs
+   duplexes against it. Pre-assigned demonstrations are previews, not the product.
+2. The **predicted guide strand** must be visible per candidate, with the model that predicted it.
+3. The **rating** must be legible and must say what it counts.
+4. The **promoter visualisation needs rebuilding**, with hover explanations saying what each
+   element means rather than assuming the reader knows.
+5. **Every setting is adjustable from the browser**, not by editing Python.
+
+Items 1–3 and 5 are served by the existing backend and blocked only by D1. Item 4 is new design
+work on the promoter track and is the one part with no implementation behind it yet.
 
 ## Accepted constraints
 
@@ -322,6 +440,26 @@ the agreed scope, location controls, chromatin controls and the remaining catalo
 **Exit:** a researcher can complete setup, inspect warnings, change a setting, compare and reopen
 a run through the application without writing Python.
 
+### Acceptance criteria from the user's 7 October feedback
+
+The application written on 7 October claims to serve most of this and has no tests or browser
+check behind the claim. Each criterion is checked by using the running application, not by reading
+its code.
+
+- Typing a human gene symbol returns its transcripts and declared literature anchors, and the
+  researcher picks one deliberately. No arbitrary transcript is chosen for them.
+- Each candidate shows its predicted guide strand, named with the model that predicted it, and
+  says so when the two nearest-neighbour tables disagree. The genomic strand of the locus is
+  displayed separately and never conflated with it.
+- The rating states what it counts — preferences met out of preferences *evaluated* — names the
+  gates that could not be checked, and never reads as a probability of activation.
+- The promoter visualisation explains itself on hover: what a band, a track, a mark and a
+  candidate are, in a sentence a researcher who has not read this repository can act on.
+- Every setting the catalogue declares is adjustable in the browser, with its definition, units,
+  legal range, default origin, sourced alternatives and the measured effect of the change on this
+  promoter. Applying a change runs Python and shows the resulting diff.
+- A pasted sequence with no genomic context still works, with the unavailable checks named.
+
 Also verify a sourced alternative, a custom value, an invalid combination, a reset, an imported
 configuration and missing-context behavior. The researcher can distinguish the setting's
 motivation, its measured effect on this run and the absence of validated efficacy evidence.
@@ -347,10 +485,28 @@ the application. Claims about off-target coverage and activity remain bounded by
 
 ## Immediate next implementation slice
 
-Complete milestone 1, then deliver milestone 2 as one reviewable scientific change with ADRs,
-benchmark output and generated example pages. This resolves the accepted policy before building
-data adapters or a user interface around stale semantics. No further confirmation of the accepted
-decisions is needed. Milestone 1 browser checks and documentation cleanup remain unfinished.
+**Superseded on 7 October by what was actually built.** Milestone 1's transparency work and
+milestone 2's engine, export and ADRs are done (see the status section above), and a milestone 6
+backend was then written out of order with no interface attached. The next slice is therefore to
+finish that application rather than to start milestone 3:
+
+1. Test the router and the store offline through `AppRouter.dispatch`, which takes a method and a
+   target and needs no socket. Cover an invalid custom configuration, a gene that does not exist,
+   a pasted sequence with no TSS, a run that fails mid-way, a reopened snapshot and an export.
+2. Test the `app.js` behaviour that carries a scientific claim — the rating's denominator, the
+   predicted guide and its model, rejected candidates staying visible with their reasons, and
+   missing evidence reading as unknown rather than negative.
+3. Add the pipeline test for the configured asymmetry end length (D3).
+4. Use the running application against a real cached gene and read what it shows. Record what is
+   wrong with it as defects before changing anything.
+5. Decide the one-renderer-or-two question (D4) and record it as an ADR before the two diverge
+   further.
+
+Only then return to milestone 3. The earlier sequencing argument still holds for everything after
+this slice: resolve accepted policy before building adapters around it.
+
+The historical text of this slice follows, since its milestone-2 steps describe work already
+landed and its reasoning is still the reasoning.
 
 Deliver milestone 2 in small steps:
 
@@ -400,3 +556,102 @@ check starts earlier so distribution constraints can shape dependency choices in
 - [AF22 H3K4me3 sample GSM2902406](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM2902406)
 - [2026 curated saRNA database paper](https://doi.org/10.3390/molecules31183249)
 - [Authors' database and source records](https://github.com/NIC-SBI/sarna-database)
+
+## Workbench verification update — 7 October 2026, after implementation
+
+This supersedes the 13:33 review's untested-app observations while preserving them as history.
+The local workbench is implemented and exercised. Launch and installation instructions are in
+[local-workbench.md](local-workbench.md); architectural choices are in
+[ADR 0015](../adr/0015-local-workbench-and-frozen-ui.md).
+
+- **D1–D3:** 22 new offline tests exercise jobs, multiple recorded genes, minus-strand
+  coordinates, custom roles/values/options, missing evidence, guide-comparison end length,
+  snapshots and exports. Full suite: 1,322 passed, eight live tests deselected. Ruff and strict
+  mypy pass; pytest's combined statement/branch coverage is 97%. The independently derived
+  GC/AA two-base RNA difference pins the adjusted pipeline path at +2.49 kcal/mol.
+- **D2, browser evidence:** `scripts/verify_workbench_browser.py` passed with cached SCN1A and
+  pasted DNA. Actual Chromium checks cover draft preservation, reruns/diff, saved reopening,
+  hover, mobile layout and an offline HTML file's full excluded-candidate verdicts. Desktop
+  and mobile screenshots were inspected. No Playwright Python dependency was needed.
+- **D4–D5:** The live workbench and its frozen export share the same UI. The older CLI viewer
+  remains for compatibility. Complete archival verdicts intentionally cost file size, while
+  SQLite compresses snapshots. See ADR 0015 for scope and later renderer migration.
+- **D6–D8:** Frozen favicon is inline and the root link is neutralized; fonts use an explicit
+  system stack. Upstream rule bounds now end at −1, and the thesis alternative clearly names
+  its upstream-only extent rather than claiming +500 or attempting a nonexistent zero.
+- **Milestone 6:** Gene/transcript/literature-anchor or pasted-DNA setup, all supported controls,
+  a new promoter map, named guide predictions and evaluated preference ratings, local saves,
+  previous-run comparison, and frozen HTML/JSON/core CSV are implemented. Cached SCN1A gave
+  14 passing; changing the window gate to a preference gave 57, with 43 newly admitted and
+  13 shared rank changes. This measures changed criteria, not improved activation.
+
+The app remains an initial local release. Live-source access and clean Windows/macOS installs
+were not verified here; no expression adapter, generalized cell-specific histone reader,
+off-target report, dTdT order export or methods document is claimed. Source version pinning,
+licence/metadata reconciliation and these remaining milestones still matter.
+
+## New-gene lookup correction — 7 October 2026
+
+The user's failing `chd2` and `kcnq2` requests contained `offline=true`: Ensembl was never
+contacted. Lowercase input also bypassed existing uppercase cache entries, because normalisation
+previously ran only after a remote "gene not found" response, not after an offline cache miss.
+
+- Normalise human symbols before cache/network access and in saved requests.
+- Place the cache-only control and effective mode in the target setup. Reopening a saved run
+  restores its mode visibly. `SARNA_OFFLINE` remains an enforced server setting and the UI
+  explains how to restart without it.
+- Distinguish uncached/offline records, unknown genes and service outages. An explicit online
+  retry can recover either lookup or a missing promoter window during design. Previous results
+  remain saved. Offline requests never silently fetch.
+- Version 2 of the local SQLite schema adds a failure code; existing snapshots survive the
+  migration. No scientific defaults, scores or strand calculations changed in this correction.
+- Fresh-cache Chromium runs fetched live CHD2 and KCNQ2 promoters and generated 2,482 targets
+  each. Wang defaults yielded 13 and 9 passing candidates respectively. Lookup recovery,
+  lowercase input, reruns, saved reopening and frozen reports passed. KCNQ2 additionally passed
+  recovery after changing to an uncached 2,501 bp promoter window.
+  A separate fresh-cache CHD2 job also completed with default motif scanning and regulatory
+  retrieval enabled, without a regulatory-unavailable notice.
+- The offline suite now passes 1,327 tests with eight original network tests deselected;
+  strict mypy and Ruff pass. Live browser checks are separate from that offline test count.
+
+This supersedes the earlier statement that new live-source access had not been verified.
+See [the troubleshooting instructions](local-workbench.md#if-another-gene-fails-to-load).
+New genes/windows still require internet unless the necessary reference responses are cached.
+
+## Multi-promoter workbench extension — 7 October 2026
+
+The user's follow-up makes deliberate design for genes with several promoters part of the
+current implementation scope. The prior single-reference workbench remains the scientific
+foundation; [ADR 0016](../adr/0016-multiple-promoter-designs.md) records the new decision and
+revises ADR 0012's earlier rejection of designing against several TSSs without pooling ranks.
+
+- A whole-gene reference overview groups annotated transcripts only when their contig, strand
+  and TSS coordinate match exactly. Member transcript IDs remain visible. This is coordinate
+  grouping, not an inference of biological promoter equivalence or cell-specific activity.
+- Supported human gene symbols and stable Ensembl gene IDs lead to the same reference-selection
+  workflow. An optional gene-ID version suffix is removed for current-record lookup; it does
+  not pin a release. Broad synonym and ambiguous-alias resolution is not claimed by this slice.
+- Researchers can select several annotated/literature references and enter their own genomic
+  reference with a name, source/derivation and uncertainty note. Custom GRCh38 coordinates are
+  entered 1-based, converted to 0-based once, and labelled researcher-supplied/inferred. Gene
+  contig and strand are retained. Position and window must fit the primary chromosome; an
+  outside-gene reference is allowed with its gene association explicitly unverified.
+  Annotation and citations do not prove measured activity. Completed gene runs freeze the
+  available reference overview returned at lookup.
+- Each selected reference starts from the shared rule configuration and can retain pinned
+  criteria and its own retrieval span. Defaults, supported roles/values, equal preference
+  counting, named guide models and 19-nt default cores remain unchanged.
+- Python creates separate saved child runs. A saved comparison group links them and reports
+  per-reference progress/failures. Successful results survive another reference's failure.
+  Reopening uses saved snapshots; group JSON and offline HTML preserve their distinct contexts.
+- The comparison retains each reference and configuration. It neither merges ranks nor declares
+  a best promoter. A duplex shared by overlapping windows may have different relative positions
+  and verdicts under each reference. Existing same-reference rerun comparisons remain separate
+  from cross-reference inspection.
+
+The guide's [multi-promoter instructions](local-workbench.md#design-against-several-promoters)
+and editable [flow diagram](../architecture/website-flow.drawio) describe this workflow.
+Verification of this extension is pending. The 1,327-test count and live CHD2/KCNQ2 observations
+above belong to the preceding version; record the new suite/browser results here only after
+they complete. Expression/occupancy adapters, measured-source coverage, arbitrary-cell tracks,
+order-ready exports, off-target reporting and clean installers remain continuation work.
