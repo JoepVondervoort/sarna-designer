@@ -294,22 +294,37 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     ladder = browser.evaluate("""(()=>{
       const rows=[...document.querySelectorAll('#candidate-detail .ladder-row')];
       if (rows.length!==3) return {error:"expected sense, rungs and antisense rows"};
-      const text=r=>[...r.querySelectorAll('.bases span')].map(s=>s.textContent.trim());
+      // Only the core columns: .ov is an overhang and .pad is the gap opposite one, so
+      // including them misaligns the two strands by two columns and compares a dT with a blank.
+      const core=r=>[...r.querySelectorAll('.bases span.b')].map(s=>s.textContent.trim());
+      const rungs=r=>[...r.querySelectorAll('.bases span.rung')].map(s=>s.textContent.trim());
       const roles=rows.filter(r=>r.querySelector('.ladder-label i'))
                       .map(r=>r.querySelector('.ladder-label i').textContent);
-      return {sense:text(rows[0]), rungs:text(rows[1]), anti:text(rows[2]), roles,
+      return {sense:core(rows[0]), rungs:rungs(rows[1]), anti:core(rows[2]), roles,
               overhangs:document.querySelectorAll('#candidate-detail .ladder .ov').length};
     })()""")
     assert isinstance(ladder, dict) and "error" not in ladder, ladder
     pairs = {"A": "U", "U": "A", "G": "C", "C": "G"}
     sense, anti = ladder["sense"], ladder["anti"]
     assert len(sense) == len(anti) == len(ladder["rungs"]), ladder
-    # Every drawn rung must correspond to a real Watson-Crick pair between the two rows.
-    for index, rung in enumerate(ladder["rungs"]):
-        if rung not in ("", "\u00a0"):
-            top, bottom = sense[index], anti[index]
-            assert pairs.get(top) == bottom, (
-                f"column {index} draws a rung between {top} and {bottom}, which do not pair")
+    # Both directions, because one of them is not enough. Checking only that *drawn* rungs
+    # pair is vacuous: a wrong pairing table simply draws fewer rungs, and every rung that
+    # survives is still correct. Planting RNA_PAIR = {G:"G", C:"C"} passed that test while the
+    # drawing silently marked every G/C column as a mismatch. So each column is required to
+    # draw a rung exactly when its two bases genuinely pair.
+    blank = ("", "\u00a0")
+    for index, (top, bottom) in enumerate(zip(sense, anti, strict=True)):
+        drew_rung = ladder["rungs"][index] not in blank and ladder["rungs"][index] != "\u00d7"
+        should_pair = pairs.get(top) == bottom
+        assert drew_rung == should_pair, (
+            f"column {index} pairs {top} with {bottom} "
+            f"({'a real pair' if should_pair else 'not a pair'}) but "
+            f"{'drew' if drew_rung else 'did not draw'} a rung")
+    # And the engine builds the antisense strand as the reverse complement, so on a correct
+    # record every column pairs. A cross anywhere means the data itself is wrong.
+    assert all(pairs.get(t) == b for t, b in zip(sense, anti, strict=True)), (
+        f"the antisense strand is not the reverse complement of the sense strand: "
+        f"{''.join(sense)} against {''.join(anti)}")
     # Both 3' dTdT overhangs are drawn: two bases on each of the two strands.
     assert ladder["overhangs"] == 4, ladder["overhangs"]
     assert "guide" in ladder["roles"] and "passenger" in ladder["roles"], ladder["roles"]
