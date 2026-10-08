@@ -473,7 +473,14 @@ function renderTable() {
   $("page-previous").disabled = state.page===0; $("page-next").disabled = state.page>=pages-1;
   $("select-page").checked = page.length>0 && page.every(c=>state.checked.has(c.id));
   $("select-page").indeterminate = page.some(c=>state.checked.has(c.id)) && !$("select-page").checked;
-  $("export-note").textContent = `${state.checked.size?`${state.checked.size} selected candidates` : "All passing candidates"}. Order CSV gives the 21-mers to synthesise, 19 nt RNA cores plus dTdT; core CSV gives the cores alone. No off-target screening has been performed.`;
+  const screened = Object.keys(state.screenings || {});
+  $("export-note").textContent =
+    `${state.checked.size ? `${state.checked.size} selected candidates`
+                          : "All passing candidates"}. `
+    + `Excel carries every candidate with its values, plus the run and its rules on their own `
+    + `sheets. Order CSV gives the 21-mers to synthesise; core CSV gives the 19 nt cores alone. `
+    + `${screened.length ? `Off-target screening (${screened.join(", ")}) travels with them.`
+                         : "No off-target screening has been performed."}`;
 }
 async function selectCandidate(id) {
   const run = state.result, candidate = run.candidates.find(c=>c.id===id);
