@@ -829,7 +829,11 @@ async function exportRun(type) {
   try {
     const r=state.result, name=`${r.gene?.symbol || "promoter"}-${r.app.run_id.slice(0,8)}.${type}`;
     if (frozen) { downloadBlob(new Blob([type==="csv"?csvText(r):JSON.stringify(r,null,2)],{type:type==="csv"?"text/csv":"application/json"}),name); return; }
-    const response=await fetch(`/api/runs/${r.app.run_id}/export.${type}${type==="csv"&&state.checked.size?`?ids=${encodeURIComponent([...state.checked].join(","))}`:""}`);
+    // A selection applies to the row-wise exports; an HTML or JSON archive is the whole run.
+    const selectable = type === "csv" || type === "xlsx";
+    const ids = selectable && state.checked.size
+      ? `?ids=${encodeURIComponent([...state.checked].join(","))}` : "";
+    const response=await fetch(`/api/runs/${r.app.run_id}/export.${type}${ids}`);
     if (!response.ok) throw new Error(`Export failed (${response.status})`);
     downloadBlob(await response.blob(),name);
   } catch(e) { error(e.message); }
@@ -1520,7 +1524,7 @@ $("select-top").addEventListener("click",()=>{state.checked.clear();state.result
 $("zoom-in").addEventListener("click",()=>viewport(.5));$("zoom-out").addEventListener("click",()=>viewport(2));$("pan-left").addEventListener("click",()=>viewport(1,-.3));$("pan-right").addEventListener("click",()=>viewport(1,.3));$("zoom-reset").addEventListener("click",()=>{state.start=0;state.end=state.result.promoter.length;renderMap();});
 $("candidate-detail").addEventListener("click",async e=>{const b=e.target.closest("[data-copy]");if(b){try{await navigator.clipboard.writeText(b.dataset.copy);b.textContent="Copied";}catch{error("Clipboard unavailable. Select and copy the displayed sequence.");}}});
 $("run-evidence").addEventListener("click",renderEvidence);
-for (const type of ["csv","json","html"]) $("export-"+type).addEventListener("click",()=>exportRun(type));
+for (const type of ["csv","json","html","xlsx"]) $("export-"+type).addEventListener("click",()=>exportRun(type));
 $("export-order").addEventListener("click",exportOrder);
 $("motif-panel").addEventListener("click",event=>{
   if (event.target.closest("#clear-motif-focus")) {

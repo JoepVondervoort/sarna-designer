@@ -26,6 +26,7 @@ from tests.unit.test_ensembl import (
     client_for,
     requests_made,
 )
+from tests.unit.test_workbook import sheets_of
 
 # Known 19-nt target from the cached SCN1A run; deliberately CpG-depleted flanks.
 DNA = "GCTCTACTCTCAGTTCCAAACTATGACCTACTATGATACCATAC"
@@ -525,3 +526,98 @@ def test_the_app_publishes_the_end_energies_behind_each_guide_call(tmp_path: Pat
     assert assessment["three_prime"]["energy"] == pytest.approx(-0.93)
     assert assessment["three_prime"]["stacks"] == [["AA", pytest.approx(-0.93)]]
     assert assessment["unit"] == "kcal/mol"
+
+
+class TestTheSpreadsheetExport:
+    """"Download all the saRNAs with their values", as a file Excel opens correctly.
+
+    A CSV is not a file format, it is a convention Excel resolves against the machine's locale:
+    on a Dutch or German Windows the list separator is ``;`` and a comma-separated export
+    arrives with every column in column A. The first thing a colleague would see.
+    """
+
+    @staticmethod
+    def book(service: DesignService, run_id: str, query: str = "") -> dict[str, list[list[Any]]]:
+        router = AppRouter(service)
+        try:
+            status, content_type, body = router.dispatch(
+                "GET", f"/api/runs/{run_id}/export.xlsx{query}", b"")
+            assert status == 200, body[:200]
+            assert "spreadsheetml.sheet" in content_type
+            return sheets_of(body)
+        finally:
+            router.close()
+
+    def test_the_workbook_has_a_sheet_for_the_candidates_the_run_and_the_rules(
+        self, tmp_path: Path
+    ) -> None:
+        service = service_for(tmp_path)
+        saved = run_request(service)
+        sheets = self.book(service, saved["app"]["run_id"])
+        assert list(sheets) == ["saRNA candidates", "Run", "Rules"]
+
+    def test_every_candidate_appears_in_rank_order_with_its_values(
+        self, tmp_path: Path
+    ) -> None:
+        service = service_for(tmp_path)
+        saved = run_request(service)
+        rows = self.book(service, saved["app"]["run_id"])["saRNA candidates"]
+        header = rows[0]
+        assert rows[1:], "the export has no candidates"
+        ranks = [row[header.index("rank")] for row in rows[1:]]
+        assert ranks == sorted(r for r in ranks if r is not None) or len(ranks) == 1
+        first = dict(zip(header, rows[1], strict=True))
+        # The sequences a researcher came for, and the ordered 21-mers beside the cores.
+        assert set(str(first["target_dna_5to3"])) <= set("ACGT")
+        assert str(first["sense_order_5to3"]).endswith("[dT][dT]")
+        assert str(first["antisense_order_5to3"]).endswith("[dT][dT]")
+        assert first["predicted_guide"] in {"antisense", "sense", "ambiguous"}
+
+    def test_sequences_stay_text_so_excel_cannot_reinterpret_them(
+        self, tmp_path: Path
+    ) -> None:
+        service = service_for(tmp_path)
+        saved = run_request(service)
+        rows = self.book(service, saved["app"]["run_id"])["saRNA candidates"]
+        column = rows[0].index("target_dna_5to3")
+        assert all(isinstance(row[column], str) for row in rows[1:])
+
+    def test_numbers_stay_numbers_so_a_column_can_be_sorted(self, tmp_path: Path) -> None:
+        service = service_for(tmp_path)
+        saved = run_request(service)
+        rows = self.book(service, saved["app"]["run_id"])["saRNA candidates"]
+        column = rows[0].index("gc_percent")
+        assert all(isinstance(row[column], float) for row in rows[1:])
+
+    def test_the_run_sheet_carries_the_caveat_the_interface_shows(
+        self, tmp_path: Path
+    ) -> None:
+        # The spreadsheet leaves the application. The measured ranking performance has to
+        # leave with it, or the numbers travel without the one statement that qualifies them.
+        service = service_for(tmp_path)
+        saved = run_request(service)
+        run = {row[0]: row[1] for row in self.book(service, saved["app"]["run_id"])["Run"][1:]}
+        assert "Not a probability" in str(run["what a rating is"])
+        assert run["off-target screening"] == "none performed"
+        assert run["targets evaluated"]
+        # A promoter reference that does not say where it came from is a coordinate with no
+        # standing, and the spreadsheet is what leaves the application.
+        assert run["reference provenance"], "the reference reached Excel without its source"
+        assert run["reference kind"]
+
+    def test_the_rules_sheet_names_every_rule_with_its_source(self, tmp_path: Path) -> None:
+        service = service_for(tmp_path)
+        saved = run_request(service)
+        rows = self.book(service, saved["app"]["run_id"])["Rules"]
+        assert rows[0] == ["rule", "name", "role", "evidence", "source", "parameters"]
+        sources = [row[4] for row in rows[1:]]
+        assert all(sources), "a rule reached the spreadsheet without its provenance"
+        assert any("Wang" in str(s) for s in sources)
+
+    def test_a_selection_exports_only_what_was_selected(self, tmp_path: Path) -> None:
+        service = service_for(tmp_path)
+        saved = run_request(service)
+        wanted = saved["candidates"][0]["id"]
+        rows = self.book(service, saved["app"]["run_id"], f"?ids={wanted}")["saRNA candidates"]
+        assert len(rows) == 2
+        assert rows[1][rows[0].index("candidate")] == wanted

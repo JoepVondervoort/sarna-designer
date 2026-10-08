@@ -431,6 +431,21 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     # absence. The join is covered where a screening can be stubbed; here what matters is that
     # closing the gap did not turn "nobody looked" into "nothing found".
     assert "off-target-screening [not-performed]" in rows[1]
+    # The Excel export, fetched the way the button does and checked as a real package. An
+    # .xlsx exists because Excel reads a CSV's separator from the machine's locale, so a
+    # colleague on a Dutch Windows opens a comma-separated file with everything in column A.
+    book = browser.evaluate(
+        f"fetch('/api/runs/{run_id}/export.xlsx').then(async r =>"
+        "({status:r.status, type:r.headers.get('content-type'),"
+        " size:(await r.arrayBuffer()).byteLength}))"
+    )
+    assert isinstance(book, dict), book
+    assert book["status"] == 200, book
+    assert "spreadsheetml.sheet" in str(book["type"]), book
+    assert isinstance(book["size"], int) and book["size"] > 2000, book
+    assert browser.evaluate(
+        "!!document.getElementById('export-xlsx')") is True, "no Excel button"
+
     if screenshots:
         browser.screenshot(screenshots / "workbench.png")
     browser.evaluate(f"const history=document.getElementById('saved-runs');"

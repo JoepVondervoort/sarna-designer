@@ -6,6 +6,7 @@ import json
 import logging
 import re
 from base64 import b64encode
+from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
@@ -17,6 +18,7 @@ from pydantic import ValidationError
 from sarna import __version__, settings
 from sarna.app.models import BatchRequest, DesignRequest
 from sarna.app.service import DesignService
+from sarna.app.workbook import Sheet, write_workbook
 from sarna.design.order import (
     CSV_COLUMNS,
     DEFAULT_MODEL,
@@ -289,6 +291,8 @@ class AppRouter:
                 return 200, "text/csv; charset=utf-8", output.getvalue().encode()
             if len(parts) == 4 and parts[3] == "export.order.csv":
                 return self._order_csv(run_id, snapshot, query)
+            if len(parts) == 4 and parts[3] == "export.xlsx":
+                return self._export_xlsx(run_id, snapshot, query)
             if len(parts) == 4 and parts[3] == "screenings":
                 return self._json(200, self.service.store.screenings_for(run_id))
         return self._json(404, {"detail": "No such local app route."})
@@ -348,6 +352,119 @@ class AppRouter:
                     row=row,
                 ))
         return findings
+
+    CANDIDATE_COLUMNS = (
+        "rank", "candidate", "tss_start", "tss_end", "contig", "genomic_start", "genomic_end",
+        "strand", "target_dna_5to3", "sense_core_rna_5to3", "antisense_core_rna_5to3",
+        "sense_order_5to3", "antisense_order_5to3", "gc_percent", "core_length_nt",
+        "predicted_guide", "guide_model", "models_agree", "preferences_met",
+        "preferences_evaluated", "preferences_missed", "unchecked_gates", "excluded_by",
+        "off_target_perfect", "off_target_near_perfect", "off_target_alignments",
+        "off_target_scopes",
+    )
+    """Everything the interface knows about a candidate, in one row.
+
+    Wider than ``export.csv`` on purpose: that one is deliberately a short core-sequence export
+    (ADR 0015), and this is the "give me all of them with their values" file.
+    """
+
+    @staticmethod
+    def _candidate_row(
+        candidate: dict[str, Any], findings: Sequence[ScreeningFinding],
+        rule_names: Mapping[str, str],
+    ) -> tuple[Any, ...]:
+        """Return one candidate as a spreadsheet row.
+
+        ``rule_names`` is passed rather than read from anywhere shared: this server is
+        threaded, and two exports of different runs can be in flight at once.
+        """
+        def named(ids: Sequence[str]) -> str:
+            """Rule ids are stable keys; a reader wants the names."""
+            return "; ".join(rule_names.get(identifier, identifier) for identifier in ids)
+        rating = candidate.get("rating") or {}
+        genomic = candidate.get("genomic") or {}
+        span = candidate.get("tss_span") or (None, None)
+        order = order_from_record(
+            candidate, rating.get("guide_model") or DEFAULT_MODEL, screenings=tuple(findings)
+        ) if candidate.get("rank") is not None else None
+        total = {key: sum(int(f.row.get(key) or 0) for f in findings)
+                 for key in ("perfect_hits", "near_perfect_hits", "hit_count")}
+        return (
+            candidate.get("rank"), candidate["id"], span[0], span[1],
+            genomic.get("contig"), genomic.get("start"), genomic.get("end"),
+            genomic.get("strand"),
+            candidate["target_site_dna"], candidate["sense_strand_rna"],
+            candidate["antisense_strand_rna"],
+            order.sense.annotated if order else "", order.antisense.annotated if order else "",
+            candidate.get("gc_percent"), len(candidate["target_site_dna"]),
+            rating.get("guide"), rating.get("guide_model"), rating.get("models_agree"),
+            rating.get("met"), rating.get("evaluated"),
+            named(rating.get("missed") or []),
+            named(rating.get("unchecked_gates") or []),
+            named(candidate.get("excluded_by") or []),
+            total["perfect_hits"] if findings else "",
+            total["near_perfect_hits"] if findings else "",
+            total["hit_count"] if findings else "",
+            "; ".join(f.scope for f in findings) or "not screened",
+        )
+
+    def _export_xlsx(
+        self, run_id: str, snapshot: dict[str, Any], query: dict[str, list[str]]
+    ) -> tuple[int, str, bytes]:
+        """Write the whole run as a spreadsheet: candidates, the run, and its rules.
+
+        An ``.xlsx`` rather than a third CSV because Excel resolves a CSV's separator against
+        the machine's locale: on a Dutch or German Windows a comma-separated file opens with
+        every column in column A. See :mod:`sarna.app.workbook`.
+        """
+        selected = _selected_for_export(snapshot, query)
+        screenings = self._screenings_by_candidate(run_id)
+        rules = snapshot.get("configuration", {}).get("rules", [])
+        rule_names = {rule["id"]: rule["name"] for rule in rules}
+        candidates = Sheet(
+            "saRNA candidates", self.CANDIDATE_COLUMNS,
+            tuple(self._candidate_row(c, screenings.get(c["id"], ()), rule_names)
+                  for c in selected),
+        )
+        performance = snapshot.get("ranking_performance") or {}
+        app = snapshot.get("app", {})
+        gene = snapshot.get("gene") or {}
+        anchor = app.get("anchor") or {}
+        no_reference = "none — designed against a supplied sequence"
+        run = Sheet("Run", ("field", "value"), (
+            ("run id", run_id),
+            ("created", app.get("created", "")),
+            ("gene", gene.get("symbol", "pasted sequence")),
+            ("Ensembl gene id", gene.get("ensembl_id", "")),
+            # A pasted sequence genuinely has no annotated reference. Saying so beats an
+            # empty cell, which reads as a field somebody forgot to fill in.
+            ("promoter reference", anchor.get("label", "") or no_reference),
+            ("reference kind", anchor.get("reference_kind", "") or no_reference),
+            ("reference provenance", anchor.get("provenance", "") or no_reference),
+            ("reference caveat", anchor.get("caveat") or "none recorded"),
+            ("promoter span (bp)", snapshot.get("promoter", {}).get("length")),
+            ("cell line", app.get("cell_line", "")),
+            ("configuration", snapshot.get("configuration", {}).get("preset", {}).get("name")),
+            ("customised", snapshot.get("configuration", {}).get("is_custom")),
+            ("targets evaluated", snapshot.get("counts", {}).get("generated")),
+            ("passing every evaluable gate", snapshot.get("counts", {}).get("passing")),
+            ("engine version", app.get("engine_version", "")),
+            ("ranking performance", performance.get("headline", "not measured for this run")),
+            ("what a rating is", "criteria met, counted equally. Not a probability that the "
+                                 "duplex activates the gene."),
+            ("off-target screening", "; ".join(sorted({
+                f.scope for rows in screenings.values() for f in rows})) or "none performed"),
+        ))
+        rule_sheet = Sheet("Rules", ("rule", "name", "role", "evidence", "source",
+                                     "parameters"), tuple(
+            (rule["id"], rule["name"], rule["kind"], rule.get("evidence_class", ""),
+             rule.get("provenance", {}).get("display", ""),
+             "; ".join(f"{p['name']}={p['value']}" for p in rule.get("parameters", [])))
+            for rule in rules
+        ))
+        data = write_workbook([candidates, run, rule_sheet])
+        return 200, ("application/vnd.openxmlformats-officedocument."
+                     "spreadsheetml.sheet"), data
 
     def _order_csv(
         self, run_id: str, snapshot: dict[str, Any], query: dict[str, list[str]]
