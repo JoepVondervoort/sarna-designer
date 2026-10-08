@@ -19,39 +19,120 @@ ranked, annotated, exportable duplex candidates.
 > what that does and does not establish. Treat a high rank as a prioritisation aid, not a
 > prediction of activity.
 
-## Giving it to a colleague
+## Installing it — complete steps
 
-**[`INSTALL.md`](INSTALL.md) is the step-by-step guide**, written for someone who has never
-installed anything like this. Windows, macOS and Linux, ending with `sarna-designer-check`
-printing `PASS`.
+Everything needed is below. [`INSTALL.md`](INSTALL.md) is the same thing with more hand-holding
+and a troubleshooting section; this is the whole procedure.
 
-### What they need to install first: on Windows, nothing
+### What you need first
 
-| | Needed? |
-|---|---|
-| WSL (Windows Subsystem for Linux) | **No.** Not used at all. |
-| Python | **No.** The installer fetches the right version itself. |
-| Administrator rights | **No.** |
-| Docker, Anaconda, Visual Studio | **No.** |
-| Git | **Only** if installing from this repository — see below. |
+| | Needed? | How |
+|---|---|---|
+| **PowerShell** | Yes, it is where you type | Already on Windows. Press <kbd>Win</kbd>, type `powershell`, Enter. |
+| **`uv`** | Yes — the only install | One line, in step 1 below. |
+| **Python** | No | `uv` downloads the right version (3.11) into its own folder. Your system Python is untouched. |
+| **WSL** | **No** | Not used. See [the one exception](#optional-af22-histone-tracks) below. |
+| **Administrator rights** | No | Everything goes under your own user account. |
+| **Docker, Anaconda, Visual Studio** | No | None of them. |
+| **Git** | Only for route B | [Git for Windows](https://git-scm.com/download/win) |
 
-Everything happens in **PowerShell**. One line installs [`uv`](https://docs.astral.sh/uv/),
-a second installs the tool, and a third checks it works.
+### Windows, start to finish
 
-### Two ways to give it to them
+**1. Install `uv`** ([what this is](https://docs.astral.sh/uv/)). In PowerShell:
 
-**This repository is private**, so a GitHub install URL fails with *"repository not found"*
-for anyone who has not been added to it.
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
 
-- **Send a file (recommended).** `python -m build --wheel` produces one ~320 kB `.whl` in
-  `dist/`. Email it. They need no GitHub account, no Git and no Python.
-  INSTALL.md calls this **Route A** and has a message you can copy, plus where the file
-  appears if you develop inside WSL.
-- **Add them to the repository.** They then also need
-  [Git for Windows](https://git-scm.com/download/win), and install with the `git+https://`
-  URL. INSTALL.md calls this **Route B**.
+If your organisation blocks that, `winget install --id=astral-sh.uv -e` does the same job.
 
-### Running it yourself, from a checkout
+**2. Close PowerShell and open it again.** Required — the new command is only visible to a
+fresh window. Check it worked:
+
+```powershell
+uv --version
+```
+
+**3. Install the tool.** This repository is **private**, so pick the route that applies:
+
+*Route A — from a `.whl` file you were sent* (needs no GitHub account and no Git):
+
+```powershell
+uv tool install --python 3.11 "C:\Users\YourName\Downloads\sarna_designer-0.1.0.dev0-py3-none-any.whl[app]"
+```
+
+Tip: type `uv tool install --python 3.11 "`, drag the file from Explorer into the window to
+paste its path, then type `[app]"` and Enter. The `[app]` is not optional — it installs the
+browser interface.
+
+*Route B — from this repository*, if you have been added to it and have
+[Git for Windows](https://git-scm.com/download/win):
+
+```powershell
+uv tool install --python 3.11 "sarna-designer[app] @ git+https://github.com/JoepVondervoort/sarna-designer"
+```
+
+Either way it ends with `Installed 2 executables: sarna-designer, sarna-designer-check`.
+
+**4. Close PowerShell and open it again** — the same PATH reason as step 2.
+
+**5. Check it works:**
+
+```powershell
+sarna-designer-check
+```
+
+Ends with `RESULT: PASS`. Every failure prints what to do about it.
+
+**6. Run it:**
+
+```powershell
+sarna-designer
+```
+
+Open the address it prints (`http://localhost:8001/`) in your browser, and leave the
+PowerShell window open while you work. <kbd>Ctrl</kbd>+<kbd>C</kbd> stops it.
+
+### macOS and Linux
+
+Identical except step 1:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+### Optional: AF22 histone tracks
+
+**This is the only part that needs WSL on Windows, and almost nobody needs it.** The
+`[genomics]` extra reads local AF22 bigWig files, and it depends on
+[pyBigWig](https://pypi.org/project/pyBigWig/), which publishes **no Windows wheel** and lists
+only MacOS, POSIX and Unix as supported — it needs `libcurl` and `zlib` headers to build. The
+design tool does not use it; chromatin simply reports "not loaded" without it.
+
+If you do want those tracks on Windows, install
+[WSL](https://learn.microsoft.com/windows/wsl/install) from an **administrator** PowerShell:
+
+```powershell
+wsl --install
+```
+
+Reboot, then follow the Linux steps above inside the Ubuntu window, adding `[app,genomics]`
+instead of `[app]`, and set `SARNA_AF22_DIR` to the folder holding the bigWigs.
+
+### Giving it to a colleague
+
+Because the repository is private, send them a file rather than a link:
+
+```bash
+python -m build --wheel      # one ~320 kB .whl appears in dist/
+```
+
+They need no GitHub account, no Git and no Python — that is route A above.
+[`INSTALL.md`](INSTALL.md#sending-it-to-a-colleague) has a message you can copy into the email,
+and — if you develop inside WSL — how to reach the file from Windows at all, since a path
+inside WSL is invisible to Outlook.
+
+### Running it from a checkout instead
 
 ```bash
 .venv/bin/python -m sarna.app      # then open http://localhost:8001/

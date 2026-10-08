@@ -19,13 +19,14 @@ This is the most common question, so here it is as a list.
 
 | | Needed? | |
 |---|---|---|
-| **WSL** (Windows Subsystem for Linux) | **No** | Not used at all. Ignore anything that mentions it. |
+| **WSL** (Windows Subsystem for Linux) | **No** | Not used, with [one exception](#optional-af22-histone-tracks-the-one-thing-that-needs-wsl) almost nobody needs. |
 | **Python** | **No** | Step 2 installs a tool that fetches the right Python itself. |
 | **Administrator rights** | **No** | Everything installs under your own user account. |
 | **Docker**, Anaconda, Visual Studio | **No** | None of them. |
-| **Git** | **Only for Route B** | See the table below. Most people do not need it. |
+| **Git** | **Only for Route B** | [Git for Windows](https://git-scm.com/download/win). Most people do not need it. |
 
-The only thing you install is a small program called **`uv`**, in step 2, and it is one line.
+The only thing you install is a small program called **`uv`**
+([what it is](https://docs.astral.sh/uv/)), in step 2, and it is one line.
 
 ### Where you type the commands: PowerShell
 
@@ -81,7 +82,8 @@ Copy this whole line, paste it into PowerShell (right-click pastes), and press *
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-This installs a small program called `uv` that manages the installation for you.
+This installs a small program called `uv` that manages the installation for you. If your
+organisation blocks that command, `winget install --id=astral-sh.uv -e` does the same thing.
 
 **Now close PowerShell completely and open it again.** This is necessary — the new program is
 only visible to a freshly opened window.
@@ -340,6 +342,48 @@ fetches from Ensembl as usual rather than failing.
 
 ---
 
+## Optional: AF22 histone tracks, the one thing that needs WSL
+
+Skip this unless you have been given the AF22 bigWig files and want the tool to read them.
+**The design tool does not need any of it** — without the tracks, chromatin simply reports
+"not loaded", which is an honest answer rather than a broken one.
+
+The reader for those files, [pyBigWig](https://pypi.org/project/pyBigWig/), publishes **no
+Windows wheel** and lists MacOS, POSIX and Unix as its supported platforms; building it needs
+`libcurl` and `zlib` headers. So on Windows this extra cannot be installed natively, and WSL
+is the way round it.
+
+**1. Install WSL** from an **administrator** PowerShell — right-click PowerShell in the Start
+menu and choose *Run as administrator*:
+
+```powershell
+wsl --install
+```
+
+Reboot when it asks. See [Microsoft's guide](https://learn.microsoft.com/windows/wsl/install)
+if it does not complete.
+
+**2. Open the Ubuntu window** it installed and follow the Linux steps, with `[app,genomics]`
+in place of `[app]`:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# then, from a new terminal:
+uv tool install --python 3.11 "/path/to/sarna_designer-0.1.0.dev0-py3-none-any.whl[app,genomics]"
+```
+
+**3. Point it at the tracks**, then start it:
+
+```bash
+export SARNA_AF22_DIR=/path/to/af22_data
+sarna-designer
+```
+
+The browser still opens on Windows at the printed address. Note that a copy installed this way
+keeps its saved runs inside WSL, not in your Windows user folder.
+
+---
+
 ## Sending it to a colleague
 
 *For whoever is distributing the tool, not for the person installing it.*
@@ -421,7 +465,9 @@ sarna-designer --port 8001
 - Requires Python 3.11 exactly; `[app]` adds `httpx` on top of `pydantic`. No compiler needed —
   both ship universal wheels.
 - `[genomics]` additionally pulls `pyBigWig`, `numpy` and `pyliftover` for local AF22 histone
-  tracks. You do not need it unless you have those bigWigs.
+  tracks. **Not installable on Windows**: pyBigWig publishes no Windows wheel and lists only
+  MacOS, POSIX and Unix, needing `libcurl` and `zlib` headers to build. Use WSL or a Mac for
+  that extra. You do not need it unless you have those bigWigs.
 - State lives in `--data-dir` (default `~/.sarna-designer`), one SQLite file.
 - Environment variables are documented in `src/sarna/settings.py`; `SARNA_CONTACT_EMAIL` is the
   address Ensembl asks you to send with queries, and `SARNA_OFFLINE=1` forbids all network use.
