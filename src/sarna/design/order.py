@@ -22,6 +22,7 @@ yet. :data:`OrderOutcome.NOT_PERFORMED` says so on every duplex rather than omit
 because an absent row reads as a clean screen. Findings report; they never withhold sequences.
 """
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -283,15 +284,92 @@ def _agreement_check(tables_agree: bool, summary: str) -> OrderCheck:
     )
 
 
-def _screening_check() -> OrderCheck:
-    """Report, always, that no off-target screening was performed."""
+@dataclass(frozen=True, slots=True)
+class ScreeningFinding:
+    """One screening's result for one candidate, with the provenance that makes it readable.
+
+    A screening is only meaningful with its database and its date: NCBI's holdings change week
+    to week, so "nothing found" is a statement about one database on one day (ADR 0019). Both
+    travel in the row rather than in a separate file, because a row pasted into a vendor form
+    must not arrive without the caveats belonging to it.
+    """
+
+    scope: str
+    database: str
+    searched_at: str
+    row: Mapping[str, Any]
+    """The candidate's line from the specificity table: counts, never a combined score."""
+
+    @property
+    def is_concern(self) -> bool:
+        """Whether anything here is worth reading before spending money.
+
+        Deliberately a disjunction of named counts rather than a threshold on a score. ADR 0019
+        refuses a combined specificity figure because weighing one perfect match elsewhere
+        against forty weak partial ones is the researcher's judgement, not the tool's.
+        """
+        return any(
+            int(self.row.get(key) or 0) > 0
+            for key in ("perfect_hits", "near_perfect_hits", "in_run_window_hits")
+        )
+
+    def describe(self) -> str:
+        """Return this screening's findings as one clause."""
+        counts = ", ".join(
+            f"{label} {int(self.row.get(key) or 0)}"
+            for key, label in (
+                ("hit_count", "alignments"),
+                ("perfect_hits", "perfect"),
+                ("near_perfect_hits", "near-perfect"),
+                ("in_run_window_hits", "inside this run's window"),
+            )
+            if key != "in_run_window_hits" or self.scope == GENOMIC_SCOPE
+        )
+        return f"{self.scope} ({self.database}, {self.searched_at[:10]}): {counts}"
+
+
+GENOMIC_SCOPE = "genomic"
+"""Mirrors :data:`sarna.offtarget.models.GENOMIC_SCOPE` without importing it.
+
+``sarna.design`` is the engine and must not depend on the screening package; the dependency
+runs the other way. The string is the wire value both sides already agree on.
+"""
+
+
+def _screening_check(findings: Sequence[ScreeningFinding] = ()) -> OrderCheck:
+    """Report what an off-target screening found, or that none was performed.
+
+    Three outcomes, as everywhere else in this project. No screening is **not** a clean one,
+    which is why the absence keeps its own outcome rather than collapsing into ``OK``.
+    """
+    if not findings:
+        return OrderCheck(
+            id="off-target-screening",
+            outcome=OrderOutcome.NOT_PERFORMED,
+            detail=(
+                "No off-target screening was performed for this run. Nothing here establishes "
+                "that these sequences are specific to the intended locus. Screen them before "
+                "ordering, or run the screening in the workbench."
+            ),
+        )
+    described = "; ".join(f.describe() for f in findings)
+    if any(f.is_concern for f in findings):
+        return OrderCheck(
+            id="off-target-screening",
+            outcome=OrderOutcome.CONCERN,
+            detail=(
+                f"Off-target screening found matches worth reading before ordering — "
+                f"{described}. Sequence similarity is not measured binding, and nothing was "
+                f"withheld: the duplex is above and the alignments are in the screening record."
+            ),
+        )
     return OrderCheck(
         id="off-target-screening",
-        outcome=OrderOutcome.NOT_PERFORMED,
+        outcome=OrderOutcome.OK,
         detail=(
-            "No off-target screening was performed. This project implements no off-target "
-            "analysis, so nothing here establishes that these sequences are specific to the "
-            "intended locus. Screen them independently before ordering."
+            f"Off-target screening found nothing of note — {described}. One search, of one "
+            f"database, on one day, with parameters that can miss things: this does not "
+            f"establish specificity."
         ),
     )
 
@@ -307,6 +385,7 @@ def _build(
     tables_agree: bool,
     summary: str,
     model: str,
+    screenings: Sequence[ScreeningFinding] = (),
 ) -> DuplexOrder:
     """Assemble a duplex order and its checks. The one place either entry point goes through."""
     return DuplexOrder(
@@ -320,12 +399,15 @@ def _build(
             _complementarity_check(sense_core, antisense_core),
             _intent_check(predictions, model),
             _agreement_check(tables_agree, summary),
-            _screening_check(),
+            _screening_check(screenings),
         ),
     )
 
 
-def order_for(candidate: Candidate, model: str = DEFAULT_MODEL) -> DuplexOrder:
+def order_for(
+    candidate: Candidate, model: str = DEFAULT_MODEL,
+    screenings: Sequence[ScreeningFinding] = (),
+) -> DuplexOrder:
     """Build the order-ready duplex for ``candidate``, with its sanity report.
 
     Args:
@@ -334,6 +416,10 @@ def order_for(candidate: Candidate, model: str = DEFAULT_MODEL) -> DuplexOrder:
             its rank is ``None`` and its rule verdicts remain the record of why.
         model: The nearest-neighbour table whose strand prediction is compared against the
             design intent. Defaults to the RNA table, which is the one Wang's preset gates on.
+
+        screenings: This candidate's findings from any completed off-target screening,
+            one per scope. Empty means none was performed, which is not a clean
+            result and is reported as its own outcome.
 
     Returns:
         The two 21-mers and every check made on them.
@@ -357,10 +443,14 @@ def order_for(candidate: Candidate, model: str = DEFAULT_MODEL) -> DuplexOrder:
         tables_agree=comparison.tables_agree,
         summary=comparison.summary,
         model=model,
+        screenings=screenings,
     )
 
 
-def order_from_record(record: dict[str, Any], model: str = DEFAULT_MODEL) -> DuplexOrder:
+def order_from_record(
+    record: dict[str, Any], model: str = DEFAULT_MODEL,
+    screenings: Sequence[ScreeningFinding] = (),
+) -> DuplexOrder:
     """Build the order-ready duplex from an exported candidate record.
 
     A saved run is stored as records, not as :class:`~sarna.design.candidate.Candidate` objects,
@@ -370,6 +460,7 @@ def order_from_record(record: dict[str, Any], model: str = DEFAULT_MODEL) -> Dup
     Args:
         record: One entry of a run snapshot's ``candidates``.
         model: As for :func:`order_for`.
+        screenings: As for :func:`order_for`.
 
     Returns:
         The two 21-mers and every check made on them.
@@ -396,6 +487,7 @@ def order_from_record(record: dict[str, Any], model: str = DEFAULT_MODEL) -> Dup
         tables_agree=prediction["tables_agree"],
         summary=prediction["summary"],
         model=model,
+        screenings=screenings,
     )
 
 

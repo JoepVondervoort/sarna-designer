@@ -23,6 +23,7 @@ from sarna.design.order import (
     OVERHANG_LENGTH_NT,
     SUPPORTED_CORE_LENGTH_NT,
     OrderOutcome,
+    ScreeningFinding,
     csv_row,
     order_for,
     order_from_record,
@@ -232,3 +233,66 @@ class TestExport:
     def test_an_unknown_model_is_rejected_rather_than_silently_unreported(self) -> None:
         with pytest.raises(KeyError, match="no-such-table"):
             order_for(candidate_for(), model="no-such-table")
+
+
+def finding(scope: str = "transcript", **row: object) -> ScreeningFinding:
+    """A screening result for one candidate, as the specificity table reports it."""
+    return ScreeningFinding(
+        scope=scope,
+        database="refseq_rna" if scope == "transcript" else "refseq_genomic",
+        searched_at="2026-10-08T02:14:00+00:00",
+        row={"candidate": "a", "hit_count": 0, "best_evalue": None, "near_perfect_hits": 0,
+             "perfect_hits": 0, "longest_complementary_stretch": 0, "in_run_window_hits": 0,
+             **row},
+    )
+
+
+class TestTheOrderExportCitesTheScreeningWhenThereIsOne:
+    """ADR 0019 left this join open: the export said "not-performed" after a real screening.
+
+    The export is built from the run and a screening lives in its own dated record, so until
+    the two were joined the honest answer stayed "not performed" — honest and useless to
+    somebody deciding what to synthesise.
+    """
+
+    def test_with_no_screening_the_answer_is_still_not_performed(self) -> None:
+        # Missing data is not a negative assay, and that has to survive this change.
+        screening = check(order_for(candidate_for()), "off-target-screening")
+        assert screening.outcome is OrderOutcome.NOT_PERFORMED
+        assert "not" in screening.detail.lower()
+
+    def test_a_clean_screening_is_reported_with_its_database_and_date(self) -> None:
+        order = order_for(candidate_for(), screenings=(finding(),))
+        reported = check(order, "off-target-screening")
+        assert reported.outcome is OrderOutcome.OK
+        assert "refseq_rna" in reported.detail
+        assert "2026-10-08" in reported.detail
+        # A clean result on one database on one day is not proof of specificity.
+        assert "does not establish" in reported.detail
+
+    def test_a_perfect_match_elsewhere_is_a_concern_and_names_the_count(self) -> None:
+        order = order_for(candidate_for(), screenings=(finding(perfect_hits=2, hit_count=9),))
+        reported = check(order, "off-target-screening")
+        assert reported.outcome is OrderOutcome.CONCERN
+        assert "2" in reported.detail
+
+    def test_a_concern_still_ships_the_sequences(self) -> None:
+        # Findings report; they never withhold. The whole point of the export.
+        order = order_for(candidate_for(), screenings=(finding(perfect_hits=5),))
+        assert order.sense.annotated.endswith(OVERHANG_ANNOTATED)
+        assert order.antisense.annotated.endswith(OVERHANG_ANNOTATED)
+
+    def test_both_scopes_are_reported_in_one_row(self) -> None:
+        order = order_for(candidate_for(), screenings=(
+            finding("transcript"), finding("genomic", in_run_window_hits=3)))
+        reported = check(order, "off-target-screening")
+        assert "refseq_rna" in reported.detail and "refseq_genomic" in reported.detail
+        # A hit inside the window this run designed against is the saRNA-specific risk.
+        assert reported.outcome is OrderOutcome.CONCERN
+
+    def test_the_csv_carries_the_finding_rather_than_the_placeholder(self) -> None:
+        row = dict(zip(CSV_COLUMNS, csv_row(
+            order_for(candidate_for(), screenings=(finding(near_perfect_hits=4),)), "run-1"),
+            strict=True))
+        assert "off-target-screening [concern]" in row["sanity_report"]
+        assert "not-performed" not in row["sanity_report"]

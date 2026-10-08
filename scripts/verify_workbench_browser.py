@@ -423,6 +423,9 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     assert "sense_order_5to3" in rows[0], rows[0]
     assert len(rows) > 1, "the live order export returned no duplexes"
     assert all("[dT][dT]" in row for row in rows[1:]), rows[1]
+    # No screening has been run against this live route, so the honest answer is still the
+    # absence. The join is covered where a screening can be stubbed; here what matters is that
+    # closing the gap did not turn "nobody looked" into "nothing found".
     assert "off-target-screening [not-performed]" in rows[1]
     if screenshots:
         browser.screenshot(screenshots / "workbench.png")

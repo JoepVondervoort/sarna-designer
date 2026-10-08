@@ -196,19 +196,54 @@ class TestTheRoutes:
             router.close()
 
 
-def test_the_order_csv_still_says_screening_was_not_performed_by_itself(
-    tmp_path: Path,
-) -> None:
-    # The order export's sanity report is generated from the run alone. A screening lives in its
-    # own record, so until that is wired into the export the honest answer stays "not performed".
-    service, run_id, _ = completed_run(tmp_path)
-    screen_now(service, run_id)
-    router = AppRouter(service)
-    try:
-        body = router.dispatch("GET", f"/api/runs/{run_id}/export.order.csv", b"")[2]
-        assert "off-target-screening [not-performed]" in body.decode()
-    finally:
-        router.close()
+class TestTheOrderCsvCitesTheScreening:
+    """The join ADR 0019 left open.
+
+    A screening stays its own dated record, and the export reads it rather than writing into
+    the frozen run. Before this, somebody deciding what to synthesise read
+    "off-target-screening [not-performed]" on a run they had just screened.
+    """
+
+    @staticmethod
+    def order_csv(service: DesignService, run_id: str) -> str:
+        router = AppRouter(service)
+        try:
+            return router.dispatch(
+                "GET", f"/api/runs/{run_id}/export.order.csv", b"")[2].decode()
+        finally:
+            router.close()
+
+    def test_before_any_screening_the_answer_is_still_not_performed(
+        self, tmp_path: Path
+    ) -> None:
+        # Missing data is not a negative assay; that must survive the join.
+        service, run_id, _ = completed_run(tmp_path)
+        assert "off-target-screening [not-performed]" in self.order_csv(service, run_id)
+
+    def test_after_a_screening_the_row_carries_its_findings(self, tmp_path: Path) -> None:
+        service, run_id, _ = completed_run(tmp_path)
+        screen_now(service, run_id)
+        body = self.order_csv(service, run_id)
+        assert "off-target-screening [not-performed]" not in body
+        # The provenance travels in the row: a result without its database and date is not
+        # readable six months later, and a row pasted into a vendor form arrives alone.
+        assert "refseq_rna" in body
+        assert "does not establish specificity" in body or "worth reading" in body
+
+    def test_a_failed_screening_contributes_nothing_rather_than_a_clean_result(
+        self, tmp_path: Path
+    ) -> None:
+        # A search that did not finish is not a search that found nothing.
+        service, run_id, _ = completed_run(tmp_path)
+        screening_id = service.store.start_screening(run_id, TRANSCRIPT_SCOPE)
+        service.store.fail_screening(screening_id, "NCBI refused the request")
+        assert "off-target-screening [not-performed]" in self.order_csv(service, run_id)
+
+    def test_the_screening_does_not_alter_the_frozen_run(self, tmp_path: Path) -> None:
+        service, run_id, before = completed_run(tmp_path)
+        screen_now(service, run_id)
+        self.order_csv(service, run_id)
+        assert service.store.snapshot(run_id) == before
 
 
 @pytest.mark.parametrize("scope", [TRANSCRIPT_SCOPE, GENOMIC_SCOPE])

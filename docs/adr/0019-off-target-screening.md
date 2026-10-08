@@ -152,9 +152,18 @@ Screening needs internet; the designs do not, and a failed screening leaves the 
 NCBI can be slow or refuse service, and the client gives up after thirty minutes. The 50-candidate
 cap is arbitrary in the sense that no measurement chose it.
 
-**The order export still reports `not-performed`.** A screening lives in its own record and the
-order CSV is generated from the run alone, so until the two are joined the export's answer stays
-the honest one. That join is the obvious next slice.
+**The order export now cites the screening.** ~~A screening lives in its own record and the order
+CSV is generated from the run alone, so until the two are joined the export's answer stays the
+honest one.~~ Closed 2026-10-08. The export reads the newest *complete* screening per scope and
+reports its findings in the row, with the database and the date, because a result without its
+provenance is unreadable six months later and a row pasted into a vendor form arrives alone. The
+run itself is untouched: the screening stays its own dated record and the export reads it.
+
+Three outcomes are preserved, which is the whole reason this took a shape rather than a boolean.
+No screening is still `not-performed`, not `ok` — missing data is not a negative assay. A failed
+or unfinished screening contributes nothing, because a search that did not complete is not a
+search that found nothing. A screening with perfect, near-perfect or in-window hits is a
+`concern`, and a concern still ships the sequences.
 
 `NEAR_PERFECT_IDENTITIES = 17` is a reporting threshold with no biological claim behind it. It
 changes what is counted, never what is kept, and the raw alignments travel beside it.

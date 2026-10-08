@@ -20,6 +20,7 @@ from sarna.app.service import DesignService
 from sarna.design.order import (
     CSV_COLUMNS,
     DEFAULT_MODEL,
+    ScreeningFinding,
     csv_row,
     order_from_record,
 )
@@ -318,9 +319,38 @@ class AppRouter:
         self.screeners.submit(self.service.screen, screening_id, run_id, scope)
         return self._json(202, {"id": screening_id, "scope": scope})
 
-    @staticmethod
+    def _screenings_by_candidate(
+        self, run_id: str
+    ) -> dict[str, list[ScreeningFinding]]:
+        """Return the newest complete screening per scope, indexed by candidate.
+
+        ADR 0019 left this join open, so the order export reported "not-performed" even after
+        a real screening — honest, and useless to somebody deciding what to synthesise. A
+        screening stays its own dated record; this reads it rather than writing into the run.
+
+        Newest per scope, because re-screening adds a record rather than replacing one and the
+        export should carry the most recent observation. An incomplete or failed screening
+        contributes nothing: a search that did not finish is not a search that found nothing.
+        """
+        findings: dict[str, list[ScreeningFinding]] = {}
+        seen: set[str] = set()
+        for listed in self.service.store.screenings_for(run_id):
+            if listed["status"] != "complete" or listed["scope"] in seen:
+                continue
+            seen.add(listed["scope"])
+            result = (self.service.store.screening(listed["id"]) or {}).get("result") or {}
+            parameters = result.get("parameters") or {}
+            for row in result.get("specificity") or []:
+                findings.setdefault(row["candidate"], []).append(ScreeningFinding(
+                    scope=listed["scope"],
+                    database=str(parameters.get("database", "unknown")),
+                    searched_at=str(result.get("searched_at", "")),
+                    row=row,
+                ))
+        return findings
+
     def _order_csv(
-        run_id: str, snapshot: dict[str, Any], query: dict[str, list[str]]
+        self, run_id: str, snapshot: dict[str, Any], query: dict[str, list[str]]
     ) -> tuple[int, str, bytes]:
         """Write the order-ready duplexes: 19 nt RNA cores plus dTdT, with their sanity report.
 
@@ -329,6 +359,7 @@ class AppRouter:
         failed a gate is not something to order, and its rule verdicts remain the record of why.
         """
         selected = _selected_for_export(snapshot, query)
+        screenings = self._screenings_by_candidate(run_id)
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(CSV_COLUMNS)
@@ -336,7 +367,10 @@ class AppRouter:
             # The model this run actually displayed, taken from the frozen record rather than
             # today's default, so a reopened run reports the strand prediction it was read with.
             model = (candidate.get("rating") or {}).get("guide_model") or DEFAULT_MODEL
-            writer.writerow(csv_row(order_from_record(candidate, model), run_id))
+            writer.writerow(csv_row(
+                order_from_record(candidate, model, screenings=tuple(
+                    screenings.get(candidate["id"], ()))),
+                run_id))
         return 200, "text/csv; charset=utf-8", output.getvalue().encode()
 
     def _queue_batch(
