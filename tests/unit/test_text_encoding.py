@@ -76,3 +76,21 @@ def test_cp1252_really_does_fail_on_text_ensembl_returns() -> None:
     # UTF-8 the default everywhere (PEP 686), this test is the one to revisit first.
     with pytest.raises(UnicodeEncodeError):
         "sodium channel α-subunit".encode("cp1252")  # noqa: RUF001
+
+
+def test_the_flow_diagram_and_its_svg_preview_agree() -> None:
+    """The two files describe one diagram, and both used to be maintained by hand.
+
+    That is the arrangement that let the promoter map and its legend drift until four of five
+    swatches were wrong. The SVG is now generated from the .drawio; this fails if somebody
+    edits one and not the other, naming the command that fixes it.
+    """
+    import subprocess
+    import sys
+
+    root = Path(__file__).resolve().parents[2]
+    result = subprocess.run(
+        [sys.executable, str(root / "scripts" / "render_flow_diagram.py"), "--check"],
+        capture_output=True, text=True, check=False, cwd=root,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout

@@ -9,12 +9,26 @@ ranked, annotated, exportable duplex candidates.
 > on either strand and explains every verdict, the promoter is annotated with CpG islands,
 > regulatory features and TF motif predictions, and the whole run renders as one self-contained
 > interactive HTML page. The local app adds gene lookup, browser-editable rules, Python reruns,
-> saved runs, and exports. Launch with `.venv/bin/python -m sarna.app`; open
-> **http://localhost:8001/**. The earlier `http.server` previews serve static files.
+> saved runs, an off-target screen against NCBI, and exports including a spreadsheet of every
+> candidate with its values.
 >
-> **Installing it on another machine?** [`INSTALL.md`](INSTALL.md) is written for a colleague
-> with no programming experience: one command on Windows, macOS or Linux, then
-> `sarna-designer-check` to confirm it works.
+> ### Installing it for someone else
+>
+> **[`INSTALL.md`](INSTALL.md)** is written for a colleague with no programming experience:
+> Windows, macOS and Linux, step by step, ending in `sarna-designer-check` printing `PASS`.
+>
+> **This repository is private**, so a GitHub install URL works only for collaborators and
+> needs Git installed. For anyone else, build a wheel and send them the one file:
+>
+> ```bash
+> python -m build --wheel          # produces dist/sarna_designer-*.whl, about 320 kB
+> ```
+>
+> They then need no GitHub account, no Git, and no Python of their own — `uv` fetches the
+> interpreter. INSTALL.md calls this Route A and walks through it.
+>
+> **Developing on it instead?** `.venv/bin/python -m sarna.app`, then
+> **http://localhost:8001/**.
 >
 > The engine is now validated against measured activity for the first time — 125 assayed
 > sequences, 14 of them activators. The position-19 gate excludes CEBPA, a known activator;
@@ -91,8 +105,9 @@ To use the adjustable app, follow the [local workbench guide](docs/development/l
 It retrieves supported human genes through Ensembl and accepts pasted DNA. New genes/windows need
 internet; cached responses support offline runs. The earlier generated pages remain described in
 the [preview guide](docs/development/trying-the-browser.md). An editable
-[flow diagram](docs/architecture/website-flow.drawio) and
-[SVG preview](docs/architecture/website-flow.svg) show the workbench and remaining work.
+[flow diagram](docs/architecture/website-flow.drawio) shows the dataflow and the remaining work;
+its [SVG preview](docs/architecture/website-flow.svg) is generated from it by
+`scripts/render_flow_diagram.py`.
 
 ```python
 from sarna.design.pipeline import design_sarnas

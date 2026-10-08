@@ -124,10 +124,21 @@ Runs are stored in `~/.sarna-designer/runs.sqlite3` unless `--data-dir` says oth
 
 ## Flow diagrams
 
-Open [website-flow.drawio](../architecture/website-flow.drawio) in draw.io. It contains two pages:
-**Current version** and **Planned local app**. The amber dashed boxes are planned work;
-the Python evaluation core already exists. The settings-to-rerun loop shows where explanations,
-local saves and frozen exports belong.
+Open [website-flow.drawio](../architecture/website-flow.drawio) in draw.io. It contains two
+pages: **Current multi-promoter workbench** and **Remaining continuation**.
 
-[website-flow.svg](../architecture/website-flow.svg) is a browser-viewable preview of both pages.
-Neither diagram claims the future workbench is already implemented.
+Page one is the dataflow as built: input, reference choice, one Python run per reference, saved
+local comparison, the opt-in off-target screen, and the order-ready duplex that the exports are
+written from. The amber boxes are the only place anything leaves the machine — pressing the
+screening button sends candidate 19-mers to NCBI, and nothing else does. On page two, green
+marks work that is finished.
+
+[website-flow.svg](../architecture/website-flow.svg) is a browser-viewable preview, and it is
+**generated** — edit the `.drawio` and re-run:
+
+```bash
+.venv/bin/python scripts/render_flow_diagram.py
+```
+
+A test fails if the two disagree, because when both were maintained by hand they drifted.
+Neither diagram claims that planned work is already implemented.
