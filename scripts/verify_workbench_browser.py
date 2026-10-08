@@ -283,6 +283,37 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     assert "why" in opened.lower()
     # The explanation itself, not just the verdict.
     assert "Why this rule:" in opened and "Changing it:" in opened, opened[:300]
+    # The cell line's identity and evidence. All of this reached the browser from the start and
+    # none of it was drawn -- the banner printed the name the researcher typed and stopped. A
+    # cell line named without its accession cannot be checked against anybody else's record.
+    cells = browser.evaluate("""(()=>{
+      const banner=document.getElementById('context-banner');
+      const unregistered=banner.innerText;
+      // Now the registered path, using a panel the server actually sent.
+      const known=(state.result.cell_types||[]).find(c=>c.rrid);
+      if(!known) return {unregistered, error:"no cell panel carries an accession"};
+      renderCellContext(state.result, known);
+      banner.querySelectorAll('details').forEach(d=>d.open=true);
+      const link=banner.querySelector('.accession');
+      return {unregistered, name:known.name, rrid:known.rrid,
+              href:link?link.getAttribute('href'):null,
+              linkText:link?link.textContent.trim():null,
+              axes:[...banner.querySelectorAll('.axis-table tbody th')]
+                     .map(t=>t.childNodes[0].textContent.trim()),
+              states:[...banner.querySelectorAll('.axis-state')].map(s=>s.textContent.trim()),
+              text:banner.innerText};})()""")
+    assert isinstance(cells, dict) and "error" not in cells, cells
+    # An unrecognised name must say so rather than imply the ranking used a cell context.
+    assert "No record is held for this name" in cells["unregistered"], cells["unregistered"][:200]
+    # The registered path: accession, resolvable, and every axis named rather than left raw.
+    assert cells["rrid"].startswith("CVCL_"), cells["rrid"]
+    assert cells["href"] == f"https://www.cellosaurus.org/{cells['rrid']}", cells["href"]
+    assert cells["rrid"] in cells["linkText"], cells["linkText"]
+    assert cells["axes"] == ["Expression", "Chromatin", "Factor occupancy"], cells["axes"]
+    assert set(cells["states"]) <= {"Available", "Not wired in", "No route"}, cells["states"]
+    # Saying "Loaded" would credit this run with a measurement it may not have made.
+    assert "This describes the cell line, not this run" in cells["text"]
+
     # The results open on the answer: how many survived and what to order.
     assert browser.evaluate("!document.getElementById('top-result').hidden") is True
     top = str(browser.evaluate("document.getElementById('top-result').textContent"))

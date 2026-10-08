@@ -426,8 +426,7 @@ function showResult(result) {
   renderTopResult(result);
   const cell = result.cell_types.find(c => [c.id,c.name.toLowerCase()].includes(result.app.cell_line.toLowerCase()));
   const chromatin = cell?.chromatin;
-  $("context-banner").innerHTML = `<strong>Cell context · ${escapeHTML(result.app.cell_line)}</strong><p>${chromatin?escapeHTML(chromatin.summary || "Local histone measurements loaded; inspect sources below."):"Promoter activity is unknown in this run. No cell-specific expression or histone measurement establishes that this locus is active."}</p><details><summary>Evidence gaps &amp; source notes</summary><ul>${result.app.notices.map(n => `<li>${escapeHTML(n)}</li>`).join("")}${result.app.anchor?.caveat?`<li>${escapeHTML(result.app.anchor.caveat)}</li>`:""}</ul></details>`;
-  if (result.configuration.warnings.length) $("context-banner").innerHTML += `<p style="margin-top:8px"><b>Configuration notes:</b> ${result.configuration.warnings.map(escapeHTML).join(" · ")}</p>`;
+  renderCellContext(result, cell);
   $("map-orientation").textContent = result.promoter.contig ? `chr${result.promoter.contig}:${fmt(result.promoter.start)}–${fmt(result.promoter.end)} (0-based, half-open) · DNA strand ${result.promoter.strand} · plotted 5′ → 3′ in transcript orientation` : "Plotted 5′ → 3′ as supplied · no genomic location assigned";
   $("candidate-detail").innerHTML = '<p class="hint">Select a candidate in the table or promoter map to inspect its sequences, strand prediction, and every rule verdict.</p>';
   renderMap(); renderTable();
@@ -1239,6 +1238,85 @@ function foldText(scan) {
   if (!scan.sites && !scan.expected) return "no sites found";
   if (scan.enrichment === null || scan.enrichment === undefined) return "\u2014";
   return `${scan.enrichment}\u00d7${scan.exceeds_chance ? "" : " (within chance)"}`;
+}
+
+// Keyed by the engine's own axis strings, which are hyphenated. An underscore here left
+// "tf-occupancy" rendering raw beside two properly named rows.
+const AXIS_LABEL = {
+  expression:"Expression", chromatin:"Chromatin", "tf-occupancy":"Factor occupancy",
+};
+
+function cellAxisRow(axis) {
+  // Three outcomes here too: loaded, not loaded but reachable, and nothing and no route.
+  // Rendering the last two alike would turn "nobody has looked" into "there is nothing there".
+  const state = axis.available ? "loaded" : axis.reachable ? "reachable" : "none";
+  // "Available" rather than "Loaded": this describes what exists for the cell line, not what
+  // this run read. A run with the chromatin option off still faces an available axis, and
+  // reading the two as the same thing would credit the run with a measurement it did not make.
+  const word = axis.available ? "Available" : axis.reachable ? "Not wired in" : "No route";
+  return `<tr class="axis-${state}"><th>${escapeHTML(AXIS_LABEL[axis.axis] || axis.axis)}`
+    + `<span>${escapeHTML(axis.question || "")}</span></th>`
+    + `<td><span class="axis-state ${state}">${word}</span></td>`
+    + `<td>${axis.source ? escapeHTML(axis.source) : "\u2014"}</td>`
+    + `<td>${escapeHTML(axis.note || "")}</td></tr>`;
+}
+
+function renderCellContext(result, cell) {
+  // The registry carries each line's Cellosaurus accession, its citation and what evidence
+  // exists on three axes. All of it reached the browser and none of it was drawn: the banner
+  // printed the name the researcher typed and nothing else. A cell line named without its
+  // accession cannot be checked against anybody else's record, which is the whole point of
+  // recording one.
+  const chromatin = cell?.chromatin;
+  const typed = escapeHTML(result.app.cell_line);
+  if (!cell) {
+    $("context-banner").innerHTML = `<strong>Cell context \u00b7 ${typed}</strong>`
+      + `<p>No record is held for this name, so nothing here is specific to it. A cell name on `
+      + `its own supplies no expression, chromatin or occupancy evidence, and the ranking above `
+      + `does not use one. Known lines are offered in the cell-line box; your own can be added `
+      + `with SARNA_CELL_LINES.</p>`
+      + configurationNotes(result);
+    return;
+  }
+  const accession = cell.rrid
+    ? `<a class="accession" href="https://www.cellosaurus.org/${encodeURIComponent(cell.rrid)}" `
+      + `target="_blank" rel="noopener noreferrer" `
+      + `data-tip="Cellosaurus record for this line: its origin, its known problems and its `
+      + `cross-references. Opens in a new tab so the identity can be checked independently.">`
+      + `${escapeHTML(cell.rrid)} \u2197</a>`
+    : `<span class="accession none" data-tip="No Cellosaurus accession is recorded for this `
+      + `line, so its identity cannot be checked against an external record.">no accession</span>`;
+  const axes = (cell.data_axes || []).map(cellAxisRow).join("");
+  $("context-banner").innerHTML =
+    `<strong>Cell context \u00b7 ${escapeHTML(cell.name)}</strong> ${accession}`
+    + `<p>${chromatin
+        ? escapeHTML(chromatin.summary || "Local histone measurements loaded; sources below.")
+        : "Promoter activity is unknown in this run. No cell-specific expression or histone "
+          + "measurement establishes that this locus is active."}</p>`
+    + `<p class="cell-source">${escapeHTML(cell.source || "")}`
+    + `${cell.experimental_context
+        ? " \u00b7 this project ran experiments in this line"
+        : " \u00b7 declared for reference; nothing in this project was measured in this line"}</p>`
+    + `<details><summary>What is known about ${escapeHTML(cell.name)}, and what is not</summary>`
+    + `<p class="hint">${escapeHTML(cell.description || "")}</p>`
+    + (axes ? `<table class="axis-table"><thead><tr><th>Axis</th><th>Status</th><th>Source</th>`
+        + `<th>Detail</th></tr></thead><tbody>${axes}</tbody></table>`
+        + `<p class="hint">This describes the cell line, not this run: an available axis is one `
+        + `the tool can read for these cells, and whether this run read it is in the run's own `
+        + `evidence. None of it changes a rank.</p>` : "")
+    + `</details>`
+    + `<details><summary>Evidence gaps &amp; source notes</summary><ul>`
+    + result.app.notices.map(n => `<li>${escapeHTML(n)}</li>`).join("")
+    + (result.app.anchor?.caveat ? `<li>${escapeHTML(result.app.anchor.caveat)}</li>` : "")
+    + `</ul></details>`
+    + configurationNotes(result);
+}
+
+function configurationNotes(result) {
+  return result.configuration.warnings.length
+    ? `<p style="margin-top:8px"><b>Configuration notes:</b> `
+      + `${result.configuration.warnings.map(escapeHTML).join(" \u00b7 ")}</p>`
+    : "";
 }
 
 function renderMotifPanel(result) {

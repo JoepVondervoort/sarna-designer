@@ -139,3 +139,21 @@ body.frozen .setup,body.frozen .intro-note,body.frozen .saved-label,body.frozen 
    know it is a flank position, and the engine has carried that word all along. */
 .rule-group{font-size:9px;letter-spacing:.3px;color:#5d6f72;background:#eef3f2;border-radius:4px;padding:3px 6px;white-space:nowrap}
 @media(max-width:760px){.rule-group{display:none}}
+
+/* The cell line's identity and what is actually known about it. The registry carried all of
+   this and the banner printed only the name the researcher typed. */
+.context-banner .accession{font-size:11px;font-family:ui-monospace,monospace;color:var(--teal);text-decoration:none;border-bottom:1px dotted currentColor;margin-left:6px}
+.context-banner .accession.none{color:var(--muted);border-bottom-style:solid;cursor:help}
+.context-banner .cell-source{font-size:11px;margin-top:6px;color:#8a7442}
+.axis-table{margin-top:10px;white-space:normal;font-size:11px;background:white;border-radius:8px;overflow:hidden}
+.axis-table th{background:#f6f3ea;color:#78602e;font-size:9px;padding:7px 9px;text-align:left}
+.axis-table tbody th{width:110px;font-weight:600;background:#fbf8f1;vertical-align:top}
+.axis-table td{padding:8px 9px;border-bottom:1px solid #f0e8d6;line-height:1.55;vertical-align:top}
+.axis-table tbody tr:last-child td,.axis-table tbody tr:last-child th{border-bottom:0}
+.axis-table td:nth-child(3){white-space:nowrap;font-size:10px}
+.axis-state{font-size:9px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;border-radius:4px;padding:3px 6px;white-space:nowrap}
+.axis-state.loaded{background:#e3f1e8;color:#2c6a4a}
+.axis-state.reachable{background:#eef1f4;color:#55636e}
+.axis-state.none{background:#f6ebe6;color:#8a5240}
+.axis-table tbody th span{display:block;font-weight:400;font-size:9px;color:var(--muted);margin-top:3px;line-height:1.45}
+.axis-table tbody th{width:150px}
