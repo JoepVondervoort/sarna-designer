@@ -71,8 +71,13 @@ already on your computer.
 Press the **Windows key**, type `powershell`, and press **Enter**. A blue window opens with a
 blinking cursor. You type commands here and press Enter after each one.
 
-> If a command seems to do nothing for a while, that is normal — it is downloading. Wait until
-> the blinking cursor comes back before typing the next one.
+Copy the **whole command** from each code box, paste it into PowerShell, then press
+**Enter**. Do not copy a prompt such as `PS C:\...>` or the example output. Run one command
+at a time, and wait for the `PS ...>` prompt to return before running the next one.
+
+If you see `>>`, PowerShell is waiting for an unfinished command (often a missing quote).
+Press **Ctrl+C**, then paste the complete command again. Do not type a command in pieces or
+drag a file into a partially typed command.
 
 ### Step 2 — Install `uv`
 
@@ -90,16 +95,45 @@ only visible to a freshly opened window.
 
 ### Step 3 — Install saRNA Designer
 
-**Route A — from the file you were sent.** Save the `.whl` file somewhere you can find it,
-for example your **Downloads** folder. Then type `uv tool install --python 3.11 "` , drag the
-file from Explorer into the PowerShell window (this pastes its full path for you), and finish
-the line with `[app]"` so it reads like this:
+**Route A — from the file you were sent (recommended for colleagues).**
+
+**A. Save the attachment.** You need a **file**, called
+`sarna_designer-0.1.0.dev0-py3-none-any.whl`, in your **Downloads** folder.
+
+- If you received the `.whl` directly, use your email's **Save attachment** option. Do not
+  open or extract it.
+- If you received a separate ZIP containing the wheel, save the ZIP, choose **Extract All**
+  once, then copy the `.whl` file inside into Downloads. **Do not extract the inner `.whl`.**
+
+A wheel is a ZIP archive internally. An archive icon is okay; an extracted folder is not.
+In Explorer, enable **View → Show → File name extensions** (on older Windows, **View → File
+name extensions**). If the actual wheel file was renamed to `.whl.zip`, remove only the final
+`.zip`. Renaming an extracted folder to `.whl` does not turn it into a wheel.
+
+**B. Check that the file is there.** Paste this whole line and press Enter:
 
 ```powershell
-uv tool install --python 3.11 "C:\Users\YourName\Downloads\sarna_designer-0.1.0.dev0-py3-none-any.whl[app]"
+Test-Path -LiteralPath "$env:USERPROFILE\Downloads\sarna_designer-0.1.0.dev0-py3-none-any.whl" -PathType Leaf
 ```
 
-The `[app]` on the end is **not optional** — it is what installs the browser interface.
+It must print **`True`**. If it prints `False`, stop: the file is missing, is a folder, or has
+another name. Check Downloads and the filename. Windows sometimes adds `(1)` to duplicate
+attachments. The commands here assume the exact filename above; for a newer release, replace
+only that filename in both commands with the one you received.
+
+**C. Install it.** Copy this **entire line**, including `uv tool install --python 3.11`,
+and press Enter:
+
+```powershell
+uv tool install --python 3.11 "$env:USERPROFILE\Downloads\sarna_designer-0.1.0.dev0-py3-none-any.whl[app]"
+```
+
+`$env:USERPROFILE` automatically uses your Windows user folder; leave it exactly as written.
+The `[app]` inside the quotes installs the browser interface and must stay there. Pasting only
+the quoted path will just print the path; it does **not** install anything.
+
+Already have Python 3.14 or another version? Leave it installed. This command selects Python
+3.11 separately, as required by this tool.
 
 **Route B — from GitHub**, only if you have been added to the repository and have
 [Git](https://git-scm.com/download/win) installed:
@@ -114,17 +148,11 @@ Either way, this downloads the tool and the correct Python, and ends with:
 Installed 2 executables: sarna-designer, sarna-designer-check
 ```
 
-> **This step is slow the first time, and that is normal.** It is fetching a complete private
-> Python — about 90 MB unpacked across **3,862 files** — and on Windows the virus scanner
-> inspects every one of those files as it is written. **Several minutes is expected**, longer
-> on a slow or corporate network. It only happens once: installing again later takes under a
-> second, because the download is cached.
->
-> **Is it stuck or just slow?** Open Task Manager (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Esc</kbd>)
-> and look for **uv.exe** — if it is using CPU, disk or network, leave it alone. Worry only if
-> it has sat completely idle for more than about fifteen minutes, or if the text stops at
-> `Resolving` and never moves, which usually means a proxy or firewall is blocking the
-> download.
+> The first installation may take several minutes while it downloads Python and packages.
+> Wait for the command prompt to return. If it appears stuck, press **Ctrl+C** and rerun the
+> same complete install command with `-v` immediately after `uv` (`uv -v tool install ...`).
+> Send the command and its output to the person who sent you the tool. Task Manager activity
+> alone cannot tell you whether the command was entered correctly or why it is waiting.
 
 **If you do not see that line, stop here** and read the last few lines of output — the rest of
 these steps will not work.
@@ -250,6 +278,20 @@ off-target search is a button you press, not something that happens automaticall
 ---
 
 ## If something goes wrong
+
+**`error: ... <PACKAGE>` is missing** — only the beginning of the install command was
+entered. Copy the whole line from Step 3C, including the quoted path and `[app]`.
+
+**PowerShell prints the file path and nothing else** — only the quoted path was entered.
+Run the whole Step 3C command, starting with `uv tool install`.
+
+**`neither pyproject.toml nor setup.py are present in the directory`** — check whether the
+`.whl` is actually an extracted folder. Run the Step 3B file check; it must print `True`.
+Rename the extracted folder, then save the original wheel attachment to Downloads. Do not
+create either of those missing files. If the check is `True` and the error persists, send the
+full command and output to the sender.
+
+**PowerShell shows `>>`** — press **Ctrl+C** and paste the complete command again; see Step 1.
 
 **`uv` is not recognised** — you did not close and reopen the terminal after step 2. Do that.
 
@@ -437,18 +479,33 @@ to reach it from Windows:
 
 ### 3. Send it
 
-Attach the `.whl` and link them to this file. A message that works:
+For colleagues new to this, put the **actual wheel file** inside a separate ZIP, for example
+`sarna-designer-install.zip`, and attach that ZIP together with this guide. This makes the
+instruction explicit: extract the outer ZIP once, then leave the inner wheel intact. Do not
+send a folder named `.whl`, and do not extract the wheel before packaging it.
 
-> Here is the saRNA design tool. Save the attached file somewhere you can find it, such as your
-> Downloads folder, then follow the Windows section of INSTALL.md — it is written for someone
-> who has never installed anything like this.
+From the project folder, you can create the outer ZIP with:
+
+```bash
+.venv/bin/python -m zipfile -c dist/sarna-designer-install.zip dist/sarna_designer-0.1.0.dev0-py3-none-any.whl
+```
+
+Open `dist` in Explorer as described above and attach `sarna-designer-install.zip`.
+The wheel path is a file to attach, **not a command to execute** in your terminal.
+
+A message you can send:
+
+> Attached are the saRNA design tool and its installation guide. Save the ZIP and choose
+> **Extract All** once. Copy the `.whl` file inside into your **Downloads** folder; do not
+> open or extract that inner file.
 >
-> Three things worth knowing before you start: you do **not** need WSL, Python or
-> administrator rights; everything happens in **PowerShell**; and at step 3 use **Route A**,
-> the one that installs from the file I sent, not the GitHub one.
+> Follow **Windows → Route A** in INSTALL.md. You do not need Python, WSL, administrator
+> rights, Git or a GitHub account. An existing Python installation can stay as it is.
+> Paste each complete command into PowerShell and press Enter; do not type it in pieces.
 >
-> When step 4 prints `RESULT: PASS` it is working. If anything says FAIL, send me the whole
-> output and I will tell you what it means.
+> The file check must print `True`, the installation should report `Installed 2 executables`,
+> and the final check should end with `RESULT: PASS`. If any step fails, stop and send me the
+> command and its complete output.
 
 ### If you would rather they install from GitHub
 

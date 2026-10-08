@@ -57,13 +57,33 @@ uv --version
 
 *Route A — from a `.whl` file you were sent* (needs no GitHub account and no Git):
 
+Save the wheel into **Downloads** without extracting it. If you received an outer ZIP,
+choose **Extract All** once, then copy the `.whl` file inside into Downloads. Do not extract
+the inner wheel. A ZIP icon is okay; a folder named `.whl` is not.
+
+Paste each **complete line** below separately into PowerShell and press Enter. Do not paste
+only the quoted path, and do not drag a file into a partially typed command.
+
+First verify the file:
+
 ```powershell
-uv tool install --python 3.11 "C:\Users\YourName\Downloads\sarna_designer-0.1.0.dev0-py3-none-any.whl[app]"
+Test-Path -LiteralPath "$env:USERPROFILE\Downloads\sarna_designer-0.1.0.dev0-py3-none-any.whl" -PathType Leaf
 ```
 
-Tip: type `uv tool install --python 3.11 "`, drag the file from Explorer into the window to
-paste its path, then type `[app]"` and Enter. The `[app]` is not optional — it installs the
-browser interface.
+It must print **`True`**. If it prints `False`, check the filename and location using
+[the detailed instructions](INSTALL.md#step-3--install-sarna-designer) before continuing.
+These commands assume that exact filename; replace it in both commands if your release has
+another name. Leave `$env:USERPROFILE` as written; it uses your own user folder automatically.
+
+Then install:
+
+```powershell
+uv tool install --python 3.11 "$env:USERPROFILE\Downloads\sarna_designer-0.1.0.dev0-py3-none-any.whl[app]"
+```
+
+The `[app]` installs the browser interface and must stay inside the quotes. An existing Python
+3.14 installation is fine; this command selects 3.11 separately. If PowerShell shows `>>`,
+press **Ctrl+C** and paste the entire command again.
 
 *Route B — from this repository*, if you have been added to it and have
 [Git for Windows](https://git-scm.com/download/win):
@@ -74,10 +94,10 @@ uv tool install --python 3.11 "sarna-designer[app] @ git+https://github.com/Joep
 
 Either way it ends with `Installed 2 executables: sarna-designer, sarna-designer-check`.
 
-**Expect this step to take several minutes the first time.** It fetches a complete private
-Python — 90 MB unpacked across 3,862 files — and Windows scans every file as it lands. It is
-cached afterwards: a second install takes under a second. If you want to know whether it is
-stuck, look for `uv.exe` in Task Manager; if it is using CPU or network, it is working.
+**The first installation may take several minutes** while Python and packages download.
+Wait for the `PS ...>` prompt to return. If installation fails, stop and send the complete
+command and output to the sender; see [troubleshooting](INSTALL.md#if-something-goes-wrong).
+Do not continue to the check or start commands until installation succeeds.
 
 **4. Close PowerShell and open it again** — the same PATH reason as step 2.
 
@@ -100,7 +120,8 @@ PowerShell window open while you work. <kbd>Ctrl</kbd>+<kbd>C</kbd> stops it.
 
 ### macOS and Linux
 
-Identical except step 1:
+Use the [macOS and Linux instructions in INSTALL.md](INSTALL.md#macos); the Windows
+`$env:USERPROFILE` commands above do not work in those terminals. Install `uv` with:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
