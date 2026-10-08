@@ -6,7 +6,11 @@ traceability outranks clean code: every rule carries a citation, every verdict c
 **State:** gene symbol → promoter → ranked candidates → interactive page all work.
 `design_sarnas(promoter, config)` is the engine; `EnsemblClient` resolves a gene to a promoter;
 `sarna.regulatory` annotates it; `sarna.view.html.render` writes a self-contained browser.
-1,383 tests passed, eight live-network tests excluded; mypy strict and Ruff clean.
+1,632 tests passed in 33 s, eleven live-network tests excluded; mypy strict and Ruff clean.
+**The unit suite reaches no external service.** It used to: the screening route built a real
+`BlastClient`, so every full run queued a live BLAST job at NCBI and then blocked closing the
+router until it came back. `DesignService.blast_factory` and `poll_sleep` are the seams that
+stop it, mirroring `client_factory`; a test asserts the route uses them.
 The earlier combined statement/branch coverage measurement was **97%**; socket/launcher paths
 are additionally
 exercised by separate browser checks, which are not part of that coverage measurement.
@@ -14,15 +18,25 @@ exercised by separate browser checks, which are not part of that coverage measur
 
 **`src/sarna/app/` is now an exercised local workbench.** Gene lookup, adjustable supported
 rules, Python jobs, draft/rerun diff, SQLite snapshots and JSON/HTML/core-CSV exports work.
+The candidate view opens on a **duplex panel**: the two strands drawn antiparallel with a rung
+only where the bases pair, both 3' dTdT overhangs, guide and passenger labelled, and the two
+end energies with the stacks they were summed from — the measurement the guide call *is*, which
+until now existed only inside one English sentence. The promoter map pans by dragging and zooms
+on the wheel; excluded targets are binned into a composition histogram above 280 bp because at
+full extent they were three overlapping marks per pixel. Read
+`docs/scientific/verification-2026-10-07.md` for what has been checked against its source.
 `tests/unit/test_app.py` covers recorded sources, coordinate/strand invariants, configuration,
 storage and exports. `scripts/verify_workbench_browser.py` uses a supplied Chromium binary:
 pasted DNA and cached SCN1A checks passed, including saved reopening, tooltips, mobile layout
 and complete excluded-candidate verdicts in an offline HTML file. Desktop/mobile screenshots
 were inspected. Fresh-cache live Ensembl browser runs also passed for lowercase `chd2` and
-`kcnq2`, with 13 and 9 candidates passing Wang defaults. Both checks were re-run at 15:40 on
-7 October and still pass; Chromium 1229 is installed at
-`~/.cache/ms-playwright/chromium-1229/chrome-linux64/chrome`, so this check is **not** manual —
-pass it to `--chrome`. Cache-only mode is visible; missing
+`kcnq2`, with 13 and 9 candidates passing Wang defaults. All three paths — cached SCN1A, pasted DNA and
+`--gene kcnq2 --online` from an empty cache — were re-run on 8 October and pass; Chromium 1229
+is installed at `~/.cache/ms-playwright/chromium-1229/chrome-linux64/chrome`, so this check is
+**not** manual — pass it to `--chrome`. The browser check now also covers the duplex ladder
+(a rung exactly where the bases pair, both directions), the promoter map's drag and wheel zoom
+(comparing the translated picture against the full redraw), the binned excluded-target track
+(its bins must account for every rejection), and the cell-context panel. Cache-only mode is visible; missing
 records offer an explicit online retry, while environment-forced offline remains enforced.
 Fresh Windows/macOS installations remain unverified.
 Read `docs/development/local-workbench.md` and ADR 0015. Earlier mid-session review observations
