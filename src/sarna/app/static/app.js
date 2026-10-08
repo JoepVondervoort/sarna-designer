@@ -1064,6 +1064,24 @@ function duplexSheetHTML(result, candidate) {
   const preferencesMet = rules.filter(r => r.kind === "preference" && r.outcome === "pass");
   const unavailable = rules.filter(r => r.outcome === "not-applicable");
   const row = (label, value) => `<tr><th>${label}</th><td>${value}</td></tr>`;
+  // Which tube is which, on the rows that name the tubes. "Predicted guide strand: antisense"
+  // further down is the same fact, three paragraphs from where somebody is labelling them.
+  const sheetRoles = strandRoles(candidate.rating.guide);
+  // Spelled out rather than upper-cased in CSS: this page is printed, and a role that depends
+  // on a stylesheet is a role that can go missing on paper.
+  const sheetLabel = role =>
+    role === "undecided" ? "STRAND NOT PREDICTED" : role.toUpperCase();
+  // A screening is a separate dated record, so the sheet can only speak for what this page
+  // has. Saying "none performed" after one has run is the error the order CSV just stopped
+  // making, and it would be worse here: this is the page that goes to the bench.
+  const screened = Object.entries(state.screenings || {})
+    .map(([scope, r]) => {
+      const mine = (r.specificity || []).find(x => x.candidate === candidate.id);
+      if (!mine) return null;
+      return `${scope} (${r.parameters?.database || "?"}, `
+        + `${String(r.searched_at || "").slice(0, 10)}): ${mine.perfect_hits} perfect, `
+        + `${mine.near_perfect_hits} near-perfect of ${mine.hit_count} alignments`;
+    }).filter(Boolean);
   return `<h1>saRNA duplex — ${escapeHTML(candidate.id)}</h1>
     <table class="sheet-table">
       ${row("Gene", escapeHTML(gene))}
@@ -1074,9 +1092,9 @@ function duplexSheetHTML(result, candidate) {
     </table>
     <h2>Order these two oligonucleotides</h2>
     ${order ? `<table class="sheet-table">
-      ${row("Sense strand", `<code>${escapeHTML(order.sense_order_5to3)}</code>`)}
-      ${row("Antisense strand", `<code>${escapeHTML(order.antisense_order_5to3)}</code>`)}
-      ${row("Chemistry", "19 nt RNA core + 3′ dTdT overhang on both strands; 21 nt each")}
+      ${row(`Sense strand <i>${escapeHTML(sheetLabel(sheetRoles.sense))}</i>`, `<code>${escapeHTML(order.sense_order_5to3)}</code>`)}
+      ${row(`Antisense strand <i>${escapeHTML(sheetLabel(sheetRoles.antisense))}</i>`, `<code>${escapeHTML(order.antisense_order_5to3)}</code>`)}
+      ${row("Chemistry", `${order.core_length_nt} nt RNA core + 3′ dTdT overhang on both strands; ${order.ordered_length_nt} nt each. Anneal 1:1.`)}
     </table>` : "<p>This candidate did not pass the gates and has no order-ready duplex.</p>"}
     <h2>Why it was selected</h2>
     <p>Rank ${candidate.rank ?? "—"} of ${fmt(result.counts.passing)} that passed every evaluable gate,
@@ -1088,7 +1106,12 @@ function duplexSheetHTML(result, candidate) {
     <h2>What this does not establish</h2>
     <ul>
       <li>${measured ? escapeHTML(measured.headline) : "Ranking performance was not measured for this run."}</li>
-      <li>No off-target screening has been performed. Screen these sequences independently before ordering.</li>
+      <li>${screened.length
+        ? `Off-target screening: ${screened.map(escapeHTML).join("; ")}. `
+          + `Sequence similarity is not measured binding, and one search of one database on `
+          + `one day does not establish specificity.`
+        : "No off-target screening has been performed. Screen these sequences independently "
+          + "before ordering."}</li>
       <li>A rating counts criteria met. It is not a probability that this duplex activates the gene.</li>
       <li>Cell context: ${escapeHTML(result.app.cell_line || "not specified")}. A cell name alone supplies no expression evidence.</li>
     </ul>

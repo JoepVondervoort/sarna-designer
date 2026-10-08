@@ -157,3 +157,4 @@ body.frozen .setup,body.frozen .intro-note,body.frozen .saved-label,body.frozen 
 .axis-state.none{background:#f6ebe6;color:#8a5240}
 .axis-table tbody th span{display:block;font-weight:400;font-size:9px;color:var(--muted);margin-top:3px;line-height:1.45}
 .axis-table tbody th{width:150px}
+.sheet-table th i{font-style:normal;font-weight:700;font-size:9px;letter-spacing:.5px;text-transform:uppercase;display:block;margin-top:2px}

@@ -405,6 +405,10 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
         "document.getElementById('duplex-sheet').innerHTML=duplexSheetHTML(r,best);"
         "return document.getElementById('duplex-sheet').innerText;})()"))
     assert "Order these two oligonucleotides" in sheet
+    # Which tube is which, on the rows that name the tubes.
+    assert "GUIDE" in sheet and "PASSENGER" in sheet, (
+        "the sheet names two strands without saying which is loaded")
+    assert "Anneal 1:1" in sheet
     assert sheet.count("[dT][dT]") >= 2, "both strands belong on the sheet"
     assert "Gates passed" in sheet and "Preferences met" in sheet
     assert "No off-target screening has been performed" in sheet
