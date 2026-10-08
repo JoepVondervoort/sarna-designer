@@ -62,7 +62,7 @@ body.frozen .setup,body.frozen .intro-note,body.frozen .saved-label,body.frozen 
 .offtarget-card th button.active{border-color:var(--teal);color:var(--teal)}
 
 /* Motif enrichment panel (recommendation 2). */
-.motif-panel{margin-top:12px}
+.motif-panel{margin-top:12px}.motif-panel.card{margin-top:0;padding:20px 20px 6px}.motif-panel.card>h3{margin-bottom:2px}
 .motif-panel table{font-size:12px}
 .motif-panel tbody tr{cursor:pointer}
 .motif-panel tbody tr.selected{background:#eef4f8;box-shadow:inset 3px 0 0 var(--lavender)}
@@ -180,7 +180,7 @@ body.frozen .setup,body.frozen .intro-note,body.frozen .saved-label,body.frozen 
 .map-legend>.hint{padding:11px 20px 14px;margin:0;font-size:10px}
 @media(max-width:760px){.legend-table th{width:auto;padding-left:15px}.legend-table td:nth-child(2){width:auto}.legend-table,.legend-table tbody,.legend-table tr,.legend-table th,.legend-table td{display:block}.legend-table td{border-bottom:0}.legend-table tr{border-bottom:1px solid #f0f4f2;padding:4px 0}.legend-toggle{margin-left:0}}
 /* The motif panel is its own card now, below the designs. */
-.motif-panel.card{padding-bottom:4px}
+
 .legend-chip.focused{color:var(--lavender-ink);font-weight:650}
 
 /* Use the width a large screen actually has, without letting prose run the whole way across
@@ -193,3 +193,4 @@ body.frozen .setup,body.frozen .intro-note,body.frozen .saved-label,body.frozen 
   .layout{grid-template-columns:360px minmax(0,1fr);gap:28px}
   .detail-body{gap:32px}
 }
+.motif-swatch{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:baseline}

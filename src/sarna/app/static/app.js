@@ -524,12 +524,19 @@ function renderLegend(result) {
   if (!legend) return;
   const rejections = (result.rejection_breakdown || []).slice(0, REJECTION_COLOURS.length);
   const palette = rejectionPalette(result);
+  const motifColours = motifPalette(result);
+  const motifSwatches = [...motifColours].map(([name, fill]) =>
+    ({colour:{fill, edge:fill}, name}));
+  const swatchesFor = track => track.key === "motifs" && motifSwatches.length
+    ? [...motifSwatches, {colour:TRACK_COLOURS.motif, name:"other factor"},
+       {colour:TRACK_COLOURS.motifDim, name:"dimmed, while one factor is selected"}]
+    : track.swatches;
   const chips = TRACKS.map(track => {
     const marks = track.key === "excluded"
       ? rejections.map(entry =>
           `<i style="background:${palette.get(entry.rule)};border-color:${palette.get(entry.rule)}"></i>`).join("")
         + (rejections.length ? "" : `<i style="background:${OTHER_REJECTION};border-color:${OTHER_REJECTION}"></i>`)
-      : track.swatches.map(swatch).join("");
+      : swatchesFor(track).map(swatch).join("");
     const name = track.key === "motifs" && state.motifFocus
       ? `${track.name}: ${state.motifFocus} only` : track.name;
     return `<span class="legend-chip${track.key === "motifs" && state.motifFocus
@@ -540,7 +547,7 @@ function renderLegend(result) {
     // breakdown directly above the legend. Repeating all five here said the same thing twice
     // and made this the longest row in the table.
     const marks = track.key === "excluded" ? "see the breakdown above"
-      : track.swatches.map(entry =>
+      : swatchesFor(track).map(entry =>
           `<span class="legend-mark">${swatch(entry)}${escapeHTML(entry.name)}</span>`).join("");
     return `<tr><th>${escapeHTML(track.name)}</th><td>${marks || "\u2014"}</td>`
       + `<td>${escapeHTML(track.help)}</td></tr>`;
@@ -596,7 +603,10 @@ const TRACK_COLOURS = {
   // just another shade of the same yellow.
   promoter:     {fill:"#e8b5a6", edge:"#b4573f"},
   regulatory:   {fill:"#efcf99", edge:"#b8882f"},
-  motif:        {fill:"#6a5ca8", edge:"#4e4287"},
+  // The neutral for a factor past the end of the per-factor palette. It must not *be* a
+  // palette colour: while it was #6a5ca8, SOX2 fell off the end and rendered identically to
+  // KLF4, and nothing on screen distinguished them. 3.6:1 on white.
+  motif:        {fill:"#7f8794", edge:"#5c636e"},
   motifDim:     {fill:"#d7d1ea", edge:"#b3a9d4"},
   candidate:    {fill:"#087e80", edge:"#055e60"},
 };
@@ -618,9 +628,9 @@ const TRACKS = [
    swatches:[{colour:TRACK_COLOURS.promoter, name:"promoter"},
              {colour:TRACK_COLOURS.regulatory, name:"other feature"}]},
   {key:"motifs", y:211, name:"TF motif matches",
-   help:"Sequence predictions from the bundled motif matrices. A match is not measured factor occupancy. Hover for the matrix, score and strand.",
-   swatches:[{colour:TRACK_COLOURS.motif, name:"match"},
-             {colour:TRACK_COLOURS.motifDim, name:"other factor, while one is selected"}]},
+   help:"Sequence predictions from the bundled motif matrices, one colour per factor, assigned to the most enriched first. A match is not measured factor occupancy. Hover for the matrix, score and strand.",
+   swatches:[{colour:TRACK_COLOURS.motif, name:"a match"},
+             {colour:TRACK_COLOURS.motifDim, name:"dimmed, while one factor is selected"}]},
   {key:"passing", y:245, name:"Passing targets",
    help:"Targets that pass every evaluable mandatory rule. Unavailable gates must still be examined in candidate details.",
    swatches:[{colour:TRACK_COLOURS.candidate, name:"passes every evaluable gate"}]},
@@ -628,6 +638,23 @@ const TRACKS = [
    help:"Targets with at least one failed mandatory rule, coloured by the first rule that excluded each. Hover or select to see which checks failed.",
    swatches:[]},
 ];
+
+// One colour per factor, so the motif row says *which* factor is where rather than only that
+// something matched. Assigned in the panel's own order -- enriched first, by fold -- so the
+// factors worth looking at get the distinct hues and any beyond the palette share the neutral
+// purple. Each is at least 4.5:1 on white, well past the 3:1 a graphic mark needs, and the
+// family is deliberately unlike the rejection palette so the two tracks do not read alike.
+const MOTIF_COLOURS = ["#6a5ca8","#2f7d95","#9c5420","#3f7d4e","#a2436b","#6b6f24"];
+
+function motifPalette(result) {
+  const drawn = new Set((result.tracks?.motifs || []).map(t => t.label));
+  const ranked = [...(result.motif_scans || [])]
+    .filter(m => drawn.has(m.motif))
+    .sort((a, b) => (b.exceeds_chance - a.exceeds_chance)
+                 || (b.enrichment - a.enrichment) || (b.sites - a.sites));
+  return new Map(ranked.slice(0, MOTIF_COLOURS.length)
+    .map((m, index) => [m.motif, MOTIF_COLOURS[index]]));
+}
 
 const EXCLUDED_TOP = 256, EXCLUDED_HEIGHT = 22, EXCLUDED_BINS = 104;
 // How wide a view can be before excluded targets stop being separable marks. A 19 nt target
@@ -752,10 +779,14 @@ function renderMap() {
     ? "Not retrieved \u2014 Ensembl regulatory annotations were switched off for this run."
     : "No Ensembl Regulatory Build feature overlaps this window.");
   const focused = state.motifFocus;
+  const motifColours = motifPalette(r);
   r.tracks.motifs.forEach((t,i)=>{
     // Exact label match: a prefix test would make SP1 claim SP100 if one were bundled.
     const mine = !focused || t.label === focused;
-    rect(t.start,t.end,197+(i%3)*5,mine?6:3,mine?TRACK_COLOURS.motif:TRACK_COLOURS.motifDim,t.detail);
+    const own = motifColours.get(t.label);
+    rect(t.start,t.end,197+(i%3)*5,mine?6:3,
+      mine ? (own ? {fill:own, edge:own} : TRACK_COLOURS.motif) : TRACK_COLOURS.motifDim,
+      t.detail,`data-motif-mark="${escapeHTML(t.label)}"`);
   });
   if (!r.tracks.motifs.length) emptyNote(212, r.app.request.motifs === false
     ? "Not scanned \u2014 motif prediction was switched off for this run."
@@ -1448,6 +1479,7 @@ function renderMotifPanel(result) {
   const ranked = [...scans].sort((a, b) =>
     (b.exceeds_chance - a.exceeds_chance) || (b.enrichment - a.enrichment) || (b.sites - a.sites));
   const focused = state.motifFocus;
+  const colours = motifPalette(result);
   panel.hidden = false;
   panel.innerHTML =
     `<h3>Transcription factor motifs <span class="muted">· ${scans.length} matrices scanned`
@@ -1462,7 +1494,9 @@ function renderMotifPanel(result) {
         const on = focused === m.motif;
         return `<tr data-motif="${escapeHTML(m.motif)}" class="${on ? "selected" : ""}" `
           + `tabindex="0" aria-label="Show only ${escapeHTML(m.motif)} on the map">`
-          + `<td><b>${escapeHTML(m.motif)}</b></td>`
+          + `<td><b>${colours.has(m.motif)
+              ? `<i class="motif-swatch" style="background:${colours.get(m.motif)}"></i>` : ""}`
+          + `${escapeHTML(m.motif)}</b></td>`
           + `<td class="chance">${escapeHTML(m.matrix_id)}</td>`
           + `<td>${m.sites}</td><td class="chance">${m.expected}</td>`
           + `<td class="${m.exceeds_chance ? "enriched" : "chance"}">`

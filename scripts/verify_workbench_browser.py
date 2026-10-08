@@ -273,6 +273,14 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     # A promoter must not be the same colour as any other regulatory feature.
     assert "#e8b5a6" in legend["swatches"] and "#efcf99" in legend["swatches"], legend["swatches"]
 
+    # Each factor gets its own colour, and the neutral for factors past the end of the
+    # palette must not be one of the palette's own: while it was, SOX2 fell off the end and
+    # rendered identically to KLF4 with nothing on screen to tell them apart.
+    assert browser.evaluate(
+        "MOTIF_COLOURS.includes(TRACK_COLOURS.motif.fill)") is False, (
+        "the neutral motif colour is also a per-factor colour, so two factors can collide")
+    assert browser.evaluate("new Set(MOTIF_COLOURS).size === MOTIF_COLOURS.length") is True
+
     # Panning translates the clipped group instead of redrawing 2,600 SVG nodes, because a full
     # redraw measured 14.5 ms against a 16.7 ms frame budget. That shortcut is only legitimate
     # if the translated picture is the one the redraw would have produced, so this compares
