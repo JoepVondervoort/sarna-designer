@@ -228,6 +228,51 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
         assert "individually" in reached["legend"], reached["legend"]
     browser.evaluate("document.getElementById('zoom-reset').click()")
 
+    # The legend's colours must be the map's colours. They were three separate lists and had
+    # drifted: the legend showed #e2b772 for the regulatory build against a map drawing
+    # #ddb370 and #efcf99, and #a798d2 for motifs against a map drawing #6a5ca8. A legend
+    # whose swatches are not the drawing's colours is worse than none, because it is
+    # confidently wrong. Both now come from one table, and this checks that they still do.
+    legend = browser.evaluate(r"""(()=>{
+      const hex = value => {
+        const m = value.match(/rgba?\((\d+), ?(\d+), ?(\d+)/);
+        return m ? "#" + [1,2,3].map(i=>(+m[i]).toString(16).padStart(2,"0")).join("") : value;
+      };
+      // The authoritative table, plus the rejection colours, which are generated per run
+      // rather than declared. A track with no features in this run still belongs in the
+      // legend, so what is checked is the shared source and not what happens to be drawn.
+      const declared = new Set(Object.values(TRACK_COLOURS).map(c => c.fill.toLowerCase()));
+      const generated = new Set([...REJECTION_COLOURS, OTHER_REJECTION]
+        .map(c => c.toLowerCase()));
+      const drawn = new Set([...document.querySelectorAll('#promoter-map rect[fill]')]
+        .map(r => (r.getAttribute('fill')||'').toLowerCase())
+        .filter(f => f && f !== 'none' && f !== 'transparent'));
+      const legend = document.getElementById('map-legend');
+      legend.open = true;
+      const swatches = [...legend.querySelectorAll('.legend-mark i')]
+        .map(i => hex(getComputedStyle(i).backgroundColor).toLowerCase());
+      return {drawn:[...drawn], swatches, declared:[...declared], generated:[...generated],
+              undeclared:[...drawn].filter(f => !declared.has(f) && !generated.has(f)),
+              rows:[...legend.querySelectorAll('.legend-table th')].map(t=>t.textContent.trim()),
+              collapsible: legend.tagName === 'DETAILS',
+              chips:[...legend.querySelectorAll('.legend-chip')].length};})()""")
+    assert isinstance(legend, dict), legend
+    assert legend["collapsible"] is True, "the legend cannot be collapsed"
+    assert legend["chips"] == 7, legend["chips"]
+    # Every row of the map is named in the legend, in the order the map draws them.
+    assert legend["rows"] == ["Reference / TSS", "Design windows", "CpG islands",
+                              "Regulatory build", "TF motif matches", "Passing targets",
+                              "Excluded targets"], legend["rows"]
+    stray = [s for s in legend["swatches"] if s not in legend["declared"]]
+    assert not stray, (
+        f"the legend shows {stray}, which is not in the map's colour table "
+        f"{sorted(legend['declared'])}; the two have drifted apart again")
+    assert not legend["undeclared"], (
+        f"the map draws {legend['undeclared']}, which is in neither the shared colour table "
+        f"nor the generated rejection palette, so no legend entry can describe it")
+    # A promoter must not be the same colour as any other regulatory feature.
+    assert "#e8b5a6" in legend["swatches"] and "#efcf99" in legend["swatches"], legend["swatches"]
+
     # Panning translates the clipped group instead of redrawing 2,600 SVG nodes, because a full
     # redraw measured 14.5 ms against a 16.7 ms frame budget. That shortcut is only legitimate
     # if the translated picture is the one the redraw would have produced, so this compares

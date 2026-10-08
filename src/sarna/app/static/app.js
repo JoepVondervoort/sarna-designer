@@ -512,6 +512,47 @@ function rejectionPalette(result) {
   return palette;
 }
 
+function swatch(entry) {
+  return `<i style="background:${entry.colour.fill};border-color:${entry.colour.edge}"></i>`;
+}
+
+function renderLegend(result) {
+  // Built from TRACKS, in the order the map draws them, so each entry names the row it
+  // belongs to rather than leaving the reader to match a colour by eye across seven lines.
+  // Collapsed it is one line of chips; opened it says what each track means.
+  const legend = $("map-legend");
+  if (!legend) return;
+  const rejections = (result.rejection_breakdown || []).slice(0, REJECTION_COLOURS.length);
+  const palette = rejectionPalette(result);
+  const chips = TRACKS.map(track => {
+    const marks = track.key === "excluded"
+      ? rejections.map(entry =>
+          `<i style="background:${palette.get(entry.rule)};border-color:${palette.get(entry.rule)}"></i>`).join("")
+        + (rejections.length ? "" : `<i style="background:${OTHER_REJECTION};border-color:${OTHER_REJECTION}"></i>`)
+      : track.swatches.map(swatch).join("");
+    const name = track.key === "motifs" && state.motifFocus
+      ? `${track.name}: ${state.motifFocus} only` : track.name;
+    return `<span class="legend-chip${track.key === "motifs" && state.motifFocus
+      ? " focused" : ""}">${marks}${escapeHTML(name)}</span>`;
+  }).join("");
+  const rows = TRACKS.map(track => {
+    // The excluded track's colours are per-rule and listed with their percentages in the
+    // breakdown directly above the legend. Repeating all five here said the same thing twice
+    // and made this the longest row in the table.
+    const marks = track.key === "excluded" ? "see the breakdown above"
+      : track.swatches.map(entry =>
+          `<span class="legend-mark">${swatch(entry)}${escapeHTML(entry.name)}</span>`).join("");
+    return `<tr><th>${escapeHTML(track.name)}</th><td>${marks || "\u2014"}</td>`
+      + `<td>${escapeHTML(track.help)}</td></tr>`;
+  }).join("");
+  legend.innerHTML = `<summary><span class="legend-chips">${chips}</span>`
+    + `<span class="legend-toggle">what am I looking at? \u203a</span></summary>`
+    + `<table class="legend-table"><tbody>${rows}</tbody></table>`
+    + `<p class="hint">Drag to pan \u00b7 scroll to zoom \u00b7 hover or focus any mark for its `
+    + `evidence \u00b7 click a candidate to inspect it. Coordinates and annotations identify `
+    + `features; they do not establish activity in your cell line.</p>`;
+}
+
 function renderRejectionLegend(result) {
   // Says which rule is actually constraining this promoter, in the same move as the colours.
   const breakdown = result.rejection_breakdown || [];
@@ -536,6 +577,57 @@ function renderRejectionLegend(result) {
         : "A candidate is counted against the first rule that excluded it. Every excluded "
           + "target in view is drawn individually; click one to inspect it."}</small>`;
 }
+
+// One description of the tracks, used to draw the map, to label its rows, and to build the
+// legend. They were three separate lists and had drifted: the legend's swatch for the
+// regulatory build was #e2b772 while the map drew #ddb370 and #efcf99, and its motif swatch
+// was #a798d2 against a map that drew #6a5ca8. A legend whose colours are not the map's
+// colours is worse than no legend, because it is confidently wrong.
+//
+// Fills stay light so bands do not dominate; each carries a darker edge, which is what gives
+// the boundary the 3:1 contrast a graphic mark needs without darkening the page.
+const TRACK_COLOURS = {
+  tss:          {fill:"#344d55", edge:"#243840"},
+  altTss:       {fill:"#8eaaa0", edge:"#5c7a70"},
+  window:       {fill:"#c2dfd2", edge:"#6f9e87"},
+  preferred:    {fill:"#75bfa7", edge:"#3f8a72"},
+  cpg:          {fill:"#aac7c9", edge:"#5f8d90"},
+  // Reddish, because a promoter is the feature this tool exists to target and it read as
+  // just another shade of the same yellow.
+  promoter:     {fill:"#e8b5a6", edge:"#b4573f"},
+  regulatory:   {fill:"#efcf99", edge:"#b8882f"},
+  motif:        {fill:"#6a5ca8", edge:"#4e4287"},
+  motifDim:     {fill:"#d7d1ea", edge:"#b3a9d4"},
+  candidate:    {fill:"#087e80", edge:"#055e60"},
+};
+
+const TRACKS = [
+  {key:"reference", y:59, name:"Reference / TSS",
+   help:"An annotated transcript start or a chosen literature anchor. This is the reference for coordinates, not proof of transcription in your cell line.",
+   swatches:[{colour:TRACK_COLOURS.tss, name:"chosen +1"},
+             {colour:TRACK_COLOURS.altTss, name:"other annotated starts"}]},
+  {key:"windows", y:103, name:"Design windows",
+   help:"Bands use the frozen settings of this run. Gates exclude failures; preferences contribute one equal point.",
+   swatches:[{colour:TRACK_COLOURS.window, name:"gate window"},
+             {colour:TRACK_COLOURS.preferred, name:"preferred window"}]},
+  {key:"cpg", y:142, name:"CpG islands",
+   help:"DNA CpG-rich regions called using this run\u2019s length, GC and observed/expected thresholds. Absence in a short window does not establish absence outside it.",
+   swatches:[{colour:TRACK_COLOURS.cpg, name:"island"}]},
+  {key:"regulatory", y:176, name:"Regulatory build",
+   help:"Ensembl Regulatory Build pools observations across cell types. These annotations do not establish activity in the selected cell line.",
+   swatches:[{colour:TRACK_COLOURS.promoter, name:"promoter"},
+             {colour:TRACK_COLOURS.regulatory, name:"other feature"}]},
+  {key:"motifs", y:211, name:"TF motif matches",
+   help:"Sequence predictions from the bundled motif matrices. A match is not measured factor occupancy. Hover for the matrix, score and strand.",
+   swatches:[{colour:TRACK_COLOURS.motif, name:"match"},
+             {colour:TRACK_COLOURS.motifDim, name:"other factor, while one is selected"}]},
+  {key:"passing", y:245, name:"Passing targets",
+   help:"Targets that pass every evaluable mandatory rule. Unavailable gates must still be examined in candidate details.",
+   swatches:[{colour:TRACK_COLOURS.candidate, name:"passes every evaluable gate"}]},
+  {key:"excluded", y:273, name:"Excluded targets",
+   help:"Targets with at least one failed mandatory rule, coloured by the first rule that excluded each. Hover or select to see which checks failed.",
+   swatches:[]},
+];
 
 const EXCLUDED_TOP = 256, EXCLUDED_HEIGHT = 22, EXCLUDED_BINS = 104;
 // How wide a view can be before excluded targets stop being separable marks. A 19 nt target
@@ -626,15 +718,13 @@ function renderMap() {
   const rect = (start,end,y,height,color,help,attrs="") => {
     if (!inView(start,end)) return;
     const x1=scale(Math.max(start,state.start)), x2=scale(Math.min(end,state.end));
-    parts.push(`<rect x="${x1}" y="${y}" width="${Math.max(2,x2-x1)}" height="${height}" rx="2" fill="${color}" ${tip(help)} ${attrs}/>`);
+    // A colour may be a palette entry carrying its edge, or a bare fill for the
+    // rejection colours, which are generated rather than declared.
+    const fill = typeof color === "string" ? color : color.fill;
+    const edge = typeof color === "string" ? "" : ` stroke="${color.edge}" stroke-width=".75"`;
+    parts.push(`<rect x="${x1}" y="${y}" width="${Math.max(2,x2-x1)}" height="${height}" rx="2" fill="${fill}"${edge} ${tip(help)} ${attrs}/>`);
   };
-  label("Reference / TSS",59,"An annotated transcript start or a chosen literature anchor. This is the reference for coordinates, not proof of transcription in your cell line.");
-  label("Design windows",103,"Bands use the frozen settings of this run. Gates exclude failures; preferences contribute one equal point.");
-  label("CpG islands",142,"DNA CpG-rich regions called using this run’s length, GC and observed/expected thresholds. Absence in a short window does not establish absence outside it.");
-  label("Regulatory build",176,"Ensembl Regulatory Build pools observations across cell types. These annotations do not establish activity in the selected cell line.");
-  label("TF motif matches",211,"Sequence predictions from the bundled motif matrices. A match is not measured factor occupancy. Hover for the matrix, score and strand.");
-  label("Passing targets",245,"Targets that pass evaluable mandatory rules, coloured teal. Unavailable gates must still be examined in candidate details.");
-  label("Excluded targets",273,"Targets with at least one failed mandatory rule. Hover or select to see which checks failed.");
+  for (const track of TRACKS) label(track.name, track.y, track.help);
   for (const y of [65,110,148,182,217,251,279]) parts.push(`<line x1="${left}" x2="${right}" y1="${y}" y2="${y}" stroke="#e8efeb"/>`);
   parts.push(`<g id="map-ticks">${tickMarkup(state.start,state.end,p)}</g>`);
   // Two nested groups on purpose: the clip stays in the untransformed coordinate system while
@@ -645,19 +735,19 @@ function renderMap() {
     const x=scale(p.tss_offset);
     parts.push(`<line x1="${x}" x2="${x}" y1="29" y2="281" stroke="#52726b" stroke-dasharray="4 4" opacity=".5"/><path d="M${x-5} 37h10l-5 7z" fill="#344d55" ${tip("+1 · chosen reference. The first transcribed base in this coordinate system. Its source and uncertainty are recorded in run evidence.")}/><text x="${x+7}" y="46" fill="#344d55" font-size="10">+1 reference</text>`);
   }
-  for (const t of r.tracks.alternative_tss) rect(t.start,t.end,53,12,"#8eaaa0",t.detail);
+  for (const t of r.tracks.alternative_tss) rect(t.start,t.end,53,12,TRACK_COLOURS.altTss,t.detail);
   if (p.tss_offset!==null) for (const id of ["tss-window","tss-preferred-window"]) {
     const rule=r.configuration.rules.find(q=>q.id===id); if (!rule) continue;
     const values=Object.fromEntries(rule.parameters.map(q=>[q.name,q.value]));
     const a=values[id==="tss-window"?"window-start-bp":"preferred-window-start-bp"];
     const b=values[id==="tss-window"?"window-end-bp":"preferred-window-end-bp"];
-    rect(p.tss_offset+a,p.tss_offset+b+1,id==="tss-window"?84:99,11,id==="tss-window"?"#c2dfd2":"#75bfa7",`${roleName[rule.kind]}: ${rule.name}. ${signed(a)} to ${signed(b)}. Whole target containment is required. ${rule.provenance.display}`);
+    rect(p.tss_offset+a,p.tss_offset+b+1,id==="tss-window"?84:99,11,id==="tss-window"?TRACK_COLOURS.window:TRACK_COLOURS.preferred,`${roleName[rule.kind]}: ${rule.name}. ${signed(a)} to ${signed(b)}. Whole target containment is required. ${rule.provenance.display}`);
   }
-  for (const t of r.tracks.cpg_islands) rect(t.start,t.end,134,14,"#aac7c9",t.detail);
+  for (const t of r.tracks.cpg_islands) rect(t.start,t.end,134,14,TRACK_COLOURS.cpg,t.detail);
   if (!r.tracks.cpg_islands.length) emptyNote(145,
     "No CpG island met the configured length, GC and observed/expected thresholds in this window.");
   for (const t of r.tracks.regulatory) rect(t.start,t.end,165,14,
-    t.kind.includes("promoter")?"#ddb370":"#efcf99",`${t.label}: ${t.detail}`);
+    t.kind.includes("promoter")?TRACK_COLOURS.promoter:TRACK_COLOURS.regulatory,`${t.label}: ${t.detail}`);
   if (!r.tracks.regulatory.length) emptyNote(176, r.app.request.regulatory === false
     ? "Not retrieved \u2014 Ensembl regulatory annotations were switched off for this run."
     : "No Ensembl Regulatory Build feature overlaps this window.");
@@ -665,14 +755,14 @@ function renderMap() {
   r.tracks.motifs.forEach((t,i)=>{
     // Exact label match: a prefix test would make SP1 claim SP100 if one were bundled.
     const mine = !focused || t.label === focused;
-    rect(t.start,t.end,197+(i%3)*5,mine?6:3,mine?"#6a5ca8":"#d7d1ea",t.detail);
+    rect(t.start,t.end,197+(i%3)*5,mine?6:3,mine?TRACK_COLOURS.motif:TRACK_COLOURS.motifDim,t.detail);
   });
   if (!r.tracks.motifs.length) emptyNote(212, r.app.request.motifs === false
     ? "Not scanned \u2014 motif prediction was switched off for this run."
     : "No bundled matrix matched above its threshold in this window.");
   const rejectionColours = rejectionPalette(r);
   state.excludedBinned = drawExcluded(parts, r, rejectionColours, scale, tip, rect);
-  for (const c of r.candidates.filter(c=>c.rank!==null)) rect(c.offset,c.offset+c.target_site_dna.length,232+((c.rank-1)%3)*5,7,"#087e80",`${c.id} · rank ${c.rank} · ${ratingText(c)} evaluated preferences · ${c.rating.guide || "unknown"} guide (${c.rating.guide_model}). Position ${positionText(c)}. Click for details.`,`data-candidate="${c.id}"`);
+  for (const c of r.candidates.filter(c=>c.rank!==null)) rect(c.offset,c.offset+c.target_site_dna.length,232+((c.rank-1)%3)*5,7,TRACK_COLOURS.candidate,`${c.id} · rank ${c.rank} · ${ratingText(c)} evaluated preferences · ${c.rating.guide || "unknown"} guide (${c.rating.guide_model}). Position ${positionText(c)}. Click for details.`,`data-candidate="${c.id}"`);
   if (state.selected) {
     const c=r.candidates.find(c=>c.id===state.selected);
     rect(c.offset,c.offset+c.target_site_dna.length,c.rank===null?261:228,c.rank===null?19:25,"none",`${c.id} selected`,`stroke="#b97a2b" stroke-width="2" data-candidate="${c.id}"`);
@@ -684,6 +774,7 @@ function renderMap() {
   // no-op, and advertising it is a promise the map does not keep.
   svg.classList.toggle("pannable", state.start > 0 || state.end < p.length);
   renderRejectionLegend(r);
+  renderLegend(r);
   const note = $("unevaluated-note");
   if (note) {
     const missing = r.unevaluated_rules || [];
