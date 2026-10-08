@@ -47,3 +47,6 @@ build/
 # src/sarna/validation/data/ and docs/scientific/, which are committed; the PDF itself is the
 # author's own document and does not belong in the repository's history.
 docs/*.pdf
+
+# Built wheels for sending to colleagues; rebuild with `python -m build --wheel`.
+dist/

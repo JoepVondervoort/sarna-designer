@@ -12,30 +12,50 @@ ranked, annotated, exportable duplex candidates.
 > saved runs, an off-target screen against NCBI, and exports including a spreadsheet of every
 > candidate with its values.
 >
-> ### Installing it for someone else
->
-> **[`INSTALL.md`](INSTALL.md)** is written for a colleague with no programming experience:
-> Windows, macOS and Linux, step by step, ending in `sarna-designer-check` printing `PASS`.
->
-> **This repository is private**, so a GitHub install URL works only for collaborators and
-> needs Git installed. For anyone else, build a wheel and send them the one file:
->
-> ```bash
-> python -m build --wheel          # produces dist/sarna_designer-*.whl, about 320 kB
-> ```
->
-> They then need no GitHub account, no Git, and no Python of their own — `uv` fetches the
-> interpreter. INSTALL.md calls this Route A and walks through it.
->
-> **Developing on it instead?** `.venv/bin/python -m sarna.app`, then
-> **http://localhost:8001/**.
->
 > The engine is now validated against measured activity for the first time — 125 assayed
 > sequences, 14 of them activators. The position-19 gate excludes CEBPA, a known activator;
 > the default window excludes 10 of 14 when recovered locations are used.
 > Read [`docs/scientific/empirical-validation.md`](docs/scientific/empirical-validation.md) for
 > what that does and does not establish. Treat a high rank as a prioritisation aid, not a
 > prediction of activity.
+
+## Giving it to a colleague
+
+**[`INSTALL.md`](INSTALL.md) is the step-by-step guide**, written for someone who has never
+installed anything like this. Windows, macOS and Linux, ending with `sarna-designer-check`
+printing `PASS`.
+
+### What they need to install first: on Windows, nothing
+
+| | Needed? |
+|---|---|
+| WSL (Windows Subsystem for Linux) | **No.** Not used at all. |
+| Python | **No.** The installer fetches the right version itself. |
+| Administrator rights | **No.** |
+| Docker, Anaconda, Visual Studio | **No.** |
+| Git | **Only** if installing from this repository — see below. |
+
+Everything happens in **PowerShell**. One line installs [`uv`](https://docs.astral.sh/uv/),
+a second installs the tool, and a third checks it works.
+
+### Two ways to give it to them
+
+**This repository is private**, so a GitHub install URL fails with *"repository not found"*
+for anyone who has not been added to it.
+
+- **Send a file (recommended).** `python -m build --wheel` produces one ~320 kB `.whl` in
+  `dist/`. Email it. They need no GitHub account, no Git and no Python.
+  INSTALL.md calls this **Route A** and has a message you can copy, plus where the file
+  appears if you develop inside WSL.
+- **Add them to the repository.** They then also need
+  [Git for Windows](https://git-scm.com/download/win), and install with the `git+https://`
+  URL. INSTALL.md calls this **Route B**.
+
+### Running it yourself, from a checkout
+
+```bash
+.venv/bin/python -m sarna.app      # then open http://localhost:8001/
+```
 
 ## What problem this solves
 

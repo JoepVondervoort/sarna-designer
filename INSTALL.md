@@ -13,11 +13,28 @@ You need about **ten minutes** and an internet connection for the setup.
 
 ## Before you start
 
-You do **not** need to install Python yourself. The installer below fetches the exact version
-the tool needs and keeps it separate from anything else on your machine, so it cannot break
-other software you use.
+### What you need to install first: on Windows, nothing
 
-You do **not** need WSL, Docker, or administrator rights on Windows.
+This is the most common question, so here it is as a list.
+
+| | Needed? | |
+|---|---|---|
+| **WSL** (Windows Subsystem for Linux) | **No** | Not used at all. Ignore anything that mentions it. |
+| **Python** | **No** | Step 2 installs a tool that fetches the right Python itself. |
+| **Administrator rights** | **No** | Everything installs under your own user account. |
+| **Docker**, Anaconda, Visual Studio | **No** | None of them. |
+| **Git** | **Only for Route B** | See the table below. Most people do not need it. |
+
+The only thing you install is a small program called **`uv`**, in step 2, and it is one line.
+
+### Where you type the commands: PowerShell
+
+Everything on Windows happens in **PowerShell**. Not Command Prompt, not a WSL/Ubuntu window,
+not inside any other program. Step 1 shows how to open it.
+
+> **If you already use WSL for something else:** do not install this inside it. The tool is
+> installed on Windows and opens in your normal Windows browser. A copy installed inside WSL
+> will not be on your Start menu and its saved runs will be somewhere you cannot easily find.
 
 ### How you will get the tool — read this first
 
@@ -37,9 +54,9 @@ you want **Route A**.
 Route A is also the only one that needs no Git and no GitHub account at all, which is why it
 is written first below.
 
-> **If you are the person sending the file:** build it with `python -m build --wheel` in a
-> checkout and send the single `.whl` from `dist/`. It is about 320 kB and contains everything
-> except the Python interpreter, which `uv` fetches.
+> **If you are the person sending the file**, see
+> [Sending it to a colleague](#sending-it-to-a-colleague) at the end — it tells you how to
+> build the file and exactly where it appears.
 
 ---
 
@@ -320,6 +337,70 @@ This is safe to share while somebody else is using it — cache entries are writ
 name and renamed, so you never read a half-written file. It holds only public Ensembl records,
 no designs: your runs stay in your own `--data-dir`. If the shared folder is unreachable the tool
 fetches from Ensembl as usual rather than failing.
+
+---
+
+## Sending it to a colleague
+
+*For whoever is distributing the tool, not for the person installing it.*
+
+The repository is private, so the simplest thing to send is a single file: a **wheel** (`.whl`).
+It is about 320 kB, it contains the whole tool, and the person receiving it needs no GitHub
+account, no Git and no Python.
+
+### 1. Build it
+
+From a checkout, on any platform:
+
+```bash
+.venv/bin/python -m build --wheel
+```
+
+If that says `No module named build`, install it once with
+`.venv/bin/python -m pip install build`.
+
+It prints `Successfully built sarna_designer-0.1.0.dev0-py3-none-any.whl` and puts that one
+file in the **`dist/`** folder next to the code.
+
+### 2. Find it
+
+```
+<your checkout>/dist/sarna_designer-0.1.0.dev0-py3-none-any.whl
+```
+
+**If you develop inside WSL**, that path is inside Linux and Outlook cannot see it. Two ways
+to reach it from Windows:
+
+- Run `explorer.exe dist` from the project folder in your WSL terminal. A normal Windows
+  Explorer window opens on the folder, and you can drag the file straight into an email.
+- Or open Explorer and paste this into the address bar, substituting your distribution name
+  and user:
+  ```
+  \\wsl$\Ubuntu\home\jvon\sarna-designer\dist
+  ```
+  (On newer Windows builds `\\wsl.localhost\Ubuntu\...` also works.)
+
+### 3. Send it
+
+Attach the `.whl` and link them to this file. A message that works:
+
+> Here is the saRNA design tool. Save the attached file somewhere you can find it, such as your
+> Downloads folder, then follow the Windows section of INSTALL.md — it is written for someone
+> who has never installed anything like this.
+>
+> Three things worth knowing before you start: you do **not** need WSL, Python or
+> administrator rights; everything happens in **PowerShell**; and at step 3 use **Route A**,
+> the one that installs from the file I sent, not the GitHub one.
+>
+> When step 4 prints `RESULT: PASS` it is working. If anything says FAIL, send me the whole
+> output and I will tell you what it means.
+
+### If you would rather they install from GitHub
+
+They need to be added as a collaborator on the repository **and** to install
+[Git for Windows](https://git-scm.com/download/win) first. That is two extra things that can
+go wrong, which is why the file is the default recommendation. Making the repository public
+would remove both, and is a decision about publishing the work rather than a technical one.
 
 ---
 
