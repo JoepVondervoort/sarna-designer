@@ -19,6 +19,28 @@ other software you use.
 
 You do **not** need WSL, Docker, or administrator rights on Windows.
 
+### How you will get the tool — read this first
+
+There are two routes, and **which one applies to you is not a preference**:
+
+| | **Route A — a file you were sent** | **Route B — from GitHub** |
+|---|---|---|
+| You need | the `.whl` file, nothing else | a GitHub account **with access to the repository**, and **Git installed** |
+| Works for | anyone | collaborators on the repository only |
+| Use it when | you were emailed or handed a file | you have been added to the repository |
+
+**The repository is private.** A GitHub link will fail with *"repository not found"* for
+anyone who has not been given access — that is what a private repository looks like from
+outside, and it is not a sign that anything is broken. If you were not explicitly added to it,
+you want **Route A**.
+
+Route A is also the only one that needs no Git and no GitHub account at all, which is why it
+is written first below.
+
+> **If you are the person sending the file:** build it with `python -m build --wheel` in a
+> checkout and send the single `.whl` from `dist/`. It is about 320 kB and contains everything
+> except the Python interpreter, which `uv` fetches.
+
 ---
 
 ## Windows
@@ -49,17 +71,39 @@ only visible to a freshly opened window.
 
 ### Step 3 — Install saRNA Designer
 
+**Route A — from the file you were sent.** Save the `.whl` file somewhere you can find it,
+for example your **Downloads** folder. Then type `uv tool install --python 3.11 "` , drag the
+file from Explorer into the PowerShell window (this pastes its full path for you), and finish
+the line with `[app]"` so it reads like this:
+
+```powershell
+uv tool install --python 3.11 "C:\Users\YourName\Downloads\sarna_designer-0.1.0.dev0-py3-none-any.whl[app]"
+```
+
+The `[app]` on the end is **not optional** — it is what installs the browser interface.
+
+**Route B — from GitHub**, only if you have been added to the repository and have
+[Git](https://git-scm.com/download/win) installed:
+
 ```powershell
 uv tool install --python 3.11 "sarna-designer[app] @ git+https://github.com/JoepVondervoort/sarna-designer"
 ```
 
-This downloads the tool and the correct Python. It prints a list of packages and ends with
-`Installed 2 executables: sarna-designer, sarna-designer-check`.
+Either way, this downloads the tool and the correct Python. It takes a minute or two and ends
+with:
 
-> **Given the tool as a folder or zip file instead?** Unzip it, then use the folder path:
-> ```powershell
-> uv tool install --python 3.11 "C:\path\to\sarna-designer[app]"
-> ```
+```
+Installed 2 executables: sarna-designer, sarna-designer-check
+```
+
+**If you do not see that line, stop here** and read the last few lines of output — the rest of
+these steps will not work.
+
+### Step 3b — Close and reopen PowerShell, again
+
+`uv` may print a warning that its folder *"is not on your PATH"*. Closing PowerShell and
+opening it again fixes that. Do it even if you saw no warning; it costs five seconds and it is
+the single most common reason step 4 fails.
 
 ### Step 4 — Check that it works
 
@@ -99,9 +143,20 @@ Then close Terminal and open it again.
 
 ### Step 3 — Install saRNA Designer
 
+From the file you were sent (Route A — drag the `.whl` into Terminal to paste its path):
+
+```bash
+uv tool install --python 3.11 "/Users/you/Downloads/sarna_designer-0.1.0.dev0-py3-none-any.whl[app]"
+```
+
+Or from GitHub (Route B), if you have access to the repository and `git` installed:
+
 ```bash
 uv tool install --python 3.11 "sarna-designer[app] @ git+https://github.com/JoepVondervoort/sarna-designer"
 ```
+
+It should end with `Installed 2 executables`. Then close Terminal and open it again, so the
+new commands are on your PATH.
 
 ### Steps 4 and 5 — Check and start
 
@@ -168,8 +223,20 @@ off-target search is a button you press, not something that happens automaticall
 
 **`uv` is not recognised** — you did not close and reopen the terminal after step 2. Do that.
 
-**`sarna-designer` is not recognised** — step 3 did not finish. Run it again and read the last
-few lines for an error.
+**`sarna-designer` is not recognised** — almost always step 3b: close PowerShell or Terminal
+completely and open a new one. If it still is not found, run `uv tool update-shell` and open
+another new window. If that does not help either, step 3 did not finish — run it again and
+read the last few lines for an error.
+
+**`repository not found`, or Git asks for a password** — the repository is private and your
+account has not been given access. Use Route A: ask for the `.whl` file.
+
+**`git` is not recognised** — Route B needs [Git for Windows](https://git-scm.com/download/win).
+Route A does not need it at all.
+
+**The check says `httpx is missing` or `the local web interface is incomplete`** — the `[app]`
+was left off the end of the command in step 3. This is the most common single mistake. Run
+`uv tool uninstall sarna-designer` and do step 3 again, with `[app]` on the end.
 
 **The check says FAIL** — each failing line prints a `what to do:` with it. If it says to report
 the output, copy the whole thing and send it on; it is written to be useful to whoever maintains
@@ -190,9 +257,17 @@ sarna-designer-check --online
 
 ## Updating
 
+If you installed from GitHub (Route B):
+
 ```
 uv tool upgrade sarna-designer
 ```
+
+If you installed from a file (Route A), there is nothing for `uv` to upgrade *from* — ask for
+the new `.whl` and install it over the top with the same step 3 command. Your saved runs are
+kept.
+
+Either way, run `sarna-designer-check` afterwards.
 
 ## Uninstalling
 
@@ -251,11 +326,17 @@ fetches from Ensembl as usual rather than failing.
 ## The short version, for people who know Python
 
 ```bash
+# From a wheel you were sent (works without Git or repository access):
+uv tool install --python 3.11 "./sarna_designer-0.1.0.dev0-py3-none-any.whl[app]"
+# Or, with access to the private repository and git on PATH:
 uv tool install --python 3.11 "sarna-designer[app] @ git+https://github.com/JoepVondervoort/sarna-designer"
+
 sarna-designer-check --online
 sarna-designer --port 8001
 ```
 
+- The repository is **private**: the git URL resolves only for collaborators, and needs `git`
+  installed. The wheel needs neither. Build one with `python -m build --wheel`.
 - Requires Python 3.11 exactly; `[app]` adds `httpx` on top of `pydantic`. No compiler needed —
   both ship universal wheels.
 - `[genomics]` additionally pulls `pyBigWig`, `numpy` and `pyliftover` for local AF22 histone

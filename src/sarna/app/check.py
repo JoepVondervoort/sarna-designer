@@ -83,7 +83,8 @@ def check_imports(report: Report) -> None:
     except ImportError:
         report.fail(
             "httpx is missing, so gene lookup cannot work",
-            'Install the app extra: uv pip install "sarna-designer[app]"',
+            "Reinstall with the app extra. The [app] on the end is what installs it: "
+            'uv tool install --python 3.11 "sarna-designer[app] @ <where you got it from>"',
         )
 
 
@@ -185,11 +186,27 @@ def check_server(report: Report) -> None:
                 report.ok("Local web interface", f"can open a browser port (tested on {port})")
             finally:
                 router.close()
+    except ImportError as error:
+        # Reported separately from a port failure, because the remedies share nothing. Sending
+        # somebody to look at their firewall when a dependency is missing wastes their
+        # afternoon, and this is the likeliest single mistake in the install: leaving the
+        # [app] off the end of the command.
+        report.fail(
+            f"The local web interface is incomplete ({error})",
+            "This is a missing dependency, not a network or firewall problem. Reinstall with "
+            "the app extra: the [app] on the end of the install command is what adds it.",
+        )
+    except OSError as error:
+        report.fail(
+            f"The local web interface could not open a port ({type(error).__name__}: {error})",
+            "A firewall or security tool may be blocking local connections. The tool only ever "
+            "listens on your own machine (127.0.0.1); allow it if prompted.",
+        )
     except Exception as error:
         report.fail(
             f"The local web interface could not start ({type(error).__name__}: {error})",
-            "A firewall or security tool may be blocking local connections. The tool only ever "
-            "listens on your own machine (127.0.0.1); allow it if prompted.",
+            "Copy this whole output and send it on; it is written to be useful to whoever "
+            "maintains the tool.",
         )
 
 
