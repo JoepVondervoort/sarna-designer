@@ -108,12 +108,23 @@ The `[app]` on the end is **not optional** — it is what installs the browser i
 uv tool install --python 3.11 "sarna-designer[app] @ git+https://github.com/JoepVondervoort/sarna-designer"
 ```
 
-Either way, this downloads the tool and the correct Python. It takes a minute or two and ends
-with:
+Either way, this downloads the tool and the correct Python, and ends with:
 
 ```
 Installed 2 executables: sarna-designer, sarna-designer-check
 ```
+
+> **This step is slow the first time, and that is normal.** It is fetching a complete private
+> Python — about 90 MB unpacked across **3,862 files** — and on Windows the virus scanner
+> inspects every one of those files as it is written. **Several minutes is expected**, longer
+> on a slow or corporate network. It only happens once: installing again later takes under a
+> second, because the download is cached.
+>
+> **Is it stuck or just slow?** Open Task Manager (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Esc</kbd>)
+> and look for **uv.exe** — if it is using CPU, disk or network, leave it alone. Worry only if
+> it has sat completely idle for more than about fifteen minutes, or if the text stops at
+> `Resolving` and never moves, which usually means a proxy or firewall is blocking the
+> download.
 
 **If you do not see that line, stop here** and read the last few lines of output — the rest of
 these steps will not work.

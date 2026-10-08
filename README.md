@@ -74,6 +74,11 @@ uv tool install --python 3.11 "sarna-designer[app] @ git+https://github.com/Joep
 
 Either way it ends with `Installed 2 executables: sarna-designer, sarna-designer-check`.
 
+**Expect this step to take several minutes the first time.** It fetches a complete private
+Python — 90 MB unpacked across 3,862 files — and Windows scans every file as it lands. It is
+cached afterwards: a second install takes under a second. If you want to know whether it is
+stuck, look for `uv.exe` in Task Manager; if it is using CPU or network, it is working.
+
 **4. Close PowerShell and open it again** — the same PATH reason as step 2.
 
 **5. Check it works:**
