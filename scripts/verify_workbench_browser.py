@@ -194,10 +194,20 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
         return sum + (m?+m[1]:0);}, 0);
       return {bins:bins.length, counted,
               excluded: state.result.candidates.filter(c=>c.rank===null).length,
+              span: state.result.promoter.length,
+              marks: document.querySelectorAll('#promoter-map rect[data-candidate]').length,
               legend: document.querySelector('#rejection-legend small').textContent,
               binnedMode: state.excludedBinned};})()""")
     assert isinstance(binned, dict)
-    if binned["excluded"]:
+    # A short pasted sequence is narrower than the separability threshold, so drawing each
+    # target individually is the correct behaviour there, not a failure to bin.
+    wide = binned["span"] > 280
+    if binned["excluded"] and not wide:
+        assert binned["binnedMode"] is False, (
+            f"a {binned['span']} bp region is narrow enough to draw every target")
+        assert binned["marks"] > 0, "no individual targets were drawn in a narrow region"
+        assert "individually" in binned["legend"], binned["legend"]
+    if binned["excluded"] and wide:
         assert binned["binnedMode"] is True, "the full region should bin excluded targets"
         assert binned["bins"] > 0, "no density columns were drawn"
         assert binned["counted"] == binned["excluded"], (
@@ -226,12 +236,21 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     # Zoomed in, because at full extent there is nowhere to pan and the map says so by not
     # offering the grab cursor at all.
     browser.evaluate("document.getElementById('zoom-in').click()")
+    state_span = int(cast("int", browser.evaluate("state.result.promoter.length")))
     drag = browser.evaluate(r"""(()=>{
       const svg=document.getElementById('promoter-map');
-      const id=(state.result.candidates.find(c=>c.rank!==null)||{}).id;
-      if(!id) return {error:"no passing candidate to track"};
+      // Track a mark that stays clear of both edges. renderMap clamps a partly-scrolled mark
+      // to the viewport and floors its width at 2 units so thin features stay visible, while
+      // the drag translates the true rectangle and lets the clip path cut it. Under the clip
+      // those agree everywhere except a sub-2-unit sliver at the very edge, so comparing a
+      // clamped mark compares the floor rather than the panning arithmetic.
+      const inside=r=>{const x=+r.getAttribute('x'), w=+r.getAttribute('width');
+                       return x>140 && x+w<958;};
+      const candidates=[...svg.querySelectorAll('[data-candidate]')].filter(inside);
+      if(!candidates.length) return {error:"no unclamped candidate mark to track"};
+      const id=candidates[Math.floor(candidates.length/2)].dataset.candidate;
       const xOf=()=>{const r=svg.querySelector('[data-candidate="'+id+'"]');
-                     return r?+r.getAttribute('x'):null;};
+                     return r && inside(r) ? +r.getAttribute('x') : null;};
       const box=()=>svg.getBoundingClientRect();
       const send=(target,type,x)=>target.dispatchEvent(new PointerEvent(type,{bubbles:true,
         cancelable:true,clientX:x,clientY:box().top+box().height/2,button:0,buttons:1,
@@ -261,6 +280,11 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
         assert abs(predicted - drag["after"]) < 0.01, (
             f"the drag drew the mark at {predicted} but the redraw puts it at {drag['after']}; "
             "the fast pan path and the full redraw disagree")
+    else:
+        # Only acceptable on a region too small to pan a mark clear of the edges.
+        assert state_span <= 280, (
+            "the tracked mark left the plot area on a region wide enough to keep it inside, "
+            "so the pan arithmetic was never actually compared")
     browser.evaluate("document.getElementById('zoom-reset').click()")
 
     # The measured ranking performance is shown, not left to the footer.
@@ -437,6 +461,39 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     browser.evaluate("document.querySelector('#candidate-rows [data-candidate]').click()")
     browser.wait("document.querySelector('#candidate-detail .verdict .outcome.fail')!==null")
     assert browser.evaluate("state.result.candidates.every(c=>Array.isArray(c.rules))") is True
+    # A passing candidate in the archive, which is the case the rejected one above cannot
+    # cover: the duplex panel is built from result.order, and the archive has no backend to
+    # ask for it. If that table were not embedded, the panel would quietly degrade to "this
+    # candidate failed a gate" on a candidate that passed every one.
+    archived = browser.evaluate(r"""(()=>{
+      const best=state.result.candidates.find(c=>c.rank===1);
+      if(!best) return {error:"the archive holds no passing candidate"};
+      // The table is still filtered to rejected candidates from the check above, so the
+      // passing one is not in the DOM to click until the filter is switched back.
+      document.querySelector('[data-filter=passing]').click();
+      const row=[...document.querySelectorAll('#candidate-rows [data-candidate]')]
+        .find(r=>r.dataset.candidate===best.id);
+      if(!row) return {error:"rank 1 is not in the passing table"};
+      row.click();
+      return new Promise(resolve=>setTimeout(()=>{
+        const panel=document.querySelector('#candidate-detail .duplex-panel');
+        resolve({
+          present: !!panel,
+          rungs: document.querySelectorAll('#candidate-detail .ladder .rung').length,
+          overhangs: document.querySelectorAll('#candidate-detail .ladder .ov').length,
+          tubes: [...document.querySelectorAll('#candidate-detail .role-chip')]
+                   .map(c=>c.textContent.trim()),
+          ends: document.querySelectorAll('#candidate-detail .end-box b').length,
+          text: panel?panel.innerText.slice(0,200):"",
+        });}, 400));})()""")
+    assert isinstance(archived, dict) and "error" not in archived, archived
+    assert archived["present"], "the archive lost the duplex panel"
+    assert archived["rungs"] == 19, archived["rungs"]
+    assert archived["overhangs"] == 4, archived["overhangs"]
+    assert "guide" in archived["tubes"] and "passenger" in archived["tubes"], archived["tubes"]
+    assert archived["ends"] == 2, "the end energies did not survive the export"
+    assert "failed a gate" not in archived["text"], archived["text"]
+
     browser.evaluate("document.getElementById('run-evidence').click()")
     assert browser.evaluate("document.getElementById('evidence-dialog').open") is True
     browser.evaluate("document.querySelector('#evidence-dialog .close-dialog').click()")
