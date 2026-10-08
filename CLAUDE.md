@@ -154,6 +154,7 @@ Read the ADR before reopening its question; each records the alternatives and wh
 | What TF annotation can and cannot honestly show | `tf-binding.md` |
 | Why random sequence is an invalid promoter fixture | `synthetic-promoter-fixtures.md` |
 | AF22 chromatin: targets open, SCN1A closed | `af22-chromatin.md` |
+| Table 1, the thermodynamics and the coordinates, checked against their sources | `verification-2026-10-07.md` |
 | Guide prediction: 13% of candidates flip between tables | `guide-prediction-divergence.md` |
 
 `GLOSSARY.md` fixes the vocabulary — use its terms rather than coining synonyms.
