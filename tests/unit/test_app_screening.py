@@ -44,8 +44,16 @@ def screen_now(service: DesignService, run_id: str, scope: str = TRANSCRIPT_SCOP
 
 
 def completed_run(tmp_path: Path) -> tuple[DesignService, str, dict[str, Any]]:
-    """Return a service with one finished run."""
+    """Return a service with one finished run, and no route to NCBI.
+
+    The BLAST client is stubbed at the service rather than passed into ``screen``, because the
+    HTTP route calls ``screen`` without one. Before this existed, every full run of the test
+    suite submitted a real search to NCBI and then blocked closing the router until it came
+    back -- which is how the suite went from 67 seconds to hanging.
+    """
     service = service_for(tmp_path)
+    service.blast_factory = lambda: blast_answering([PUT_REPLY, READY_WITH_HITS, REPORT])
+    service.poll_sleep = lambda _seconds: None
     saved = run_request(service)
     return service, saved["app"]["run_id"], saved
 
@@ -273,3 +281,45 @@ class TestAScreeningMustNotStarveTheRestOfTheApp:
         finally:
             release.set()
             router.close()
+
+
+def test_the_route_screens_through_the_injectable_client_and_not_a_real_one(
+    tmp_path: Path,
+) -> None:
+    """The seam that stops the test suite talking to NCBI.
+
+    ``screen`` has always taken a ``blast_client`` argument documented as "injected for tests",
+    but the HTTP route calls it with three positional arguments and no client, so every test
+    that went through the route built a real one and submitted a live search. That is a job
+    queued at a shared public service on every run of the suite, and closing the router then
+    waited for it: the suite drifted from 67 seconds to hanging outright. It is also exactly
+    the rate-limit exposure ADR 0019 is written around.
+    """
+    service = service_for(tmp_path)
+    built: list[str] = []
+
+    def factory() -> BlastClient:
+        built.append("asked")
+        return blast_answering([PUT_REPLY, READY_WITH_HITS, REPORT])
+
+    service.blast_factory = factory
+    service.poll_sleep = lambda _seconds: None
+    saved = run_request(service)
+    router = AppRouter(service)
+    try:
+        status, _, body = router.dispatch(
+            "POST", f"/api/runs/{saved['app']['run_id']}/screenings",
+            json.dumps({"scope": TRANSCRIPT_SCOPE}).encode())
+        assert status == 202
+        screening_id = json.loads(body)["id"]
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            if service.store.screening(screening_id)["status"] != "running":
+                break
+            time.sleep(0.02)
+    finally:
+        router.close()
+    assert built == ["asked"], (
+        "the route did not take its BLAST client from blast_factory, so it built a real one "
+        "and this test just submitted a search to NCBI")
+    assert service.store.screening(screening_id)["status"] == "complete"

@@ -123,9 +123,12 @@ class AppRouter:
     def close(self) -> None:
         """Finish workers when the application or a test shuts down."""
         self.workers.shutdown(wait=True, cancel_futures=True)
-        # Queued screenings are dropped; running ones are left to finish, as they hold an NCBI
-        # request id that would otherwise be abandoned mid-flight.
-        self.screeners.shutdown(wait=True, cancel_futures=True)
+        # Queued screenings are dropped and a running one is *not* waited for. A screening sits
+        # in NCBI's queue for minutes and may sit for thirty, so waiting would make closing the
+        # app -- or a test closing its router -- block for exactly that long. The screening's
+        # record stays "running", which is the honest state: the job was abandoned, not failed,
+        # and NCBI still holds the request id.
+        self.screeners.shutdown(wait=False, cancel_futures=True)
 
     def dispatch(
         self, method: str, target: str, body: bytes = b"",

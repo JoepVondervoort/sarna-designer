@@ -88,14 +88,26 @@ class DesignService:
 
     def __init__(
         self, data_dir: Path, client_factory: Callable[[bool], EnsemblClient] | None = None,
+        blast_factory: Callable[[], BlastClient] | None = None,
     ) -> None:
-        """Use an injectable client for recorded-source tests and cached/offline requests."""
+        """Use an injectable client for recorded-source tests and cached/offline requests.
+
+        ``blast_factory`` exists for the same reason as ``client_factory`` and was missing.
+        ``screen`` took a ``blast_client`` argument documented as "injected for tests", but the
+        HTTP route calls ``screen`` with three positional arguments and no client, so anything
+        exercising the route built a real one and submitted a live job to NCBI. The suite did
+        that on every run.
+        """
         self.store = RunStore(data_dir / "runs.sqlite3")
         self.client_factory = client_factory or (
             lambda offline: EnsemblClient(cache_dir=settings.cache_dir("ensembl"),
                                           offline=None if settings.is_offline() else offline,
                                           timeout=15, backoff_seconds=0.5)
         )
+        self.blast_factory = blast_factory or BlastClient
+        self.poll_sleep: Callable[[float], None] = time.sleep
+        """How a screening waits between polls. The route cannot pass ``sleep`` to ``screen``,
+        so a test exercising the route would otherwise spend NCBI's real poll interval."""
 
     @staticmethod
     def _gene(client: EnsemblClient, symbol: str) -> Gene:
@@ -109,7 +121,7 @@ class DesignService:
         run_id: str,
         scope: str,
         blast_client: BlastClient | None = None,
-        sleep: Callable[[float], None] = time.sleep,
+        sleep: Callable[[float], None] | None = None,
     ) -> None:
         """Run an off-target screening for a finished design run, in the background.
 
@@ -120,11 +132,14 @@ class DesignService:
             screening_id: The record to write progress and results into.
             run_id: The finished design run being screened.
             scope: ``transcript`` or ``genomic``.
-            blast_client: Injected for tests; a real one is built and closed here otherwise.
-            sleep: Injected for tests. Production waits NCBI's requested interval
-                between polls, which a test must not actually spend.
+            blast_client: An open client to use. Otherwise one comes from ``blast_factory``,
+                which the route path relies on: a caller that does not pass a client must still
+                be able to avoid reaching NCBI.
+            sleep: How to wait between polls. Defaults to ``poll_sleep``, which the route
+                path relies on for the same reason it relies on ``blast_factory``: a caller
+                that cannot pass arguments must still be able to avoid a real wait.
         """
-        client = blast_client or BlastClient()
+        client = blast_client or self.blast_factory()
         try:
             snapshot = self.store.snapshot(run_id)
             candidates = snapshot["candidates"]
@@ -138,7 +153,7 @@ class DesignService:
                 progress=lambda stage: self.store.screening_progress(screening_id, stage),
                 transcripts=self._transcript_lookup() if scope == GENOMIC_SCOPE else None,
                 window=self._run_window(snapshot),
-                sleep=sleep,
+                sleep=sleep if sleep is not None else self.poll_sleep,
             )
             self.store.finish_screening(screening_id, {
                 **record.to_dict(),
