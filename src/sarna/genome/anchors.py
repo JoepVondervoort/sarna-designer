@@ -2,8 +2,8 @@
 
 The glossary says a TSS belongs to a transcript and a promoter window is meaningless without one.
 Chapter 2 of the thesis breaks that, for a good reason. Its SCN1A duplexes target promoters mapped
-by **Dong et al. 2014** and **Long et al. 2008**, and the Dong distal region — which produced two of
-the project's three SCN1A activators — has no Ensembl transcript within 5.5 kb. A tool that can only
+by **Dong et al. 2014** and **Long et al. 2008**, and the Dong distal region (which produced two of
+the project's three SCN1A activators) has no Ensembl transcript within 5.5 kb. A tool that can only
 measure from an annotated TSS could not have produced those two designs.
 
 So the thing a window is measured from is generalised here into a **promoter anchor**: a named,
@@ -14,7 +14,7 @@ longer the only kind.
 does. "-500 bp" means something different when the zero is a GENCODE-annotated TSS, a TSS mapped in
 a publication, or a point inferred from where somebody's designs happened to land.
 :class:`ReferenceKind` makes a caller say which, and an anchor with no reference point produces a
-promoter with no TSS at all — so the TSS rules report not-applicable rather than measuring from an
+promoter with no TSS at all, so the TSS rules report not-applicable rather than measuring from an
 invented origin.
 
 Anchors are **data, not code**: shipped ones live in ``data/promoter_anchors.toml`` with their
@@ -191,7 +191,7 @@ class PromoterAnchor:
 
         With a reference point, the window is ``upstream_bp`` and ``downstream_bp`` around it, and
         the first base's TSS position follows. Without one, the window is the declared region plus
-        ``region_padding_bp`` either side and there is no TSS position — which is the honest answer,
+        ``region_padding_bp`` either side and there is no TSS position, which is the honest answer,
         not a degraded one.
 
         Raises:

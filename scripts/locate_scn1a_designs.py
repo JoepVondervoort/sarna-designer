@@ -1,7 +1,7 @@
 """Map the thesis's SCN1A designs back onto the genome, and report which TSS each sits near.
 
 The chapter 4 dataset records target sequences but no coordinates, which is what stops the
-location rules — the TSS windows, CpG-island overlap — from being testable against measured
+location rules (the TSS windows, CpG-island overlap) from being testable against measured
 activity. This script recovers the coordinates for the 15 SCN1A designs by searching the locus,
 then reports each one's offset from **every** annotated TSS rather than from an assumed one.
 

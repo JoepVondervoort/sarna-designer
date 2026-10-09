@@ -39,7 +39,7 @@ another `--port` and the matching URL.
    - **Order CSV** is what you synthesise: both strands as 19 nt RNA cores plus a 3′ `[dT][dT]`
      overhang, 21 nt each, in 5′→3′ orientation. Core, overhang and joined form are separate
      columns, because vendor notation for a chimeric oligo differs between suppliers. Every row
-     carries its own sanity report, including that **no off-target screening was performed** —
+     carries its own sanity report, including that **no off-target screening was performed**,
      this project implements none, so screen the sequences independently before ordering. Passing
      candidates only, unless you select specific ones. See
      [ADR 0017](../adr/0017-order-ready-duplex-export.md).

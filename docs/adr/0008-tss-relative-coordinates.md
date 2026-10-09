@@ -1,4 +1,4 @@
-# ADR 0008 — TSS-relative positions use the biological no-zero convention, and the whole target must lie inside the window
+# ADR 0008: TSS-relative positions use the biological no-zero convention, and the whole target must lie inside the window
 
 - **Status**: Accepted
 - **Date**: 2026-10-06
@@ -39,14 +39,14 @@ contained by converting through a **continuous internal offset** in exactly one 
 | `+1` | `0` |
 | `+2` | `1` |
 
-All arithmetic — distances, shifts, window containment — happens on the offset. No other module
+All arithmetic (distances, shifts, window containment) happens on the offset. No other module
 performs arithmetic on a TSS position directly.
 
 ### 2. A candidate satisfies a TSS window only if **every** base of it is inside
 
 The mandatory window is a statement about where the target lies, so a target half of which sits
 outside the window does not lie inside it. A 19-mer whose 5' end is at `−105` extends to `−87`,
-overlapping the transcript — which is the outcome the upstream window exists to prevent.
+overlapping the transcript, which is the outcome the upstream window exists to prevent.
 
 Concretely, with the default `−1000 … −100`:
 

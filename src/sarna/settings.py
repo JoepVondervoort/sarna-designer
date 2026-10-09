@@ -1,7 +1,7 @@
 """Every environment variable this package reads, in one place.
 
 Scattered ``os.environ`` calls are how a documented variable comes to be read nowhere.
-``.env.example`` named three — a contact address for Ensembl, a cache root and an offline switch —
+``.env.example`` named three (a contact address for Ensembl, a cache root and an offline switch)
 and none was consulted; the client meanwhile sent a ``User-Agent`` carrying a dangling
 ``https://github.com/`` and no address, while the example file told the reader Ensembl asks for one.
 A test now asserts that the set of variables documented and the set read are the same set, in both
@@ -77,7 +77,7 @@ def cache_dir(source: str) -> Path:
         source: A short name for the source, used as the subdirectory, e.g. ``"ensembl"``.
 
     Returns:
-        The path. Resolving it is not a commitment to write there — whoever caches creates it,
+        The path. Resolving it is not a commitment to write there, whoever caches creates it,
         so asking where the cache would go never leaves an empty directory behind.
     """
     root = os.environ.get(CACHE_DIR_VARIABLE, "").strip()

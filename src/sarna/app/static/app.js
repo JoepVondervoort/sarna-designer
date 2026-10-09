@@ -9,7 +9,7 @@ const ordered = v => Array.isArray(v)?v.map(ordered):v && typeof v==="object"?Ob
 const frozen = window.SARNA_FROZEN || null;
 const state = {catalogue:null, source:"gene", gene:null, draft:{}, base:{}, result:null, selected:null,
   checked:new Set(), filter:"passing", page:0, sort:"rank", descending:false, start:0, end:0, busy:false, retry:null,
-  customReferences:{}, basket:[], batch:null, editingReference:null};
+  customReferences:{}, basket:[], batch:null, editingReference:null, expression:null};
 const roleName = {mandatory:"Gate", preference:"Preference", tiebreak:"Tiebreak", off:"Off"};
 const tableNames = {"rna-xia-1998":"RNA · Xia 1998", "dna-santalucia-1998":"DNA · SantaLucia 1998", "legacy-dna-kj":"Legacy DNA · defective"};
 
@@ -33,9 +33,9 @@ function syncDataAccess() {
   if (forced) $("offline").checked = true;
   $("offline").disabled = forced;
   $("data-access-status").textContent = forced ?
-    "Cache only — enforced by SARNA_OFFLINE. To fetch new references, unset it in the launch terminal and restart the app." : $("offline").checked ?
-    "Cache only — no Ensembl requests. A gene, transcript or promoter window that has not been cached will need online retrieval." :
-    "Online retrieval allowed — missing public references are fetched from Ensembl and cached. Design calculations run locally.";
+    "Cache only, enforced by SARNA_OFFLINE. To fetch new references, unset it in the launch terminal and restart the app." : $("offline").checked ?
+    "Cache only, with no Ensembl requests. A gene, transcript or promoter window that has not been cached will need online retrieval." :
+    "Online retrieval allowed. Missing public references are fetched from Ensembl and cached. Design calculations run locally.";
   document.querySelector(".data-access").classList.toggle("cache-only", $("offline").checked);
 }
 function presetData() { return state.catalogue.presets.find(p => p.id === $("preset").value); }
@@ -109,10 +109,16 @@ function populateGene(gene, selected = "") {
   $("gene-info").innerHTML = `<strong>${escapeHTML(gene.symbol)} <span class="muted">${escapeHTML(gene.id)}</span></strong>${escapeHTML(gene.description)}<p class="hint">${escapeHTML(gene.assembly || "GRCh38")} · genomic ${escapeHTML(gene.strand)} strand · ${fmt(transcripts.length)} transcripts<br>${escapeHTML(gene.source)}</p>`;
   $("gene-info").hidden = false;
   const groups = gene.tss_groups || [];
-  const choices = groups.length ? groups.map(g=>`<optgroup label="Annotated +1 at ${escapeHTML(g.contig)}:${fmt(g.tss+1)} · ${g.transcript_ids.length} transcript(s)">${g.transcript_ids.map(id=>{
+  // Python orders transcripts by reference_priority, so the MANE Select group and the MANE
+  // transcript inside it already arrive first; the list is rendered in the order given rather
+  // than re-sorted here. The marker says *why* it is first, because "on top" alone is a
+  // position a reader has to guess the meaning of.
+  const mark = t => t?.mane ? " · MANE Select · default"
+    : t?.canonical ? " · Ensembl canonical" : "";
+  const choices = groups.length ? groups.map(g=>`<optgroup label="Annotated +1 at ${escapeHTML(g.contig)}:${fmt(g.tss+1)} · ${g.transcript_ids.length} transcript(s)${g.mane?" · default reference":""}">${g.transcript_ids.map(id=>{
     const t = transcripts.find(t=>t.id===id);
-    return `<option value="transcript:${escapeHTML(id)}">${escapeHTML(id)}${t?.mane?" · MANE Select":t?.canonical?" · canonical":""} · ${escapeHTML(t?.biotype)}</option>`;
-  }).join("")}</optgroup>`).join("") : `<optgroup label="Annotated transcripts">${transcripts.map(t=>`<option value="transcript:${escapeHTML(t.id)}">${escapeHTML(t.id)}${t.mane?" · MANE Select":t.canonical?" · canonical":""} · ${escapeHTML(t.biotype)}</option>`).join("")}</optgroup>`;
+    return `<option value="transcript:${escapeHTML(id)}">${escapeHTML(id)}${mark(t)} · ${escapeHTML(t?.biotype)}</option>`;
+  }).join("")}</optgroup>`).join("") : `<optgroup label="Annotated transcripts">${transcripts.map(t=>`<option value="transcript:${escapeHTML(t.id)}">${escapeHTML(t.id)}${mark(t)} · ${escapeHTML(t.biotype)}</option>`).join("")}</optgroup>`;
   const anchorChoices = anchors.map(a=>`<option value="anchor:${escapeHTML(a.id)}">${escapeHTML(a.label)} · ${escapeHTML(a.reference_kind)}</option>`).join("");
   const customChoices = Object.values(state.customReferences).map(a=>`<option value="custom:${escapeHTML(a.id)}">${escapeHTML(a.name)} · researcher supplied</option>`).join("");
   $("reference").innerHTML = `<option value="">Choose a promoter reference…</option>${choices}${anchorChoices?`<optgroup label="Declared literature anchors">${anchorChoices}</optgroup>`:""}${customChoices?`<optgroup label="Researcher references">${customChoices}</optgroup>`:""}`;
@@ -121,7 +127,7 @@ function populateGene(gene, selected = "") {
   $("add-promoter").disabled = !$("reference").value;
   $("save-custom-reference").disabled = false;
   $("custom-reference-locus").textContent = `GRCh38 · chr${gene.contig || "?"} · gene strand ${gene.strand}. Enter a 1-based genomic coordinate, not a TSS-relative position.`;
-  renderGeneOverview(); renderBasket();
+  renderGeneOverview(); renderBasket(); renderExpression();
 }
 function renderGeneOverview() {
   const gene = state.gene;
@@ -160,6 +166,156 @@ function renderGeneOverview() {
   $("gene-overview-map").innerHTML=parts.join("");
   $("tss-group-list").innerHTML=groups.map(g=>`<details><summary>Annotated +1 · ${escapeHTML(g.contig)}:${fmt(g.tss+1)} <span class="muted">${g.transcript_ids.length} transcript(s)${g.mane?" · MANE Select":""}</span></summary><p class="hint">Shared start coordinate, not a measurement of promoter activity.</p><div>${g.transcript_ids.map(id=>`<button type="button" class="text-button" data-choose-transcript="${escapeHTML(id)}">${escapeHTML(id)}</button>`).join("")}</div></details>`).join("");
 }
+/* What the cell-line box actually does, shown next to the box. The control looked inert
+   because it is almost inert: of the 24 (cell line x evidence axis) pairs in the registry,
+   exactly one is available, AF22 chromatin, and that one needs the option switched on and the
+   tracks installed. The choice is recorded with the run and never touches a gate or a rank.
+   Saying so beside the field is better than leaving a researcher to infer it. */
+/* The status words come from axisState, declared with the results panel below and shared on
+   purpose: the setup side and the results side must lay these facts out differently, because a
+   four-column table is unreadable in a 310px sidebar, but they must not be able to word them
+   differently. Writing a second copy of the words here is the bug this comment prevents, since
+   a later function declaration of the same name silently wins. */
+function axisBrief(axis) {
+  const {state, word} = axisState(axis);
+  return `<li class="axis-${state}"><span class="axis-state ${state}">${word}</span> `
+    + `<strong>${escapeHTML(AXIS_LABEL[axis.axis] || axis.axis)}</strong>`
+    + `<span class="muted"> ${escapeHTML(axis.question || "")}</span>`
+    + `<details><summary>${axis.source ? escapeHTML(axis.source) : "no source"}</summary>`
+    + `<p class="hint">${escapeHTML(axis.note || "")}</p></details></li>`;
+}
+function cellTypeFor(typed) {
+  const wanted = typed.trim().toLowerCase();
+  if (!wanted) return null;
+  return (state.catalogue?.cells || []).find(
+    c => c.name.toLowerCase() === wanted || c.id.toLowerCase() === wanted) || null;
+}
+function renderCellEvidence() {
+  const box = $("cell-evidence");
+  if (!box) return;
+  const typed = $("cell-line").value;
+  const always = `<p class="hint">Recorded with the run as your experimental context. It does `
+    + `not change which candidates pass, how they rank, or any sequence calculation.</p>`;
+  if (!typed.trim()) {
+    box.innerHTML = always + `<p class="hint">Leave it blank, pick a known line, or type your `
+      + `own. Known lines carry a record of what has and has not been measured in them.</p>`;
+    return;
+  }
+  const cell = cellTypeFor(typed);
+  if (!cell) {
+    box.innerHTML = always + `<p class="hint"><strong>${escapeHTML(typed.trim())}</strong> is `
+      + `not in the registry, so nothing shown anywhere in this app is specific to it. No `
+      + `measurement is implied for it. Add your own with the SARNA_CELL_LINES file.</p>`;
+    return;
+  }
+  const axes = cell.data || [];
+  const live = axes.filter(a => a.available);
+  const chromatinLive = live.some(a => a.axis === "chromatin");
+  const summary = live.length
+    ? `${live.length} of ${axes.length} kinds of evidence are available for this line.`
+    : `None of the ${axes.length} kinds of evidence are available for this line.`;
+  box.innerHTML = always
+    + `<p class="cell-name"><strong>${escapeHTML(cell.name)}</strong>`
+    + (cell.rrid ? ` <span class="muted">RRID ${escapeHTML(cell.rrid)}</span>` : "")
+    + (cell.experimental_context ? ` <span class="muted">used in this project's own experiments</span>` : "")
+    + `</p><p class="hint">${escapeHTML(summary)}</p>`
+    + `<ul class="axis-brief">${axes.map(axisBrief).join("")}</ul>`
+    + (chromatinLive
+        ? `<p class="hint">To use it, switch on <strong>AF22 chromatin</strong> under Data `
+          + `sources and run options, and have the track files installed. Without both, no `
+          + `histone measurement is loaded and the result says so rather than reporting closed `
+          + `chromatin.</p>`
+        : "")
+    + `<details class="cell-detail"><summary>About this line</summary>`
+    + `<p class="hint">${escapeHTML(cell.description)}</p>`
+    + `<p class="hint">${escapeHTML(cell.provenance)}</p></details>`;
+}
+/* Expression evidence sits beside the reference choice and never reorders it. The picker's
+   order is the annotation's (MANE Select first); a transcript being the most expressed in bulk
+   tissue is a different claim, and promoting it would decide for the researcher. */
+function expressionFor(id) {
+  return state.expression?.transcripts?.[id] || null;
+}
+function annotateReferenceOptions() {
+  const payload = state.expression;
+  for (const option of $("reference").options) {
+    if (option.dataset.baseLabel === undefined) option.dataset.baseLabel = option.textContent;
+    const id = option.value.startsWith("transcript:") ? option.value.slice(11) : "";
+    const entry = id && payload?.transcripts ? payload.transcripts[id] : null;
+    option.textContent = option.dataset.baseLabel + (entry ? ` · ${entry.short_label}` : "");
+  }
+}
+function expressionRows(entry) {
+  /* An all-zero transcript has no "highest" groups worth listing: the first five would be an
+     alphabetical slice of zeros, which reads as though those tissues were distinguished. The
+     headline above already says it was measured at zero everywhere, so nothing replaces it. */
+  if (!entry.top?.length) return "";
+  const rows = entry.top.map(m => `<tr><th scope="row">${escapeHTML(m.tissue_name)}</th>`
+    + `<td>${m.median.toFixed(2)} ${escapeHTML(m.unit)}</td>`
+    + `<td class="muted">${m.sample_count ? `${fmt(m.sample_count)} donors` : "donor count not reported"}</td></tr>`).join("");
+  return `<table class="expression-table"><caption>Highest ${entry.top.length} of ${fmt(entry.measured_groups)} sample groups</caption><tbody>${rows}</tbody></table>`;
+}
+function renderExpression() {
+  const box = $("expression"), payload = state.expression;
+  annotateReferenceOptions();
+  if (state.source !== "gene" || !state.gene || !payload) { box.hidden = true; return; }
+  box.hidden = false;
+  if (payload.available === false) {
+    box.innerHTML = `<p class="eyebrow">TRANSCRIPT EXPRESSION</p><p class="hint">${escapeHTML(payload.note)}</p>`
+      + `<p class="hint muted">${escapeHTML(payload.detail)}</p>`
+      + `<button type="button" class="text-button" id="retry-expression">Try again</button>`;
+    $("retry-expression").addEventListener("click", () => loadExpression(state.gene.symbol));
+    return;
+  }
+  const selected = $("reference").value.startsWith("transcript:") ? $("reference").value.slice(11) : "";
+  const entry = selected ? expressionFor(selected) : null;
+  const transcript = state.gene.transcripts?.find(t => t.id === selected);
+  const heading = `<p class="eyebrow">TRANSCRIPT EXPRESSION · ${escapeHTML(payload.dataset_id)} · GENCODE ${escapeHTML(payload.annotation_release)}</p>`;
+  const chosen = entry
+    ? `<p class="expression-headline"><strong>${escapeHTML(selected)}</strong>${transcript?.mane ? " (MANE Select)" : ""}: ${escapeHTML(entry.label)}</p>`
+      + `<p class="hint">${escapeHTML(payload.brain_label)}: ${escapeHTML(entry.brain_label)}</p>`
+      + `<p class="hint muted">${escapeHTML(entry.status_note)}</p>`
+      + expressionRows(entry)
+    : `<p class="hint">Select an annotated transcript to see what GTEx measured for it.</p>`;
+  const others = Object.values(payload.transcripts)
+    .filter(t => t.status === "measured" && t.brain && t.brain.median > 0)
+    .sort((a, b) => b.brain.median - a.brain.median).slice(0, 5);
+  const ranking = others.length
+    ? `<details class="expression-detail"><summary>Most expressed in GTEx's nervous-system groups (${others.length} shown)</summary>`
+      + `<p class="hint">${escapeHTML(payload.brain_note)}</p><ol class="expression-list">`
+      + others.map(t => {
+        /* Biotype belongs here. The highest brain value for SCN1A sits on a transcript
+           annotated nonsense_mediated_decay, and a reader choosing a promoter from this list
+           without seeing that would be designing against a decay target's start site. */
+        /* GTEx quantifies at least one SCN1A transcript Ensembl has since retired, so there
+           is no biotype to join on. Saying so is more use than an empty slot. */
+        const biotype = state.gene.transcripts?.find(x => x.id === t.transcript_id)?.biotype
+          || "not in Ensembl's current annotation";
+        return `<li><button type="button" class="text-button" data-choose-transcript="${escapeHTML(t.transcript_id)}">${escapeHTML(t.transcript_id)}</button> <span class="muted">${escapeHTML(t.brain_label)} · ${escapeHTML(biotype)}</span></li>`;
+      }).join("")
+      + `</ol><p class="hint">This list is evidence, not a recommendation. It does not change the order of the picker above.</p></details>`
+    : `<p class="hint">No transcript of this gene has a median above zero in any nervous-system group.</p>`;
+  const counts = `<p class="hint muted">${fmt(payload.measured_transcripts)} transcripts quantified, of which ${fmt(payload.silent_transcripts)} are measured at zero in every group.</p>`;
+  const caveats = `<details class="expression-detail"><summary>What these numbers do and do not show</summary><ul class="caveat-list">`
+    + (payload.caveat_list || payload.caveats).map(c => `<li>${escapeHTML(c)}</li>`).join("")
+    + `</ul><p class="hint">${escapeHTML(payload.provenance)}</p></details>`;
+  box.innerHTML = heading + chosen + ranking + counts + caveats;
+}
+async function loadExpression(symbol) {
+  const asked = symbol;
+  state.expression = null; renderExpression();
+  try {
+    const payload = await api(`/api/genes/${encodeURIComponent(symbol)}/expression?offline=${$("offline").checked}`);
+    if (state.gene?.symbol !== asked) return;   /* The user moved on while this was in flight. */
+    state.expression = payload;
+  } catch (failure) {
+    if (state.gene?.symbol !== asked) return;
+    state.expression = {available:false, transcripts:{},
+      note:"No expression evidence was retrieved. This says nothing about whether these transcripts are expressed.",
+      detail:failure.message};
+  }
+  renderExpression();
+}
 async function lookup() {
   const symbol = $("gene-symbol").value.trim().toUpperCase();
   if (!symbol) throw new Error("Enter a human gene symbol or Ensembl gene ID first.");
@@ -169,6 +325,9 @@ async function lookup() {
     const gene = await api(`/api/genes/${encodeURIComponent(symbol)}?offline=${$("offline").checked}`);
     if (state.gene && state.gene.symbol !== gene.symbol) { state.basket=[]; state.customReferences={}; }
     populateGene(gene,previousReference);
+    /* Deliberately not awaited: the picker is usable before GTEx answers, and a GTEx outage
+       must not stop a gene lookup from completing. */
+    loadExpression(gene.symbol);
     markDraft(); return gene;
   } finally { $("lookup-gene").disabled = false; $("lookup-gene").textContent = "Look up"; }
 }
@@ -292,8 +451,8 @@ function renderBatch(batch) {
     const first=run.result?.candidates.find(c=>c.rank===1), rating=summary.best_rating || first?.rating;
     const config=summary.configuration || (run.result?{preset_name:run.result.configuration.preset.name,is_custom:run.result.configuration.is_custom}:null);
     const label=batchReference(run), kind=req.custom_reference?"researcher supplied / inferred":summary.anchor?.reference_kind || run.result?.app.anchor?.reference_kind || "annotated transcript";
-    const ratingLabel=rating && typeof rating==="object"?(rating.evaluated?`${rating.met}/${rating.evaluated}`:"Not evaluated"):rating ?? "—";
-    return `<tr class="${state.result?.app.run_id===run.id?"selected":""}"><td><strong>${escapeHTML(label)}</strong><p class="hint">${escapeHTML(kind)}</p>${req.custom_reference?`<p class="hint">+1 at ${fmt(req.custom_reference.tss_position)} (1-based)</p>`:""}</td><td>${fmt(req.upstream)} upstream<br>${fmt(req.downstream)} downstream</td><td>${escapeHTML(config?.preset_name || req.preset_id)}${config?.is_custom?" · custom":""}<p class="hint">${escapeHTML(summary.cell_line || req.cell_line)}</p></td><td>${counts?`${fmt(counts.passing)} / ${fmt(counts.generated)}`:"—"}</td><td>${escapeHTML(ratingLabel)}</td><td>${run.status==="complete"?`<button type="button" class="secondary" data-open-batch-run="${escapeHTML(run.id)}">Open run</button>`:`<span class="tag">${escapeHTML(run.status.toUpperCase())}</span><p class="hint batch-error">${escapeHTML(run.error || run.stage)}</p>`}</td></tr>`;
+    const ratingLabel=rating && typeof rating==="object"?(rating.evaluated?`${rating.met}/${rating.evaluated}`:"Not evaluated"):rating ?? "n/a";
+    return `<tr class="${state.result?.app.run_id===run.id?"selected":""}"><td><strong>${escapeHTML(label)}</strong><p class="hint">${escapeHTML(kind)}</p>${req.custom_reference?`<p class="hint">+1 at ${fmt(req.custom_reference.tss_position)} (1-based)</p>`:""}</td><td>${fmt(req.upstream)} upstream<br>${fmt(req.downstream)} downstream</td><td>${escapeHTML(config?.preset_name || req.preset_id)}${config?.is_custom?" · custom":""}<p class="hint">${escapeHTML(summary.cell_line || req.cell_line)}</p></td><td>${counts?`${fmt(counts.passing)} / ${fmt(counts.generated)}`:"n/a"}</td><td>${escapeHTML(ratingLabel)}</td><td>${run.status==="complete"?`<button type="button" class="secondary" data-open-batch-run="${escapeHTML(run.id)}">Open run</button>`:`<span class="tag">${escapeHTML(run.status.toUpperCase())}</span><p class="hint batch-error">${escapeHTML(run.error || run.stage)}</p>`}</td></tr>`;
   }).join("");
   const completed=runs.filter(r=>r.status==="complete").length, failed=runs.filter(r=>r.status==="error").length;
   $("batch-progress").textContent=`${completed} of ${runs.length} completed${failed?` · ${failed} failed; completed runs remain available`:""}${batch.retry_of?` · retry of saved group ${batch.retry_of.slice(0,8)}`:""}`;
@@ -419,7 +578,7 @@ function showResult(result) {
   $("metric-generated").textContent = fmt(result.counts.generated);
   $("metric-passing").textContent = fmt(result.counts.passing);
   const first = result.candidates.find(c => c.rank===1);
-  $("metric-best").textContent = first ? `${first.rating.met}/${first.rating.evaluated}` : "—";
+  $("metric-best").textContent = first ? `${first.rating.met}/${first.rating.evaluated}` : "n/a";
   $("metric-length").textContent = `${fmt(result.promoter.length)} bp`;
   renderRankingPerformance(result.ranking_performance);
   renderMotifPanel(result);
@@ -468,7 +627,7 @@ function renderTable() {
   state.page = Math.min(state.page,pages-1);
   const page = values.slice(state.page*50,(state.page+1)*50);
   $("visible-count").textContent = `· ${fmt(values.length)}`;
-  $("candidate-rows").innerHTML = page.length ? page.map(c => `<tr data-candidate="${c.id}" class="${state.selected===c.id?"selected":""}" tabindex="0" aria-label="Inspect ${c.id}"><td><input type="checkbox" data-check="${c.id}" ${state.checked.has(c.id)?"checked":""} aria-label="Select ${c.id} for export"></td><td>${c.rank || "—"}</td><td><span class="dna">${escapeHTML(c.target_site_dna)}</span><p class="candidate-id">${c.id}${c.rank===null?` · ${c.excluded_by.length} failed gates`:""}</p></td><td>${escapeHTML(positionText(c))}</td><td>${c.gc_percent}%</td><td><div class="rating-cell"><b>${ratingText(c)}</b><span class="rating-bar"><i style="width:${c.rating.percent ?? 0}%"></i></span></div>${c.rating.unavailable?`<p class="candidate-id">${c.rating.unavailable} unavailable</p>`:""}${c.rating.unchecked_gates.length?`<p class="candidate-id">${c.rating.unchecked_gates.length} unchecked gates</p>`:""}${(c.rating.missed||[]).length?`<p class="missed-chip">missed: ${c.rating.missed.map(id=>escapeHTML(ruleName(id))).join(", ")}</p>`:""}</td><td><span class="guide-badge ${escapeHTML(c.rating.guide || "unknown")}">${escapeHTML(c.rating.guide || "unknown")}</span>${!c.rating.models_agree?'<p class="disagreement">Models disagree</p>':""}</td></tr>`).join("") : '<tr><td colspan="7" style="padding:30px;text-align:center;color:var(--muted)">No candidates match this view. Inspect excluded targets or adjust your criteria and run again.</td></tr>';
+  $("candidate-rows").innerHTML = page.length ? page.map(c => `<tr data-candidate="${c.id}" class="${state.selected===c.id?"selected":""}" tabindex="0" aria-label="Inspect ${c.id}"><td><input type="checkbox" data-check="${c.id}" ${state.checked.has(c.id)?"checked":""} aria-label="Select ${c.id} for export"></td><td>${c.rank || "n/a"}</td><td><span class="dna">${escapeHTML(c.target_site_dna)}</span><p class="candidate-id">${c.id}${c.rank===null?` · ${c.excluded_by.length} failed gates`:""}</p></td><td>${escapeHTML(positionText(c))}</td><td>${c.gc_percent}%</td><td><div class="rating-cell"><b>${ratingText(c)}</b><span class="rating-bar"><i style="width:${c.rating.percent ?? 0}%"></i></span></div>${c.rating.unavailable?`<p class="candidate-id">${c.rating.unavailable} unavailable</p>`:""}${c.rating.unchecked_gates.length?`<p class="candidate-id">${c.rating.unchecked_gates.length} unchecked gates</p>`:""}${(c.rating.missed||[]).length?`<p class="missed-chip">missed: ${c.rating.missed.map(id=>escapeHTML(ruleName(id))).join(", ")}</p>`:""}</td><td><span class="guide-badge ${escapeHTML(c.rating.guide || "unknown")}">${escapeHTML(c.rating.guide || "unknown")}</span>${!c.rating.models_agree?'<p class="disagreement">Models disagree</p>':""}</td></tr>`).join("") : '<tr><td colspan="7" style="padding:30px;text-align:center;color:var(--muted)">No candidates match this view. Inspect excluded targets or adjust your criteria and run again.</td></tr>';
   $("page-label").textContent = values.length ? `${fmt(state.page*50+1)}–${fmt(Math.min((state.page+1)*50,values.length))} of ${fmt(values.length)} · page ${state.page+1}/${pages}` : "0 candidates";
   $("page-previous").disabled = state.page===0; $("page-next").disabled = state.page>=pages-1;
   $("select-page").checked = page.length>0 && page.every(c=>state.checked.has(c.id));
@@ -556,7 +715,7 @@ function renderLegend(result) {
     const marks = track.key === "excluded" ? "see the breakdown above"
       : swatchesFor(track).map(entry =>
           `<span class="legend-mark">${swatch(entry)}${escapeHTML(entry.name)}</span>`).join("");
-    return `<tr><th>${escapeHTML(track.name)}</th><td>${marks || "\u2014"}</td>`
+    return `<tr><th>${escapeHTML(track.name)}</th><td>${marks || "none"}</td>`
       + `<td>${escapeHTML(track.help)}</td></tr>`;
   }).join("");
   legend.innerHTML = `<summary><span class="legend-chips">${chips}</span>`
@@ -585,7 +744,7 @@ function renderRejectionLegend(result) {
     + `<small>${state.excludedBinned
         ? "A candidate is counted against the first rule that excluded it. Excluded targets are "
           + "binned by position, and each column is split by the share of that bin each rule "
-          + "rejected \u2014 every column is the same height, which carries no meaning. Hover "
+          + "rejected. Every column is the same height, which carries no meaning. Hover "
           + "for counts; click a column, or zoom below " + INDIVIDUAL_MARK_SPAN
           + " bp, to see each target."
         : "A candidate is counted against the first rule that excluded it. Every excluded "
@@ -616,7 +775,15 @@ const TRACK_COLOURS = {
   motif:        {fill:"#7f8794", edge:"#5c636e"},
   motifDim:     {fill:"#d7d1ea", edge:"#b3a9d4"},
   candidate:    {fill:"#087e80", edge:"#055e60"},
+  // The highest-ranked targets. A darker shade of the same teal, because they are passing
+  // candidates rather than a different kind of thing -- and colour is only one of the three
+  // channels separating them: they are also full lane height and numbered.
+  topCandidate: {fill:"#0b4f57", edge:"#063136"},
 };
+
+// How many of the highest-ranked targets the map marks out. The candidate table already
+// treats the same set as a unit with its "Select top 10" button, so the two agree.
+const TOP_MARKED = 10;
 
 const TRACKS = [
   {key:"reference", y:59, name:"Reference / TSS",
@@ -639,8 +806,9 @@ const TRACKS = [
    swatches:[{colour:TRACK_COLOURS.motif, name:"a match"},
              {colour:TRACK_COLOURS.motifDim, name:"dimmed, while one factor is selected"}]},
   {key:"passing", y:245, name:"Passing targets",
-   help:"Targets that pass every evaluable mandatory rule. Unavailable gates must still be examined in candidate details.",
-   swatches:[{colour:TRACK_COLOURS.candidate, name:"passes every evaluable gate"}]},
+   help:"Targets that pass every evaluable mandatory rule. The ten highest-ranked are drawn full height and numbered with their rank. Rank is preferences met, counted equally, and on 125 assayed sequences this ranking did not beat chance, so a numbered mark is a shortlist to inspect and not a prediction of activity. Unavailable gates must still be examined in candidate details.",
+   swatches:[{colour:TRACK_COLOURS.topCandidate, name:"rank 1–10, numbered"},
+             {colour:TRACK_COLOURS.candidate, name:"passes every evaluable gate"}]},
   {key:"excluded", y:273, name:"Excluded targets",
    help:"Targets with at least one failed mandatory rule, coloured by the first rule that excluded each. Hover or select to see which checks failed.",
    swatches:[]},
@@ -738,6 +906,55 @@ function drawExcluded(parts, r, rejectionColours, scale, tip, rect) {
   return true;
 }
 
+const PASSING_TOP = 232, PASSING_STEP = 5, PASSING_HEIGHT = 7;
+const MARKED_TOP = 230, MARKED_HEIGHT = 19, MARKED_LABEL_GAP = 13;
+
+function passingTip(c) {
+  return `${c.id} · rank ${c.rank} · ${ratingText(c)} evaluated preferences · `
+    + `${c.rating.guide || "unknown"} guide (${c.rating.guide_model}). `
+    + `Position ${positionText(c)}. Click for details.`;
+}
+
+function drawPassing(parts, r, scale, tip, rect) {
+  // Every passing target used to be the same teal mark, so rank 1 and rank 900 were
+  // indistinguishable and the map could not answer the question it is looked at for: where
+  // are the ones I would actually order? The top ten are now separated on three channels at
+  // once -- full lane height instead of a third of it, a darker fill, and the rank printed
+  // above the mark -- because any one of the three alone fails somebody: colour fails a
+  // colour-blind reader, height alone does not say *which* rank, and a numeral is too small
+  // to find by eye at full extent.
+  //
+  // Rank is preferences met, counted equally (ADR 0006). The numeral is a shortlist to
+  // inspect, not a measured probability, and both the legend and the banner above the map
+  // say so.
+  const passing = r.candidates.filter(c => c.rank !== null);
+  for (const c of passing.filter(c => c.rank > TOP_MARKED)) {
+    rect(c.offset, c.offset + c.target_site_dna.length,
+      PASSING_TOP + ((c.rank - 1) % 3) * PASSING_STEP, PASSING_HEIGHT,
+      TRACK_COLOURS.candidate, passingTip(c), `data-candidate="${c.id}"`);
+  }
+  const marked = passing.filter(c => c.rank <= TOP_MARKED);
+  // Worst rank first, so rank 1 is drawn last and is the one on top where they overlap.
+  for (const c of [...marked].sort((a, b) => b.rank - a.rank)) {
+    rect(c.offset, c.offset + c.target_site_dna.length, MARKED_TOP, MARKED_HEIGHT,
+      TRACK_COLOURS.topCandidate, passingTip(c), `data-candidate="${c.id}"`);
+  }
+  // Numerals in rank order, skipping any that would collide with one already placed: a
+  // better rank keeps its label, and the rank of an unlabelled mark is still in its tooltip.
+  // Without this, two adjacent top-ten targets -- common, since neighbouring windows share
+  // most of their sequence -- overprint into an unreadable smudge.
+  const placed = [];
+  for (const c of [...marked].sort((a, b) => a.rank - b.rank)) {
+    const middle = c.offset + c.target_site_dna.length / 2;
+    if (middle < state.start || middle >= state.end) continue;
+    const x = scale(middle);
+    if (placed.some(at => Math.abs(at - x) < MARKED_LABEL_GAP)) continue;
+    placed.push(x);
+    parts.push(`<text class="rank-label" x="${x.toFixed(1)}" y="${MARKED_TOP - 3}" `
+      + `text-anchor="middle">${c.rank}</text>`);
+  }
+}
+
 function renderMap() {
   if (!state.result) return;
   const r = state.result, p = r.promoter, left = 133, right = 965, width = right-left;
@@ -783,7 +1000,7 @@ function renderMap() {
   for (const t of r.tracks.regulatory) rect(t.start,t.end,165,14,
     t.kind.includes("promoter")?TRACK_COLOURS.promoter:TRACK_COLOURS.regulatory,`${t.label}: ${t.detail}`);
   if (!r.tracks.regulatory.length) emptyNote(176, r.app.request.regulatory === false
-    ? "Not retrieved \u2014 Ensembl regulatory annotations were switched off for this run."
+    ? "Not retrieved. Ensembl regulatory annotations were switched off for this run."
     : "No Ensembl Regulatory Build feature overlaps this window.");
   const focused = state.motifFocus;
   const motifColours = motifPalette(r);
@@ -796,11 +1013,11 @@ function renderMap() {
       t.detail,`data-motif-mark="${escapeHTML(t.label)}"`);
   });
   if (!r.tracks.motifs.length) emptyNote(212, r.app.request.motifs === false
-    ? "Not scanned \u2014 motif prediction was switched off for this run."
+    ? "Not scanned. Motif prediction was switched off for this run."
     : "No bundled matrix matched above its threshold in this window.");
   const rejectionColours = rejectionPalette(r);
   state.excludedBinned = drawExcluded(parts, r, rejectionColours, scale, tip, rect);
-  for (const c of r.candidates.filter(c=>c.rank!==null)) rect(c.offset,c.offset+c.target_site_dna.length,232+((c.rank-1)%3)*5,7,TRACK_COLOURS.candidate,`${c.id} · rank ${c.rank} · ${ratingText(c)} evaluated preferences · ${c.rating.guide || "unknown"} guide (${c.rating.guide_model}). Position ${positionText(c)}. Click for details.`,`data-candidate="${c.id}"`);
+  drawPassing(parts, r, scale, tip, rect);
   if (state.selected) {
     const c=r.candidates.find(c=>c.id===state.selected);
     rect(c.offset,c.offset+c.target_site_dna.length,c.rank===null?261:228,c.rank===null?19:25,"none",`${c.id} selected`,`stroke="#b97a2b" stroke-width="2" data-candidate="${c.id}"`);
@@ -820,7 +1037,7 @@ function renderMap() {
     note.textContent = missing.length
       ? `${missing.length} rule${missing.length === 1 ? "" : "s"} could not be evaluated for any `
         + `candidate in this run: ${missing.map(ruleName).join(", ")}. `
-        + `These counted neither for nor against anything \u2014 they are not failures.`
+        + `These counted neither for nor against anything, and they are not failures.`
       : "";
   }
 }
@@ -995,7 +1212,7 @@ function referenceLabel(result) {
   const t = result.transcript;
   if (!t) return "pasted sequence";
   const marks = [t.is_mane_select ? "MANE Select" : null, t.biotype, t.refseq_match].filter(Boolean);
-  return `${t.ensembl_id}${marks.length ? ` — ${marks.join(", ")}` : ""}`;
+  return `${t.ensembl_id}${marks.length ? `: ${marks.join(", ")}` : ""}`;
 }
 
 function orderRowFor(result, candidateId) {
@@ -1085,7 +1302,7 @@ function endEvidence(candidate) {
     + `<p class="hint">Less negative is less stable. The ${weaker} end is the weaker of the two. `
     + `RISC loads whichever strand has the more weakly paired 5′ end (Schwarz et al. 2003; `
     + `Khvorova et al. 2003), and the antisense strand’s 5′ end pairs with the target’s `
-    + `3′ end — the right-hand end above. ${escapeHTML(
+    + `3′ end, the right-hand end above. ${escapeHTML(
         a.predicted_guide === "ambiguous"
           ? "Here the two ends are equal to within the model’s tolerance, so no strand is favoured."
           : `Hence ${a.predicted_guide} is predicted to be loaded.`)}</p>`
@@ -1161,7 +1378,7 @@ function renderTopResult(result) {
       + `${roles.antisense === "guide"
           ? "The antisense strand is predicted to be loaded, which is the design intent."
           : roles.sense === "guide"
-          ? "The sense strand is predicted to be loaded, against the design intent — see the candidate below."
+          ? "The sense strand is predicted to be loaded, against the design intent. See the candidate below."
           : "Neither strand is favoured for loading by the selected model."} `
       + `No off-target screening has been performed. `
       + `<button type="button" id="inspect-top-duplex" class="text-button">See how they pair ›</button></p></div>`
@@ -1215,12 +1432,12 @@ function duplexSheetHTML(result, candidate) {
         + `${String(r.searched_at || "").slice(0, 10)}): ${mine.perfect_hits} perfect, `
         + `${mine.near_perfect_hits} near-perfect of ${mine.hit_count} alignments`;
     }).filter(Boolean);
-  return `<h1>saRNA duplex — ${escapeHTML(candidate.id)}</h1>
+  return `<h1>saRNA duplex ${escapeHTML(candidate.id)}</h1>
     <table class="sheet-table">
       ${row("Gene", escapeHTML(gene))}
       ${row("Promoter reference", escapeHTML(referenceLabel(result)))}
       ${row("Position", escapeHTML(positionText(candidate)) + (candidate.tss_span ? " relative to reference TSS" : " in supplied sequence"))}
-      ${row("Genomic", candidate.genomic ? escapeHTML(`${candidate.genomic.contig}:${candidate.genomic.start}-${candidate.genomic.end} (${candidate.genomic.strand} strand, GRCh38)`) : "—")}
+      ${row("Genomic", candidate.genomic ? escapeHTML(`${candidate.genomic.contig}:${candidate.genomic.start}-${candidate.genomic.end} (${candidate.genomic.strand} strand, GRCh38)`) : "not placed on the genome")}
       ${row("Target site DNA", `<code>${escapeHTML(candidate.target_site_dna)}</code>`)}
     </table>
     <h2>Order these two oligonucleotides</h2>
@@ -1230,9 +1447,9 @@ function duplexSheetHTML(result, candidate) {
       ${row("Chemistry", `${order.core_length_nt} nt RNA core + 3′ dTdT overhang on both strands; ${order.ordered_length_nt} nt each. Anneal 1:1.`)}
     </table>` : "<p>This candidate did not pass the gates and has no order-ready duplex.</p>"}
     <h2>Why it was selected</h2>
-    <p>Rank ${candidate.rank ?? "—"} of ${fmt(result.counts.passing)} that passed every evaluable gate,
+    <p>Rank ${candidate.rank ?? "n/a"} of ${fmt(result.counts.passing)} that passed every evaluable gate,
        meeting ${escapeHTML(met)}. Predicted guide strand:
-       ${escapeHTML(candidate.rating.guide || "unknown")}, by ${escapeHTML(candidate.rating.guide_model || "—")}.</p>
+       ${escapeHTML(candidate.rating.guide || "unknown")}, by ${escapeHTML(candidate.rating.guide_model || "an unnamed model")}.</p>
     <p><b>Gates passed (${gatesPassed.length} of ${gates.length}):</b> ${gatesPassed.length ? gatesPassed.map(named).join("; ") : "none"}. A gate excludes a candidate that fails it.</p>
     <p><b>Preferences met (${preferencesMet.length}):</b> ${preferencesMet.length ? preferencesMet.map(named).join("; ") : "none"}. A preference adds one point and never excludes.</p>
     ${unavailable.length ? `<p><b>Could not be evaluated (${unavailable.length}):</b> ${unavailable.map(named).join("; ")}. These counted neither for nor against it, and are not failures.</p>` : ""}
@@ -1379,7 +1596,7 @@ function renderScreening(record) {
     + ordered.map(r => `<tr><td>${escapeHTML(r.candidate)}</td>`
         + `<td${r.perfect_hits ? ' class="flagged"' : ''}>${r.perfect_hits}</td>`
         + `<td>${r.near_perfect_hits}</td><td>${r.longest_complementary_stretch}</td>`
-        + `<td>${r.best_evalue === null ? "—" : Number(r.best_evalue).toExponential(1)}</td>`
+        + `<td>${r.best_evalue === null ? "n/a" : Number(r.best_evalue).toExponential(1)}</td>`
         + `<td>${r.hit_count}</td>`
         + (genomic ? `<td${r.in_run_window_hits ? ' class="flagged"' : ''}>`
                      + `${r.in_run_window_hits}</td>` : "")
@@ -1392,7 +1609,7 @@ function foldText(scan) {
   // A matrix with no sites has no fold to report: 0 found against 0 expected is undefined, not
   // zero, and printing "null" or "0x" would each claim more than the scan knows.
   if (!scan.sites && !scan.expected) return "no sites found";
-  if (scan.enrichment === null || scan.enrichment === undefined) return "\u2014";
+  if (scan.enrichment === null || scan.enrichment === undefined) return "n/a";
   return `${scan.enrichment}\u00d7${scan.exceeds_chance ? "" : " (within chance)"}`;
 }
 
@@ -1402,18 +1619,26 @@ const AXIS_LABEL = {
   expression:"Expression", chromatin:"Chromatin", "tf-occupancy":"Factor occupancy",
 };
 
-function cellAxisRow(axis) {
+function axisState(axis) {
   // Three outcomes here too: loaded, not loaded but reachable, and nothing and no route.
   // Rendering the last two alike would turn "nobody has looked" into "there is nothing there".
-  const state = axis.available ? "loaded" : axis.reachable ? "reachable" : "none";
+  //
   // "Available" rather than "Loaded": this describes what exists for the cell line, not what
   // this run read. A run with the chromatin option off still faces an available axis, and
   // reading the two as the same thing would credit the run with a measurement it did not make.
-  const word = axis.available ? "Available" : axis.reachable ? "Not wired in" : "No route";
+  //
+  // Shared by the setup sidebar and the results banner so the two can lay the same facts out
+  // differently without being able to word them differently.
+  return axis.available ? {state: "loaded", word: "Available"}
+    : axis.reachable ? {state: "reachable", word: "Not wired in"}
+    : {state: "none", word: "No route"};
+}
+function cellAxisRow(axis) {
+  const {state, word} = axisState(axis);
   return `<tr class="axis-${state}"><th>${escapeHTML(AXIS_LABEL[axis.axis] || axis.axis)}`
     + `<span>${escapeHTML(axis.question || "")}</span></th>`
     + `<td><span class="axis-state ${state}">${word}</span></td>`
-    + `<td>${axis.source ? escapeHTML(axis.source) : "\u2014"}</td>`
+    + `<td>${axis.source ? escapeHTML(axis.source) : "no source"}</td>`
     + `<td>${escapeHTML(axis.note || "")}</td></tr>`;
 }
 
@@ -1508,7 +1733,7 @@ function renderMotifPanel(result) {
           + `<td>${m.sites}</td><td class="chance">${m.expected}</td>`
           + `<td class="${m.exceeds_chance ? "enriched" : "chance"}">`
           + `${foldText(m)}</td>`
-          + `<td class="chance">${escapeHTML(m.data_type || "—")}`
+          + `<td class="chance">${escapeHTML(m.data_type || "n/a")}`
           + `${m.in_vivo ? "" : " (in vitro)"}</td>`
           + `<td class="relevance">${escapeHTML(m.relevance || "")}</td></tr>`;
       }).join("")
@@ -1533,6 +1758,7 @@ async function initialize() {
     $("engine-version").textContent=`v${state.catalogue.engine_version}`;
     $("preset").innerHTML=state.catalogue.presets.map(p=>`<option value="${p.id}">${escapeHTML(p.name)}</option>`).join("");
     $("cell-lines").innerHTML=state.catalogue.cells.map(c=>`<option value="${escapeHTML(c.name)}"></option>`).join("");
+    renderCellEvidence();
     if (!frozen) { setPreset("wang-2015"); syncDataAccess(); }
     if (frozen) {
       document.body.classList.add("frozen"); document.querySelector(".local-badge").textContent="Frozen offline record";
@@ -1551,8 +1777,9 @@ async function initialize() {
 }
 $("design-form").addEventListener("submit",e=>{e.preventDefault();design();});
 $("lookup-gene").addEventListener("click",()=>{error("");lookup().catch(e=>error(e,"lookup"));});
-$("gene-symbol").addEventListener("input",()=>{state.gene=null;state.basket=[];state.customReferences={};resetCustomEditor();renderBasket();renderGeneOverview();$("reference").disabled=true;$("reference").innerHTML='<option value="">Look up this gene first</option>';$("gene-info").hidden=true;$("add-promoter").disabled=true;$("save-custom-reference").disabled=true;error("");});
-$("reference").addEventListener("change",()=>{$("add-promoter").disabled=!$("reference").value;});
+$("gene-symbol").addEventListener("input",()=>{state.gene=null;state.expression=null;$("expression").hidden=true;state.basket=[];state.customReferences={};resetCustomEditor();renderBasket();renderGeneOverview();$("reference").disabled=true;$("reference").innerHTML='<option value="">Look up this gene first</option>';$("gene-info").hidden=true;$("add-promoter").disabled=true;$("save-custom-reference").disabled=true;error("");});
+$("reference").addEventListener("change",()=>{$("add-promoter").disabled=!$("reference").value;renderExpression();});
+$("cell-line").addEventListener("input",renderCellEvidence);
 $("add-promoter").addEventListener("click",()=>addPromoter());
 $("save-custom-reference").addEventListener("click",saveCustomReference);
 $("cancel-custom-reference").addEventListener("click",resetCustomEditor);
@@ -1577,9 +1804,11 @@ $("promoter-basket").addEventListener("click",e=>{
 function chooseOverviewReference(key) {
   if (frozen || !key) return;
   $("reference").value=key; $("add-promoter").disabled=!key; markDraft();
+  renderExpression();   /* Setting .value in script fires no change event. */
   $("reference").focus();
 }
 $("tss-group-list").addEventListener("click",e=>{const button=e.target.closest("[data-choose-transcript]");if(button)chooseOverviewReference(`transcript:${button.dataset.chooseTranscript}`);});
+$("expression").addEventListener("click",e=>{const button=e.target.closest("[data-choose-transcript]");if(button)chooseOverviewReference(`transcript:${button.dataset.chooseTranscript}`);});
 function selectOverviewItem(target) {
   const node=target.closest("[data-reference],[data-tss-group]"); if (!node) return;
   if (node.dataset.reference) chooseOverviewReference(node.dataset.reference);

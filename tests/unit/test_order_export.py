@@ -251,7 +251,7 @@ class TestTheOrderExportCitesTheScreeningWhenThereIsOne:
     """ADR 0019 left this join open: the export said "not-performed" after a real screening.
 
     The export is built from the run and a screening lives in its own dated record, so until
-    the two were joined the honest answer stayed "not performed" — honest and useless to
+    the two were joined the honest answer stayed "not performed", honest and useless to
     somebody deciding what to synthesise.
     """
 

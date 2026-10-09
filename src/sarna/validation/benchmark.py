@@ -12,8 +12,8 @@ structural criteria, so the set contains almost no candidate the gate would reje
 admits everything presented to it has not been shown to be permissive; it has been shown nothing.
 
 **Assayed sequences arrive without their promoters.** The dataset gives target sites, not genomic
-coordinates, so the rules that need promoter context — the TSS windows, CpG-island overlap, the
-3' flank positions — report not-applicable rather than contributing. The measured discrimination
+coordinates, so the rules that need promoter context (the TSS windows, CpG-island overlap, the
+3' flank positions) report not-applicable rather than contributing. The measured discrimination
 is therefore the discrimination of the *sequence-intrinsic* rules alone, which is a subset of
 what a real run applies. Recovering the coordinates would fix this and is worth doing; it needs
 the promoter each duplex was designed against, which the chapter does not tabulate.
@@ -221,7 +221,7 @@ def score_sequence(
         config: The resolved rules to apply.
         location: Recovered genomic context, from ``load_chapter4_locations``. With it, the TSS
             windows and the 3' flank preferences can be evaluated; without it they report
-            not-applicable, which is the correct outcome rather than a failure — the chapter
+            not-applicable, which is the correct outcome rather than a failure, the chapter
             records no coordinates.
 
     Returns:

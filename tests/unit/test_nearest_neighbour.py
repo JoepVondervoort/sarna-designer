@@ -1,7 +1,7 @@
 """Nearest-neighbour stacking tables.
 
 The legacy script's table has defect B2: three stacks are mapped to the wrong parameter. Rather
-than describe that in a comment, these tests make it a *computed property* — a table is
+than describe that in a comment, these tests make it a *computed property*, a table is
 self-consistent when every stack equals its reverse complement, and the legacy table is not.
 """
 

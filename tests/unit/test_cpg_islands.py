@@ -116,8 +116,8 @@ class TestBoundaries:
     A 500 bp window starting at ``s`` overlaps the block by ``s + 500 - 1000`` bases while
     ``s < 1000``. The GC criterion needs at least ``0.55 * 500 = 275`` GC bases, so
     ``s - 500 >= 275``, giving ``s >= 775``. At ``s = 775`` the window holds 275 block bases,
-    about 138 CpGs against an expected ``138 * 137 / 500 = 37.8``, a ratio of 3.65 — far above
-    0.65 — so the GC content is the binding constraint and the first qualifying window starts at
+    about 138 CpGs against an expected ``138 * 137 / 500 = 37.8``, a ratio of 3.65 (far above
+    0.65) so the GC content is the binding constraint and the first qualifying window starts at
     775. The last window that fits starts at 1500. Merging gives ``[775, 2000)``.
     """
 
@@ -225,8 +225,8 @@ class TestOverlapQuery:
 class TestIncrementalCountingMatchesBruteForce:
     """The sliding counts are maintained incrementally; this checks them against rescanning.
 
-    The incremental CpG update is the subtlest arithmetic in the module — a CpG leaves when the
-    departing base was the C of a pair, and arrives when the entering base completes one — and an
+    The incremental CpG update is the subtlest arithmetic in the module (a CpG leaves when the
+    departing base was the C of a pair, and arrives when the entering base completes one) and an
     error in it would shift island boundaries silently. Comparing against a naive recount over
     randomised sequences is the cheapest way to keep it honest.
     """

@@ -7,10 +7,10 @@ Status: **Phase 0 / Discovery.** Living document, updated during requirements gr
 | Artifact | Lines | Role | Notes |
 |---|---|---|---|
 | `saRNA Promoter Scanner.py` | ~560 | Promoter-sequence → 19-mer candidate design + rank | Attached in chat |
-| `saRNA by Promoter Sequence.py` | ~560 | — | **Byte-identical duplicate** of the above. Not a second implementation. |
+| `saRNA by Promoter Sequence.py` | ~560 | n/a | **Byte-identical duplicate** of the above. Not a second implementation. |
 | `EpiMarker checker .py` | 837 | Gene symbol → Ensembl TSS → ±30 kb → locate *known* saRNAs → histone ChIP enrichment + RandomForest | On disk at `/home/jvon/EpiMarker checker .py` |
 | `af22_data/*.bw` | 6 files, ~890 MB | AF22 histone ChIP-seq bigWigs, GSE108506, 50 bp bins | On disk, already downloaded |
-| `20250428_saRNA_designs_with_epigenomic_marker_scanning/` | empty | Output dir from a prior run | — |
+| `20250428_saRNA_designs_with_epigenomic_marker_scanning/` | empty | Output dir from a prior run | n/a |
 | `Designs.xlsx` | **MISSING** | Input to EpiMarker: per-gene columns of 19-mers labelled positive/non control | Script aborts without it |
 
 Two scripts, not three: the design engine (Scanner) and the epigenomic annotation/validation
@@ -24,29 +24,29 @@ script (EpiMarker) are **separate pipelines with no shared code and conflicting 
 | Passenger / sense | Strand identical to the target; printed 5'→3' by the legacy Scanner |
 | Guide / antisense | Complement of the target; intended RISC-loaded strand |
 | Duplex | 19 bp core + 3' `UU` overhang on both strands (i.e. delivered as 21-mers) |
-| Promoter window | Legacy Scanner: *whatever sequence is pasted* — no TSS-relative window exists yet |
+| Promoter window | Legacy Scanner: *whatever sequence is pasted*, no TSS-relative window exists yet |
 | POS_CTRL / NON_CTRL | EpiMarker labels for empirically active vs inactive known saRNAs |
 
 Note: the legacy Scanner has **no concept of a TSS or of genomic coordinates at all.** It
 scans a bare pasted string. All TSS-relative logic lives only in EpiMarker.
 
-## 3. Design rules — Promoter Scanner (the design engine)
+## 3. Design rules: Promoter Scanner (the design engine)
 
 Ordering below is the order applied in the legacy main loop.
 
 | # | Rule | Location | Current default | Range | Rationale | Evidence class | Configurable? | Effect on ranking |
 |---|---|---|---|---|---|---|---|---|
 | R1 | Candidate length = 19 nt | `maketargets` | 19 | 18–21 typical | siRNA/saRNA duplex core | Established | Yes | Defines the window; none directly |
-| R2 | Scan start offset `i = 3`, end `len-4` | main loop | 3 / −4 | — | **Unexplained.** `−4` is needed so `checkflanks` can read +22; the leading `3` has no justification and silently drops the first 3 candidates | Artefact / likely bug | Remove | Drops candidates |
+| R2 | Scan start offset `i = 3`, end `len-4` | main loop | 3 / −4 | n/a | **Unexplained.** `−4` is needed so `checkflanks` can read +22; the leading `3` has no justification and silently drops the first 3 candidates | Artefact / likely bug | Remove | Drops candidates |
 | R3 | No homopolymer run | `checkconsecutive` | run ≥ 5 rejected | 3–6 | Runs cause synthesis/off-target/structure problems | Heuristic | Yes | Hard filter |
-| R4 | `endstability ≥ 0` | `endstability` | ≥ 0 | — | Thermodynamic asymmetry: 5' end of *target* more stable ⇒ 5' end of *guide* less stable ⇒ guide preferentially loaded | Established (Schwarz 2003, Khvorova 2003) | Yes (threshold) | Hard filter **and** scored (`stab`) |
+| R4 | `endstability ≥ 0` | `endstability` | ≥ 0 | n/a | Thermodynamic asymmetry: 5' end of *target* more stable ⇒ 5' end of *guide* less stable ⇒ guide preferentially loaded | Established (Schwarz 2003, Khvorova 2003) | Yes (threshold) | Hard filter **and** scored (`stab`) |
 | R5 | GC fraction | `countGC` | **0.40 – 0.65** | 0.3–0.7 | Duplex stability / RISC loading | Empirical | Yes | Hard filter |
-| R6 | Position 19 = `A` | `checkpos19` | required | — | ⇒ guide 5' nt is `U`; U/A at guide 5' favours AGO2 loading | Established-ish (Ui-Tei 2004) | Yes (on/off) | Hard filter |
-| R7 | Position 18 ∈ {`A`,`U`} | `checkpos18` | required, A=2 / U=1 | — | A/U-rich 3' target end = low-stability guide 5' end | Empirical | Yes | Hard filter **and** dominant score term |
-| R8 | End-base asymmetry | `endbase` | required True | — | Single-base proxy for R4 using half the AA/GG stacking energy | Heuristic, crude | Yes | Hard filter |
-| R9 | No overlap with any CpG site | `insite` | required | — | Avoid CpG methylation-sensitive targets | Heuristic, project-specific | Yes | Hard filter |
-| R10 | Not inside a CpG island | `inisland` | **COMMENTED OUT in main** | — | Takai & Jones island definition | Heuristic | Yes | Currently inert |
-| R11 | Position 7 = `U` | `checkpos7` | scored only | — | Guide position-13 preference / cleavage-site geometry | Empirical | Yes | Score term only |
+| R6 | Position 19 = `A` | `checkpos19` | required | n/a | ⇒ guide 5' nt is `U`; U/A at guide 5' favours AGO2 loading | Established-ish (Ui-Tei 2004) | Yes (on/off) | Hard filter |
+| R7 | Position 18 ∈ {`A`,`U`} | `checkpos18` | required, A=2 / U=1 | n/a | A/U-rich 3' target end = low-stability guide 5' end | Empirical | Yes | Hard filter **and** dominant score term |
+| R8 | End-base asymmetry | `endbase` | required True | n/a | Single-base proxy for R4 using half the AA/GG stacking energy | Heuristic, crude | Yes | Hard filter |
+| R9 | No overlap with any CpG site | `insite` | required | n/a | Avoid CpG methylation-sensitive targets | Heuristic, project-specific | Yes | Hard filter |
+| R10 | Not inside a CpG island | `inisland` | **COMMENTED OUT in main** | n/a | Takai & Jones island definition | Heuristic | Yes | Currently inert |
+| R11 | Position 7 = `U` | `checkpos7` | scored only | n/a | Guide position-13 preference / cleavage-site geometry | Empirical | Yes | Score term only |
 | R12 | 3'-flanking A/U count | `checkflanks` | 4 nt window, scored | 0–8 | A/U-rich flank aids unwinding | Heuristic | Yes | Score term only |
 
 ### Scoring formula (legacy)
@@ -56,9 +56,9 @@ score = stab*stabilitydiff + ind18*indicator18 + ind7*indicator7 + flank*flanksc
         0.01 * ~[0..10]      1000 * {1,2}        1000 * {0,1}       1 * {0..4}
 ```
 
-**This is not a calibrated numeric score — it is a lexicographic tier system in disguise.**
+**This is not a calibrated numeric score. It is a lexicographic tier system in disguise.**
 Because `indicator18 ∈ {1,2}` (0 is already hard-filtered) and `indicator7 ∈ {0,1}`, the
-weights 1000/1000 create four discrete tiers (1000, 2000, 2000, 3000 — note tiers *collide*:
+weights 1000/1000 create four discrete tiers (1000, 2000, 2000, 3000, note tiers *collide*:
 `ind18=2, ind7=0` ties `ind18=1, ind7=1` at 2000), with `flankscore` as the within-tier
 discriminator and `stab` as a final sub-unit tiebreak. The 2-decimal-looking output score is
 pseudo-precision. Candidate for explicit tiered ranking in the new engine.
@@ -68,7 +68,7 @@ pseudo-precision. Candidate for explicit tiered ranking in the new engine.
 10 Gibbs values hardcoded (`AAE`…`GGE`), sourced from "Wiki: Nucleic Acid Thermodynamics".
 `endstability` sums NN stacking energies over the first and last `end`(=4) nt.
 
-## 4. Design rules — EpiMarker (conflicting second implementation)
+## 4. Design rules: EpiMarker (conflicting second implementation)
 
 | Rule | Location | Value | Conflict with Scanner |
 |---|---|---|---|
@@ -76,9 +76,9 @@ pseudo-precision. Candidate for explicit tiered ranking in the new engine.
 | GC % | `validate_dna` | **40 – 60 %** | **CONFLICTS with Scanner's 40–65 %** |
 | Score | `compute_score` | `0.7*GCscore + 0.3*distanceScore`, ideal = **−500 bp** from TSS | **Completely different, incompatible scoring scheme** |
 | Promoter window | `get_region` | **±30 000 bp** around TSS | Scanner has no window at all |
-| TSS | `get_gene_and_tss` | Ensembl canonical transcript only | — |
+| TSS | `get_gene_and_tss` | Ensembl canonical transcript only | n/a |
 
-EpiMarker *does not generate* candidates — it locates user-supplied 19-mers by string search.
+EpiMarker *does not generate* candidates) it locates user-supplied 19-mers by string search.
 
 ## 5. Guide-strand prediction (to be preserved)
 
@@ -96,8 +96,8 @@ position 18/19 identity) rather than only the boolean outcome.
 
 1. Guide is always the antisense strand.
 2. One gene → one canonical transcript → one TSS → one promoter (EpiMarker).
-3. Genome assembly is whatever Ensembl REST currently defaults to (GRCh38) — **never pinned**.
-4. AF22 bigWig coordinates are assumed compatible with that assembly — **unverified, and a
+3. Genome assembly is whatever Ensembl REST currently defaults to (GRCh38) (**never pinned**.
+4. AF22 bigWig coordinates are assumed compatible with that assembly) **unverified, and a
    likely GRCh37/GRCh38 mismatch given GSE108506's publication date.** Blocking question.
 5. 19 nt + UU overhang is the correct delivery format.
 6. A single-bp bigWig sample represents the signal over a 19 nt target.
@@ -112,23 +112,23 @@ Severity: **S1** = wrong scientific output, **S2** = wrong behaviour, **S3** = h
 | ID | Sev | Location | Defect |
 |---|---|---|---|
 | B1 | **S1** | EpiMarker `get_region` + `find_sarna` | For minus-strand genes Ensembl is asked for `strand=-1`, returning the **reverse complement** of the region. `idx = seq.find(dna)` therefore counts from the opposite end, yet `abspos = start + idx` treats it as a forward offset, and `rel = abspos − TSS` keeps the plus-strand sign convention. **All minus-strand positions and all TSS-relative distances are wrong.** Exactly the strand-coordinate class of bug to test explicitly. |
-| B2 | **S1** | Scanner NN energy table | Reverse-complement-equivalent dinucleotides are mis-paired. In NN convention `AC ≡ GT`, `UC ≡ GA`, `AG ≡ CT`. The code maps `AC→CAE`, `UC→CTE`, `AG→GAE` — i.e. three pairs assigned to the wrong parameter. Biases every `endstability` value and therefore filter R4 and the score. **Needs your decision: fix, or preserve for traceability?** |
+| B2 | **S1** | Scanner NN energy table | Reverse-complement-equivalent dinucleotides are mis-paired. In NN convention `AC ≡ GT`, `UC ≡ GA`, `AG ≡ CT`. The code maps `AC→CAE`, `UC→CTE`, `AG→GAE`, i.e. three pairs assigned to the wrong parameter. Biases every `endstability` value and therefore filter R4 and the score. **Needs your decision: fix, or preserve for traceability?** |
 | B3 | **S1** | EpiMarker `find_sarna` return | `return rel, compute_score(gc, rel) if ok else (rel, 0)` parses as `return rel, (score if ok else (rel, 0))`. When GC validation fails the "score" is a **tuple**, not a number. Silently corrupts downstream scoring/ML. |
 | B4 | **S2** | EpiMarker `enrichment_analysis` | Signal sampled at a **single base pair** (`TSS+p` … `+1`) from 50 bp-binned bigWigs, and not averaged over the 19 nt target. Also uses `TSS+p` which compounds B1 on minus strands. |
 | B5 | **S2** | Scanner `checkconsecutive` | Docstring claims "22-nucleotide subsequence" and "four or more consecutive identical bases"; the loop actually detects runs of **five** within the 19-mer. Code and documented rule disagree. |
 | B6 | **S2** | Scanner main loop | `i = 3` start offset silently discards the first three candidate windows with no stated reason (R2). |
-| B7 | **S2** | Scanner `CpGislanddetector` | Relies on **list aliasing** — the in-code comment calls it "a strange feature of Python" and the merge logic depends on the alias. Fragile. Also `CpG > 7` where Takai & Jones specify ≥ 7, and `CpGexp` is recomputed with `str.count` every iteration (O(n·200)) while GC is updated incrementally. |
-| B8 | **S2** | Scanner main | `inisland` is **commented out** — R10 does not run. Intentional or accidental? |
+| B7 | **S2** | Scanner `CpGislanddetector` | Relies on **list aliasing**, the in-code comment calls it "a strange feature of Python" and the merge logic depends on the alias. Fragile. Also `CpG > 7` where Takai & Jones specify ≥ 7, and `CpGexp` is recomputed with `str.count` every iteration (O(n·200)) while GC is updated incrementally. |
+| B8 | **S2** | Scanner main | `inisland` is **commented out**. R10 does not run. Intentional or accidental? |
 | B9 | **S2** | Scanner `endbase` / `endstability` / `complement` | Error branches `print(...)` and then **continue with a stale or undefined `energy`**. `endbase` would raise `UnboundLocalError` on the first call; later calls silently reuse the previous value. Violates fail-fast. |
 | B10 | **S3** | EpiMarker `setup_environment` | Hardcoded Windows path `C:\Users\joep-\...` + `os.chdir`. Cannot run in WSL. |
 | B11 | **S3** | EpiMarker | `pip install` invoked at runtime from inside the script (`ensure_plotly`). |
-| B12 | **S3** | Scanner | `from pylab import *` — unused, and star-imports numpy/matplotlib names over builtins. |
+| B12 | **S3** | Scanner | `from pylab import *`, unused, and star-imports numpy/matplotlib names over builtins. |
 | B13 | **S3** | Scanner `complement` | Named/documented as "reverse complement" in its error message but correctly computes a plain complement. |
 | B14 | **S3** | Both | Everything is index-arithmetic `while` loops with manual counters; no functions have type hints; `promotername` is a hardcoded module constant. |
-| B15 | **S1** | EpiMarker — Ensembl REST ↔ `af22_data/*.bw` | **Assembly mismatch, verified 2026-10-06 (§12).** TSS coordinates come from Ensembl REST, which defaults to **GRCh38**; the AF22 bigWigs are **GRCh37/hg19**. Coordinates are also named differently (`1` vs `chr1`). Every histone-signal lookup therefore reads the wrong locus. This was the blocking open question — it is now closed, and the answer is that the mismatch is real. |
+| B15 | **S1** | EpiMarker. Ensembl REST ↔ `af22_data/*.bw` | **Assembly mismatch, verified 2026-10-06 (§12).** TSS coordinates come from Ensembl REST, which defaults to **GRCh38**; the AF22 bigWigs are **GRCh37/hg19**. Coordinates are also named differently (`1` vs `chr1`). Every histone-signal lookup therefore reads the wrong locus. This was the blocking open question, it is now closed, and the answer is that the mismatch is real. |
 | B16 | **S1** | Scanner `endbase` (lines 139-175) | **Not a thermodynamic test.** It scores one terminal base per end as `AAE/2` for A/U and `GGE/2` for G/C, so with only two possible values per end the condition reduces exactly to *position 1 is G or C* **and** *position 19 is A or U*. The script therefore enforces as a **mandatory gate** what Wang 2015 Table 1 marks only as "preferably" (G/C at position 1); given the existing `pos19-a` gate the second half is automatically satisfied. Not an arithmetic defect but a previously unnoticed scientific divergence between the presets: `legacy-scanner` needs a mandatory position-1 rule that `wang-2015` scores as a preference. Identified 2026-10-06 while deciding ADR 0009. **The catalogue does not yet carry this rule.** |
-| B17 | **S2** | Scanner `CpGislanddetector` (lines 289-298) | **Misattributed criteria.** The comment says the detector uses "roughly the same algorithm as used by D. Takai and P. A. Jones", but its thresholds — >= 200 bp, GC > 50 %, obs/exp > 0.6 — are **Gardiner-Garden & Frommer 1987**. Takai & Jones 2002 deliberately tightened them to >= 500 bp, GC >= 55 %, obs/exp >= 0.65, because the 1987 criteria over-call: on human chromosomes 21 and 22 they yielded 14 062 islands, over half of them Alu repeats, against 1 101 under the stricter set. The misattribution was copied into this project's own rule rationale and is now corrected; `wang-2015` defaults to Takai & Jones and both definitions ship as sourced options. Also in this function: `CpG > 7` where the comment says "at least 7", and `len(sequence) > 200` discards a sequence of exactly the window length. Identified 2026-10-06. |
-| B18 | **S2** | Scanner `score` — the position-7 term | **Anti-correlated with measured activity.** The script weights an unsourced "position 7 is U" criterion at 1000, making it one of two dominant ranking terms (see B16's sibling finding on `endbase`). Measured against the only empirical dataset available — 14 saRNAs with reproducible >= 1.5-fold activation against 111 without, from thesis chapter 4 — position 7 is U in **43 % of activators against 60 % of non-activators**, an 18-point separation in the wrong direction. With 14 activators this is six sequences against eight and does not establish that the rule is harmful; what it establishes is the complete absence of support in the only direction that could have rescued a rule with no literature and no mechanism. The rule remains catalogued, unsourced and off by default, so historical rankings stay explainable. Identified 2026-10-06; see `docs/scientific/empirical-validation.md`. |
+| B17 | **S2** | Scanner `CpGislanddetector` (lines 289-298) | **Misattributed criteria.** The comment says the detector uses "roughly the same algorithm as used by D. Takai and P. A. Jones", but its thresholds, >= 200 bp, GC > 50 %, obs/exp > 0.6, are **Gardiner-Garden & Frommer 1987**. Takai & Jones 2002 deliberately tightened them to >= 500 bp, GC >= 55 %, obs/exp >= 0.65, because the 1987 criteria over-call: on human chromosomes 21 and 22 they yielded 14 062 islands, over half of them Alu repeats, against 1 101 under the stricter set. The misattribution was copied into this project's own rule rationale and is now corrected; `wang-2015` defaults to Takai & Jones and both definitions ship as sourced options. Also in this function: `CpG > 7` where the comment says "at least 7", and `len(sequence) > 200` discards a sequence of exactly the window length. Identified 2026-10-06. |
+| B18 | **S2** | Scanner `score`, position-7 term | **Anti-correlated with measured activity.** The script weights an unsourced "position 7 is U" criterion at 1000, making it one of two dominant ranking terms (see B16's sibling finding on `endbase`). Measured against the only empirical dataset available, 14 saRNAs with reproducible >= 1.5-fold activation against 111 without, from thesis chapter 4, position 7 is U in **43 % of activators against 60 % of non-activators**, an 18-point separation in the wrong direction. With 14 activators this is six sequences against eight and does not establish that the rule is harmful; what it establishes is the complete absence of support in the only direction that could have rescued a rule with no literature and no mechanism. The rule remains catalogued, unsourced and off by default, so historical rankings stay explainable. Identified 2026-10-06; see `docs/scientific/empirical-validation.md`. |
 
 ## 8. Code to preserve vs refactor
 
@@ -160,7 +160,7 @@ no retries on either.
 ## 10. Environment (verified 2026-10-06)
 
 Python 3.11.4 · Node v20.20.0 · git 2.34.1 · Linux 6.18.40.1-microsoft-standard-WSL2 ·
-working dir `/home/jvon` on the Linux filesystem (good — not `/mnt/c`) · not yet a git repo.
+working dir `/home/jvon` on the Linux filesystem (good, not `/mnt/c`) · not yet a git repo.
 
 ---
 
@@ -177,19 +177,19 @@ User-confirmed (2026-10-06) as the guideline the legacy designs were based on.
 
 | Wang 2015 Table 1 criterion | Scanner implementation | Verdict |
 |---|---|---|
-| Distance from TSS: −100 to −1000 bp | **absent — no TSS concept at all** | **MISSING** |
+| Distance from TSS: −100 to −1000 bp | **absent: no TSS concept at all** | **MISSING** |
 | CpG islands: avoid | `inisland` written but **commented out** | **INERT** (confirms B8 is a defect) |
 | Target size: 19 nt | 19 nt | conforms |
 | Target GC content: **40–60 %** | **40–65 %** | **DIVERGES** |
 | Consecutive nucleotides ≤ 5 | rejects runs ≥ 5 | conforms (B5 was a *docstring* error; code is right) |
 | Simple repeats (di-/tri-nucleotide): avoid | **absent** | **MISSING** |
-| CpGs in target ≤ 1 | **zero tolerance** (`insite`) | **DIVERGES — stricter** |
+| CpGs in target ≤ 1 | **zero tolerance** (`insite`) | **DIVERGES, stricter** |
 | 1st and 2nd nucleotides preferably G or C | **absent** | **MISSING** |
 | 18th nucleotide: A or T | required (`checkpos18`) | conforms |
 | 19th nucleotide: A | required (`checkpos19`) | conforms |
 | 20th–23rd preferably A or T | `checkflanks`, soft-scored | conforms |
 | Thermodynamic asymmetry (NN model, antisense 5' less stable) | `endstability` + `endbase` | conforms in intent; see B2 |
-| — *no such rule in the paper* — | **position 7 = `U`, weight `ind7 = 1000`** | **UNSOURCED** |
+| *no such rule in the paper* | **position 7 = `U`, weight `ind7 = 1000`** | **UNSOURCED** |
 
 ### Consequences
 
@@ -221,7 +221,7 @@ Ranking requirement.
 
 ---
 
-## 12. Genome assembly of the AF22 bigWigs — RESOLVED 2026-10-06
+## 12. Genome assembly of the AF22 bigWigs: RESOLVED 2026-10-06
 
 Previously the blocking open question ("are the AF22 bigWigs on the same assembly as Ensembl's
 default?"). **They are not.**
@@ -231,8 +231,8 @@ compared against the known GRCh37 and GRCh38 lengths.
 
 | Chromosome | Observed in all 6 `.bw` | GRCh37/hg19 | GRCh38 |
 |---|---|---|---|
-| `chr1` | 249,250,621 | **249,250,621** ✅ | 248,956,422 |
-| `chrX` | 155,270,560 | **155,270,560** ✅ | 156,040,895 |
+| `chr1` | 249,250,621 | **249,250,621** ✔ | 248,956,422 |
+| `chrX` | 155,270,560 | **155,270,560** ✔ | 156,040,895 |
 
 All six files (GSM2902405–GSM2902410) agree: 25 contigs, UCSC-style `chr`-prefixed names,
 **GRCh37/hg19**. This is consistent with GSE108506's 2017 deposition date.
@@ -243,7 +243,7 @@ All six files (GSM2902405–GSM2902410) agree: 25 contigs, UCSC-style `chr`-pref
    EpiMarker script pins no assembly and so silently received GRCh38 TSS coordinates, then
    used them to index hg19 signal tracks.
 2. **Contig naming.** Ensembl returns `1`, `2`, `X`; the bigWigs expect `chr1`, `chr2`, `chrX`.
-   A lookup with the Ensembl name raises or returns empty rather than wrong data — so this one
+   A lookup with the Ensembl name raises or returns empty rather than wrong data, so this one
    fails loudly, whereas the assembly mismatch fails **silently**.
 
 ### Scientific consequence
@@ -259,13 +259,13 @@ design path is unaffected and only the annotation path is implicated.
 
 ### Not yet decided
 
-How the new engine reconciles the two — pinning the GRCh37 Ensembl endpoint, lifting the
-bigWigs over to GRCh38, or lifting query coordinates per-request — is an open architecture
+How the new engine reconciles the two (pinning the GRCh37 Ensembl endpoint, lifting the
+bigWigs over to GRCh38, or lifting query coordinates per-request) is an open architecture
 decision requiring an ADR. Whichever is chosen, the engine must **pin and assert the assembly
 explicitly at every genomic boundary** rather than relying on a service default, and must
 normalise contig naming at the bigWig adapter.
 
-### Addendum — the mitochondrion is *not* shared between Ensembl GRCh37 and UCSC hg19
+### Addendum: the mitochondrion is *not* shared between Ensembl GRCh37 and UCSC hg19
 
 Validating the project's contig-length tables against the AF22 headers (2026-10-06) found all
 **24 nuclear contigs identical**, confirming GRCh37, with one discrepancy:
@@ -282,7 +282,7 @@ No scientific cost: mitochondrial DNA is not packaged into nucleosomes, so histo
 is not interpretable on it, and saRNA targets are nuclear promoters. The point is recorded
 because "GRCh37 ≡ hg19" is a tempting shorthand that is wrong in exactly this one place.
 
-### Addendum — the legacy gates exclude five saRNAs known to activate their targets
+### Addendum: the legacy gates exclude five saRNAs known to activate their targets
 
 Measured 2026-10-06 against the chapter 4 dataset (`scripts/validate_against_chapter4.py`). The
 `legacy-scanner` preset rejects **5 of the 14** duplexes with reproducible activation:
@@ -301,14 +301,14 @@ against 0.17), so there is no empirical case for the tightening and a measured c
 known activators. Wang's own published settings exclude none of the fourteen.
 
 The two `thermodynamic-asymmetry` rejections come from the defective legacy stacking table (B2)
-rather than from a threshold choice — `wang-2015`, with the same 0.0 kcal/mol threshold and the
+rather than from a threshold choice, `wang-2015`, with the same 0.0 kcal/mol threshold and the
 corrected RNA table, admits both.
 
 This is the clearest statement available of what reproducing the legacy script costs, and it is
 why `legacy-scanner` is documented as "for re-deriving historical designs, not for new work".
 
 
-### Addendum — B15 is closed: coordinates are converted per request, and the conversion is checked
+### Addendum: B15 is closed: coordinates are converted per request, and the conversion is checked
 
 Implemented 2026-10-06 in `sarna.regulatory.chromatin`, taking the third of ADR 0004's three
 options: query coordinates are converted GRCh38 to hg19 per request, the bigWigs are not rewritten,
@@ -323,7 +323,7 @@ reason instead of a number:
 
 | Problem | Why refusing matters |
 |---|---|
-| mitochondrial | hg19 holds NC_001807 (16,571 bp), GRCh37 holds rCRS (16,569 bp) — different sequences, so no liftover reconciles them |
+| mitochondrial | hg19 holds NC_001807 (16,571 bp), GRCh37 holds rCRS (16,569 bp), different sequences, so no liftover reconciles them |
 | unmapped | the region is absent from the other assembly |
 | ambiguous | a coordinate mapping to several places; taking the first is how a pipeline reads a paralogue |
 | contig changed | the interval spans a rearrangement |

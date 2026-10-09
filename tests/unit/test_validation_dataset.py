@@ -232,8 +232,8 @@ class TestTheRecoveredPromoters:
 class TestExternalValidationOfTheCoordinates:
     """Two published saRNAs are named for their TSS-relative position. That is the control.
 
-    Nothing in the chain — Ensembl lookup, MANE Select choice, strand handling, locus fetch,
-    sequence search, offset arithmetic — can be meaningfully wrong and still land within a few
+    Nothing in the chain (Ensembl lookup, MANE Select choice, strand handling, locus fetch,
+    sequence search, offset arithmetic) can be meaningfully wrong and still land within a few
     bases of a position published twenty years ago.
     """
 

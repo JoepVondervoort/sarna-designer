@@ -1,4 +1,4 @@
-# ADR 0005 — A pure-Python design engine as a library, with a thin web UI over it
+# ADR 0005: A pure-Python design engine as a library, with a thin web UI over it
 
 - **Status**: Accepted
 - **Date**: 2026-10-06
@@ -29,7 +29,7 @@ exists to end.
 
 Three layers, with a hard dependency direction.
 
-**1. `sarna` — the engine, a plain importable Python package.** Candidate generation, the rule
+**1. `sarna`, the engine, a plain importable Python package.** Candidate generation, the rule
 registry, filtering, scoring and explanation. It has **no knowledge of HTTP, of the UI, or of
 any web framework**, and no global state. Rules are the data records ADR 0003 specifies.
 Genomics and epigenomics access sits behind interfaces, so the engine is testable with no
@@ -43,13 +43,13 @@ generated from them rather than maintained by hand.
 
 **3. A thin frontend** for the researcher-facing workflow: enter a gene symbol or paste a
 promoter, choose a preset, see ranked candidates with their rule breakdown, export.
-"Thin" is a constraint, not a description — it holds no scientific logic and computes no
+"Thin" is a constraint, not a description, it holds no scientific logic and computes no
 scores, so a wrong number can only ever come from the engine.
 
 Streamlit was considered and rejected for the UI: it is markedly faster to a usable tool, but
 the per-rule provenance and contribution rendering ADR 0003 mandates is exactly the kind of
 layout it makes awkward, and that rendering is a core requirement rather than a nicety. A full
-React application was considered and judged correct in shape but premature in cost — the
+React application was considered and judged correct in shape but premature in cost, the
 decision here does not preclude it, because the frontend is the only layer it would replace.
 
 ## Consequences

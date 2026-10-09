@@ -5,7 +5,7 @@ coordinates, so none can report not-applicable: a target always has a length, a 
 CpG count.
 
 A note on thresholds: the measurement lives in :mod:`sarna.sequence.nucleic` and the comparison
-lives here. That split is what stopped defect B5 recurring — the legacy ``checkconsecutive``
+lives here. That split is what stopped defect B5 recurring, the legacy ``checkconsecutive``
 hardcoded a run length that disagreed with its own documentation, because the measuring and the
 judging were the same function.
 """

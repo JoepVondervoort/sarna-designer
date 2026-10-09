@@ -172,10 +172,18 @@ class AppRouter:
         if method == "GET" and path == "/api/catalogue":
             return self._json(200, catalogue())
         if method == "GET" and path.startswith("/api/genes/"):
-            symbol = path.removeprefix("/api/genes/")
+            rest = path.removeprefix("/api/genes/")
+            # Expression is a second, optional request against a second service, so it gets
+            # its own route rather than making every gene lookup wait on GTEx.
+            symbol, _, leaf = rest.partition("/")
+            if leaf not in ("", "expression"):
+                raise KeyError(f"No such gene route: {leaf!r}")
             if not re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", symbol):
                 raise ValueError("Use a human gene symbol or Ensembl gene ID, without spaces.")
-            return self._json(200, self.service.lookup(symbol, query.get("offline") == ["true"]))
+            offline = query.get("offline") == ["true"]
+            if leaf == "expression":
+                return self._json(200, self.service.expression(symbol, offline))
+            return self._json(200, self.service.lookup(symbol, offline))
         if path == "/api/batches":
             if method == "GET":
                 return self._json(200, self.service.store.list_batches())
@@ -329,7 +337,7 @@ class AppRouter:
         """Return the newest complete screening per scope, indexed by candidate.
 
         ADR 0019 left this join open, so the order export reported "not-performed" even after
-        a real screening — honest, and useless to somebody deciding what to synthesise. A
+        a real screening, honest, and useless to somebody deciding what to synthesise. A
         screening stays its own dated record; this reads it rather than writing into the run.
 
         Newest per scope, because re-screening adds a record rather than replacing one and the
@@ -430,7 +438,7 @@ class AppRouter:
         app = snapshot.get("app", {})
         gene = snapshot.get("gene") or {}
         anchor = app.get("anchor") or {}
-        no_reference = "none — designed against a supplied sequence"
+        no_reference = "none (designed against a supplied sequence)"
         run = Sheet("Run", ("field", "value"), (
             ("run id", run_id),
             ("created", app.get("created", "")),

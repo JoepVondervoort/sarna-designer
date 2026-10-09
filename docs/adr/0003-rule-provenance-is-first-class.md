@@ -1,4 +1,4 @@
-# ADR 0003 — Rule provenance and rationale are first-class, user-visible metadata
+# ADR 0003: Rule provenance and rationale are first-class, user-visible metadata
 
 - **Status**: Accepted
 - **Date**: 2026-10-06
@@ -7,7 +7,7 @@
 ## Context
 
 The author's stated reason for valuing Wang et al. 2015 was that it **explained why the score
-was the way it was**, and asked that the application do the same — including letting the user
+was the way it was**, and asked that the application do the same, including letting the user
 see *where each option's information comes from* and *why the option could matter*.
 
 Against this, the legacy Scanner buries its science in module-level constants and bare `if`
@@ -15,7 +15,7 @@ conditions. A reader cannot tell that GC ≤ 0.65 is a local deviation, that the
 has no source, or that `1000` was chosen to create tiers rather than to express an effect size.
 
 Investigation also showed the paper itself publishes **no weights at all**, so "explain the
-score like the paper does" cannot mean "copy the paper's explanation" — there isn't one. The
+score like the paper does" cannot mean "copy the paper's explanation": there isn't one. The
 requirement is therefore to do better than the source.
 
 ## Decision
@@ -48,7 +48,7 @@ Consequences of this record being mandatory:
 
 - The scoring surface must expose contributions, which rules out implementing ranking as one
   fused arithmetic expression. The legacy `1000/1000/1/0.01` formula is reproduced as a
-  weighted sum **over named, individually reported terms** — identical arithmetic, decomposed
+  weighted sum **over named, individually reported terms**, identical arithmetic, decomposed
   reporting.
 - The legacy weighting is additionally flagged in the UI as producing **colliding tiers**
   (`pos18=2, pos7=0` ties `pos18=1, pos7=1` at 2000), which is a real artefact of the chosen

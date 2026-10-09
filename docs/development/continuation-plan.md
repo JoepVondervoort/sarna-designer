@@ -1,4 +1,4 @@
-# Continuation plan — 7 October 2026
+# Continuation plan: 7 October 2026
 
 ## Objective and authority
 
@@ -60,7 +60,7 @@ The supplied discussion mentions “seven defects” without enumerating them. D
 identity or equate them with the 18 legacy defects. Establish an explicit current defect list
 from code, tests and rendered output during the first milestone.
 
-## Status — 7 October 2026, 13:33
+## Status: 7 October 2026, 13:33
 
 **Read this section's timestamp before trusting its numbers.** The local-app slice was being
 written by a second agent *while this review ran*: `src/sarna/app/static/` did not exist at
@@ -121,18 +121,18 @@ runs interrupted by a restart. `DesignRequest` validates input and resolves the 
 through the same Python path as the library, so an invalid custom configuration is rejected before
 a job is queued. The server binds loopback only and checks `Host` and `Origin`.
 
-*Superseded — the paragraph that stood here said the five modules had no tests, that nobody had
+*Superseded (the paragraph that stood here said the five modules had no tests, that nobody had
 opened the interface, and that no Chromium existed to do it with. All three are now false. See
 the measured re-check below.*
 
-### Measured re-check — 7 October 2026, 15:40
+### Measured re-check) 7 October 2026, 15:40
 
 The claims above were re-measured rather than re-read, and the environment itself had changed.
 
 - **`src/sarna/app/` is tested.** `tests/unit/test_app.py`, `test_app_batches.py` and
   `test_app_references.py` cover it at **82%** (589 statements, 94 uncovered). What remains
-  uncovered is the socket layer and the launcher: `web.py` at 75% — its `make_server` request
-  handlers, lines 263–302 — and `__main__.py` at **0%**, 27 statements. Both are exercised by the
+  uncovered is the socket layer and the launcher: `web.py` at 75% (its `make_server` request
+  handlers, lines 263–302) and `__main__.py` at **0%**, 27 statements. Both are exercised by the
   browser and launcher checks instead, which `pytest --cov` cannot see. Neither is a scientific
   path; `models.py` (90%), `references.py` (100%), `service.py` (89%) and `store.py` (99%) are the
   ones that decide anything.
@@ -145,10 +145,10 @@ The claims above were re-measured rather than re-read, and the environment itsel
   the mobile layout. Live `--gene KCNQ2 --online` against an **empty cache**: the offline lookup is
   refused with 409 *without fetching*, the visible retry then retrieves gene, transcripts and
   promoter, a lowercase symbol resolves, an uncached-window retry completes without discarding
-  earlier results, and the run yields **9 passing** — the same number
+  earlier results, and the run yields **9 passing** (the same number
   [local-workbench.md](local-workbench.md) records for KCNQ2. No uncaught browser exceptions in
   either run. **This is the gene-to-candidates path for an arbitrary gene, working end to end.**
-- **`ruff check .` had one real failure** — `ANN202` on an untyped `factory` in
+- **`ruff check .` had one real failure**) `ANN202` on an untyped `factory` in
   `test_app_batches.py`. Fixed; the gate is clean again. The status section above recorded ruff as
   clean at 13:32, so this arrived with the app commit.
 
@@ -159,15 +159,15 @@ Totals after this slice: **1,383 passed**, 8 deselected; strict mypy clean over 
 
 `_compare` reads the selected asymmetry rule's `end-length-nt` rather than hard-coding 4. The
 status above said **no test names this pipeline path**. That was not true, and the error was found
-the only way it could be — by planting the defect and running the suite:
+the only way it could be (by planting the defect and running the suite:
 
 | Defect planted in `_compare` | Caught without the new tests? |
 |---|---|
-| `end_length=4` hard-coded again | **Yes** — `test_app.py::test_custom_end_length_controls_displayed_guide_and_all_model_comparisons`, on its hand-calculated +2.49 kcal/mol |
-| Tiebreak consulted *before* the gate | **Yes** — same test, incidentally, via the same value |
+| `end_length=4` hard-coded again | **Yes**) `test_app.py::test_custom_end_length_controls_displayed_guide_and_all_model_comparisons`, on its hand-calculated +2.49 kcal/mol |
+| Tiebreak consulted *before* the gate | **Yes** (same test, incidentally, via the same value |
 | No-rule fallback changed from 4 to 6 | **No. All 1,378 tests passed.** |
 
-So the wiring was pinned and the plan's D3 was stale — but the **fallback default was entirely
+So the wiring was pinned and the plan's D3 was stale) but the **fallback default was entirely
 unpinned**, and the documented default could have been changed from 4 to 6 with a green suite.
 [ADR 0015](../adr/0015-local-workbench-and-frozen-ui.md) states that default as part of the
 accepted contract, so nothing pinned a decision the ADR records.
@@ -177,8 +177,8 @@ now covers all four branches of `_compare`'s selection, at the pipeline level wh
 test works through the app. Its fixture is the part worth keeping: `GGGTAATTTTGACAGGTCA`, found by
 enumerating random 19-mers until one had **all three tables agreeing on antisense at the default
 four-base end and all three agreeing on sense at six**. Both verdicts are unanimous, so the test
-demonstrates the *consequence* the wiring exists to prevent — the opposite strand reported with
-full confidence, which is the wrong duplex to order — rather than only pinning an energy value.
+demonstrates the *consequence* the wiring exists to prevent (the opposite strand reported with
+full confidence, which is the wrong duplex to order) rather than only pinning an energy value.
 Each of the five tests was confirmed against a planted defect.
 
 ### Defect list with dispositions
@@ -191,25 +191,25 @@ original wording so what was claimed stays visible beside what was found.
 
 | # | Defect | Evidence | Disposition |
 |---|---|---|---|
-| D1 | `src/sarna/app/` has no tests — 399 uncovered statements across five modules, plus untested `app.js` | `pytest --cov`: every app module 0% | **Closed for the modules that decide anything.** Now 82%: `references.py` 100%, `store.py` 99%, `models.py` 90%, `service.py` 89%, `web.py` 75%, `__main__.py` 0%. The remainder is the socket layer and the launcher, covered by the browser and launcher checks instead. `app.js` still has no unit tests; it is exercised through the browser check |
+| D1 | `src/sarna/app/` has no tests, 399 uncovered statements across five modules, plus untested `app.js` | `pytest --cov`: every app module 0% | **Closed for the modules that decide anything.** Now 82%: `references.py` 100%, `store.py` 99%, `models.py` 90%, `service.py` 89%, `web.py` 75%, `__main__.py` 0%. The remainder is the socket layer and the launcher, covered by the browser and launcher checks instead. `app.js` still has no unit tests; it is exercised through the browser check |
 | D2 | The interface has never been opened in a browser | No Chromium for Playwright here; no manual check recorded | **Closed.** The premise was wrong: Chromium 1229 is installed. `verify_workbench_browser.py` passes for cached SCN1A (14 passing) and for live uncached KCNQ2 (9 passing), with no uncaught exceptions |
-| D3 | `_compare` reading `end-length-nt` from the configuration has no test | `grep end_length tests/` finds thermodynamic coverage only | **Stale as written** — the evidence was a grep that missed `test_app.py`, which does pin the wiring. The real gap was the **no-rule fallback default**, which a green 1,378-test suite tolerated being changed from 4 to 6. Now closed, with all four selection branches covered |
+| D3 | `_compare` reading `end-length-nt` from the configuration has no test | `grep end_length tests/` finds thermodynamic coverage only | **Stale as written**, the evidence was a grep that missed `test_app.py`, which does pin the wiring. The real gap was the **no-rule fallback default**, which a green 1,378-test suite tolerated being changed from 4 to 6. Now closed, with all four selection branches covered |
 | D4 | The generated viewer and the app's interface are now two separate renderers of the same run | `src/sarna/view/template.html` (1,074 lines) and `src/sarna/app/static/app.js` (38 KB); `export.html` inlines the latter | **Already decided, not open.** [ADR 0015](../adr/0015-local-workbench-and-frozen-ui.md) keeps `sarna.view` for existing scripts and historical reports, explicitly not as a second settings editor, and requires a separate compatibility review before migrating its output. The open question below predates that ADR |
-| D5 | The frozen `export.html` is 18.9 MB for SCN1A against 2.1 MB for the same gene from `template.html`; it embeds every rule verdict for all 2,482 candidates with no abbreviation | Measured 7 October | **Accepted cost, not a defect.** Re-measured at **19.25 MB**, of which 19.15 MB is the embedded payload and 18.92 MB is the 2,482 candidates (~8.0 KB each: `rules` 4.2 KB over 18 records, `guide_prediction` 2.2 KB). ADR 0015 accepts this in as many words — "complete rejected-candidate verdicts make HTML large, but preserve every explanation offline". The `_compact` abbreviation in `promoter_view.py` remains available if the cost is later judged too high; applying it would be a **change to the ADR**, so it needs the user, not a fix |
+| D5 | The frozen `export.html` is 18.9 MB for SCN1A against 2.1 MB for the same gene from `template.html`; it embeds every rule verdict for all 2,482 candidates with no abbreviation | Measured 7 October | **Accepted cost, not a defect.** Re-measured at **19.25 MB**, of which 19.15 MB is the embedded payload and 18.92 MB is the 2,482 candidates (~8.0 KB each: `rules` 4.2 KB over 18 records, `guide_prediction` 2.2 KB). ADR 0015 accepts this in as many words, "complete rejected-candidate verdicts make HTML large, but preserve every explanation offline". The `_compact` abbreviation in `promoter_view.py` remains available if the cost is later judged too high; applying it would be a **change to the ADR**, so it needs the user, not a fix |
 | D6 | `export.html` still references `/favicon.svg` and links to `/`, both of which break once the file is archived away from a running app | Measured 7 October: those are the only two external references left | **Closed.** `web.py:53-55` base64-inlines the favicon and rewrites the brand link to `#` |
 | D7 | `app.css` sets `font-family:Inter` with no `@font-face` and no stylesheet link, so Inter never loads and the page silently falls back to the system UI font | `grep -c "@font-face\|fonts.googleapis" app.css` → 0 | **Closed** by taking the second option: a deliberate `ui-sans-serif, system-ui, …` stack. Inter is gone, so nothing promises a font it cannot load, and the frozen export stays dependency-free |
 | D8 | `tss-window` offers an option labelled "−2000 to +500 bp" whose effective `window-end-bp` is 0 | Recorded earlier in this plan; still open | **Closed.** The option is now labelled "-2000 to -1 bp (upstream part of thesis chapter 4 window)" and its description states that it implements only the upstream portion and does not reproduce the full thesis window |
 | D9 | `GLOSSARY.md` defined the duplex overhang as `UU`, contradicting the settled dTdT chemistry | Glossary versus constraint 4 and `docs/scientific/` | Fixed 7 October alongside this status update |
 
-Remaining open: `app.js` has no unit tests (D1's tail). The user's interface item 4 — rebuilding
-the promoter visualisation with hover explanations — turned out to be **already implemented**:
+Remaining open: `app.js` has no unit tests (D1's tail). The user's interface item 4 (rebuilding
+the promoter visualisation with hover explanations) turned out to be **already implemented**:
 `app.js` draws seven labelled tracks (reference/TSS, design windows, CpG islands, regulatory
 build, motif matches, passing and excluded targets), each label carrying a tooltip that says what
 the element is *and* what it does not establish, with candidates clickable and zoom/pan working.
 A screenshot was inspected. If it still is not what was wanted, that needs saying concretely;
 nothing further is obviously missing from the description in the feedback.
 
-### Order-ready duplex export — 7 October 2026, 16:10
+### Order-ready duplex export: 7 October 2026, 16:10
 
 The gap `CLAUDE.md` called "largest before bench use" is closed, except for the screening half.
 
@@ -239,14 +239,14 @@ attempts on `lookup/id`, which is gene lookup, upstream of anything this slice t
 clean-tree run passing in between was coincidence, not evidence. The check passes on both trees
 when Ensembl responds.
 
-### Open question this status raises — answered by ADR 0015
+### Open question this status raises: answered by ADR 0015
 
 *The question below was written before [ADR 0015](../adr/0015-local-workbench-and-frozen-ui.md)
 was read. That ADR answers it: `sarna.view` stays for existing scripts and historical reports and
 is explicitly not a second settings editor, and migrating its output requires a separate
 compatibility review. The duplication is accepted and bounded rather than open. What the ADR does
-not do is remove the underlying risk the question names — two renderers can still disagree about
-one run — so if that is to be guarded, it wants a test comparing the two payloads for the same
+not do is remove the underlying risk the question names (two renderers can still disagree about
+one run) so if that is to be guarded, it wants a test comparing the two payloads for the same
 run, not a new decision.*
 
 There are now two independent renderers for one run: the self-contained
@@ -414,7 +414,7 @@ whose effective `window-end-bp` is 0. Its note admits the restriction, but the o
 actual value still differ. Display the implemented range accurately and explain the source
 range and restriction; allowing downstream targeting is a separate support decision.
 
-## Milestone 1 — reconcile the current implementation
+## Milestone 1: reconcile the current implementation
 
 Review and preserve the existing template changes. Generate representative pages for both
 strands, inferred and absent TSS references, and different presets/windows. Exercise candidate
@@ -428,7 +428,7 @@ superseded statements. Keep `legacy/` immutable.
 **Exit:** page claims agree with visible behavior; the defect list has named dispositions;
 documentation no longer contradicts settled chemistry, anchor support or assembly handling.
 
-## Milestone 2 — implement the accepted rule policy
+## Milestone 2: implement the accepted rule policy
 
 Support resolved rule roles without mutating global catalogue entries. Preserve Wang's default
 rules and parameters. Label a changed run as custom and show its frozen baseline. A changed role
@@ -450,7 +450,7 @@ values and change scientific rule roles, preserve the chosen source and preset b
 export every departure. Python validates this contract before any UI exposes it. A role change
 must reach evaluation, gating, scoring, candidate explanations and exports consistently.
 
-## Milestone 3 — generalise cell-context evidence
+## Milestone 3: generalise cell-context evidence
 
 Extend the existing cell-line registry with explicit tracks: mark, local path or URL, assembly,
 assay/sample identity, source accession and processing details. Separate track identity from a
@@ -466,7 +466,7 @@ evidence remains visible rather than disappearing into a summary label.
 **Exit:** unknown, measured-negative and measured-positive evidence are distinguishable; warnings
 appear before candidates, remain non-blocking and cannot affect rank.
 
-## Milestone 4 — add provenance-aware sources
+## Milestone 4: add provenance-aware sources
 
 Build a source registry with release/version, retrieval date, assembly, identifiers, licence,
 cache location and content checksum. Add EPD first, then DepMap, FANTOM5 and ENCODE. Verify each
@@ -498,7 +498,7 @@ being newer; rank performance and empirical exceptions remain claims requiring m
 **Exit:** every observation can be traced to an exact source record, and cached/offline runs do
 not silently refresh their evidence.
 
-## Milestone 5 — freeze runs before building the workbench
+## Milestone 5: freeze runs before building the workbench
 
 Define a versioned run record containing input sequence, assembly and coordinates, anchor and
 uncertainty, cell context, resolved rules and kinds, software version, evidence snapshots and
@@ -517,7 +517,7 @@ snapshots. Import/export preserves choice origins and supported limitations; reo
 record requires no access to the current preset catalogue for interpretation. Recomputing it
 also requires the recorded engine version or an explicit report of version differences.
 
-## Milestone 6 — deliver the local workbench
+## Milestone 6: deliver the local workbench
 
 Deliver a browser workbench backed by a thin local Python service. Bind to the loopback interface;
 launch it through an application launcher. Keep science in Python and use HTML/CSS/JavaScript for
@@ -548,7 +548,7 @@ its code.
 - Each candidate shows its predicted guide strand, named with the model that predicted it, and
   says so when the two nearest-neighbour tables disagree. The genomic strand of the locus is
   displayed separately and never conflated with it.
-- The rating states what it counts — preferences met out of preferences *evaluated* — names the
+- The rating states what it counts (preferences met out of preferences *evaluated*), names the
   gates that could not be checked, and never reads as a probability of activation.
 - The promoter visualisation explains itself on hover: what a band, a track, a mark and a
   candidate are, in a sentence a researcher who has not read this repository can act on.
@@ -561,7 +561,7 @@ Also verify a sourced alternative, a custom value, an invalid combination, a res
 configuration and missing-context behavior. The researcher can distinguish the setting's
 motivation, its measured effect on this run and the absence of validated efficacy evidence.
 
-## Milestone 7 — produce auditable bench exports
+## Milestone 7: produce auditable bench exports
 
 Build promoter-level off-target reporting first, with explicit reference/search scope and
 matching assumptions. Do not call it comprehensive genome-wide or transcriptome-wide safety.
@@ -590,7 +590,7 @@ finish that application rather than to start milestone 3:
 1. Test the router and the store offline through `AppRouter.dispatch`, which takes a method and a
    target and needs no socket. Cover an invalid custom configuration, a gene that does not exist,
    a pasted sequence with no TSS, a run that fails mid-way, a reopened snapshot and an export.
-2. Test the `app.js` behaviour that carries a scientific claim — the rating's denominator, the
+2. Test the `app.js` behaviour that carries a scientific claim, the rating's denominator, the
    predicted guide and its model, rejected candidates staying visible with their reasons, and
    missing evidence reading as unknown rather than negative.
 3. Add the pipeline test for the configured asymmetry end length (D3).
@@ -654,7 +654,7 @@ check starts earlier so distribution constraints can shape dependency choices in
 - [2026 curated saRNA database paper](https://doi.org/10.3390/molecules31183249)
 - [Authors' database and source records](https://github.com/NIC-SBI/sarna-database)
 
-## Workbench verification update — 7 October 2026, after implementation
+## Workbench verification update: 7 October 2026, after implementation
 
 This supersedes the 13:33 review's untested-app observations while preserving them as history.
 The local workbench is implemented and exercised. Launch and installation instructions are in
@@ -687,7 +687,7 @@ were not verified here; no expression adapter, generalized cell-specific histone
 off-target report, dTdT order export or methods document is claimed. Source version pinning,
 licence/metadata reconciliation and these remaining milestones still matter.
 
-## New-gene lookup correction — 7 October 2026
+## New-gene lookup correction: 7 October 2026
 
 The user's failing `chd2` and `kcnq2` requests contained `offline=true`: Ensembl was never
 contacted. Lowercase input also bypassed existing uppercase cache entries, because normalisation
@@ -715,7 +715,7 @@ This supersedes the earlier statement that new live-source access had not been v
 See [the troubleshooting instructions](local-workbench.md#if-another-gene-fails-to-load).
 New genes/windows still require internet unless the necessary reference responses are cached.
 
-## Multi-promoter workbench extension — 7 October 2026
+## Multi-promoter workbench extension: 7 October 2026
 
 The user's follow-up makes deliberate design for genes with several promoters part of the
 current implementation scope. The prior single-reference workbench remains the scientific

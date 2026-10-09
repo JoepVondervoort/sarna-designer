@@ -1,7 +1,7 @@
 """The design run: promoter plus configuration in, evaluated and ranked candidates out.
 
 This is the engine's public entry point, and it is deliberately a plain function over plain
-objects — no HTTP, no UI, no global state (ADR 0005), so it can be driven from a notebook, a CLI
+objects, no HTTP, no UI, no global state (ADR 0005), so it can be driven from a notebook, a CLI
 or a test as easily as from the API.
 
 The run has four stages and keeps all four populations:
@@ -149,7 +149,7 @@ def design_sarnas(
             not-applicable rather than failing (ADR 0007).
         config: The resolved rules to apply, normally from a preset.
         comparison_tables: Nearest-neighbour tables whose guide predictions are reported beside
-            each candidate. Reported only — the gate uses the configuration's table.
+            each candidate. Reported only, the gate uses the configuration's table.
 
     Returns:
         The run's candidates, rankings and the configuration that produced them.

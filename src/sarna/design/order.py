@@ -14,7 +14,7 @@ therefore stays an RNA :class:`~sarna.sequence.nucleic.NucleicSequence` and the 
 separate, explicitly deoxy value; :attr:`OrderStrand.annotated` joins them only for display.
 
 The overhang is a synthesis choice. It does not change the core, and it is never scanned or
-scored — no rule sees it.
+scored, no rule sees it.
 
 **This is not a screened order.** Accepted constraint 15 requires the order export to carry a
 sanity report including off-target findings, and no off-target analysis exists in this project
@@ -277,7 +277,7 @@ def _agreement_check(tables_agree: bool, summary: str) -> OrderCheck:
         outcome=OrderOutcome.CONCERN,
         detail=(
             f"The parameter sets disagree about which strand is loaded, which means the "
-            f"asymmetry is small enough for the choice of table to decide the answer — itself a "
+            f"asymmetry is small enough for the choice of table to decide the answer, itself a "
             f"reason to trust the prediction less. This divides the tables for 13.72% of "
             f"possible inputs (docs/scientific/guide-prediction-divergence.md). {summary}"
         ),
@@ -358,7 +358,7 @@ def _screening_check(findings: Sequence[ScreeningFinding] = ()) -> OrderCheck:
             id="off-target-screening",
             outcome=OrderOutcome.CONCERN,
             detail=(
-                f"Off-target screening found matches worth reading before ordering — "
+                f"Off-target screening found matches worth reading before ordering, "
                 f"{described}. Sequence similarity is not measured binding, and nothing was "
                 f"withheld: the duplex is above and the alignments are in the screening record."
             ),
@@ -367,7 +367,7 @@ def _screening_check(findings: Sequence[ScreeningFinding] = ()) -> OrderCheck:
         id="off-target-screening",
         outcome=OrderOutcome.OK,
         detail=(
-            f"Off-target screening found nothing of note — {described}. One search, of one "
+            f"Off-target screening found nothing of note, {described}. One search, of one "
             f"database, on one day, with parameters that can miss things: this does not "
             f"establish specificity."
         ),

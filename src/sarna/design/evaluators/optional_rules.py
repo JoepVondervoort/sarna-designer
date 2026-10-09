@@ -2,7 +2,7 @@
 
 All of these read the target site as DNA, so ``T`` is the base tested where a paper writes ``U``.
 The papers state their criteria on the sense strand, which is the target, so positions need no
-translation — but the *reasoning* often concerns the guide, and the two run in opposite
+translation, but the *reasoning* often concerns the guide, and the two run in opposite
 directions. Target position 19 is guide position 1. Comments here name whichever strand the
 mechanism is about, because that is where mistakes of this kind hide.
 """

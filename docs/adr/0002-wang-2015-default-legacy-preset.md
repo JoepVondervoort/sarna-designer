@@ -1,4 +1,4 @@
-# ADR 0002 — Ship Wang 2015 conformance as the default; preserve the legacy Scanner as a pinned preset
+# ADR 0002: Ship Wang 2015 conformance as the default; preserve the legacy Scanner as a pinned preset
 
 - **Status**: Accepted
 - **Date**: 2026-10-06
@@ -56,5 +56,5 @@ costs or gains.
   parameters, B2). The preset description says so explicitly rather than hiding it.
 - A third preset (`strict` / `exploratory`) is deferred: presets are cheap to add once the rule
   registry exists, and inventing them before the registry risks inventing biology.
-- Expected success rates from Wang 2015 — **15–20 % activate, ~70 % no effect, 5–10 % suppress**
-  — are surfaced in the UI so a high rank is not read as a likely hit.
+- Expected success rates from Wang 2015, **15–20 % activate, ~70 % no effect, 5–10 % suppress**
+ , are surfaced in the UI so a high rank is not read as a likely hit.

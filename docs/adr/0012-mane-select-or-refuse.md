@@ -10,7 +10,7 @@ symbol, so something has to bridge the gap, and the bridge is not neutral.
 
 Measured on the project's own primary target: `SCN1A` has 30 transcripts, 12 of them
 protein-coding, with **16 distinct transcription start sites** and five distinct ones among the
-coding transcripts. They span chr2:166,073,669 to chr2:166,149,213 — over 75 kb. Choosing between
+coding transcripts. They span chr2:166,073,669 to chr2:166,149,213, over 75 kb. Choosing between
 them moves the promoter window by up to that distance, which is to say the choice decides which
 sequence gets designed against, entirely.
 
@@ -77,7 +77,7 @@ unrepeatable.
   to handle arbitrary genes.
 - **MANE Select is not always the biologically relevant promoter.** It is the agreed
   representative, not the one active in the cell type under study. For SCN1A specifically, none of
-  the thesis's own 15 SCN1A designs targets the MANE Select promoter — they cluster around two
+  the thesis's own 15 SCN1A designs targets the MANE Select promoter, they cluster around two
   other TSSs (see `docs/scientific/scn1a-design-coordinates.md`). A tool that only ever offered
   MANE Select would not have been able to reproduce this project's own earlier work.
 - **MANE Select covers protein-coding genes only.** A lncRNA target needs a different policy,
@@ -93,8 +93,8 @@ transcript, so no engine change is needed for either.
 ## Alternatives rejected
 
 **Default to Ensembl canonical when MANE Select is absent.** Tempting, and it would make Workflow A
-always succeed. Rejected because it converts the exact question this ADR exists to surface — which
-promoter? — back into a silent default, and because "canonical" is an Ensembl-internal designation
+always succeed. Rejected because it converts the exact question this ADR exists to surface (which
+promoter?) back into a silent default, and because "canonical" is an Ensembl-internal designation
 a reviewer cannot check against a second source.
 
 **Design against every TSS and merge the results.** Scientifically the most complete answer, and it

@@ -1,4 +1,4 @@
-# ADR 0018 — Apache-2.0 for the code, and the bundled data's actual terms
+# ADR 0018: Apache-2.0 for the code, and the bundled data's actual terms
 
 Date: 2026-10-07. Status: accepted. Supersedes the placeholder `LICENSE` and the
 "licensing undecided" entries in `README.md` and `CLAUDE.md`.
@@ -18,7 +18,7 @@ wrong about it.
 
 MIT and Apache-2.0 were the candidates; both are OSI-approved and permissive, and the choice is
 not between open and closed. Apache-2.0 was chosen for its **express patent grant** (section 3).
-This tool designs molecules in a field with active therapeutic patents — MTL-CEBPA, built on a
+This tool designs molecules in a field with active therapeutic patents. MTL-CEBPA, built on a
 duplex this engine's default configuration excludes, is in human trials. An express grant, and
 the reciprocal termination clause for anyone who sues over it, protects both the author and
 downstream users at no practical cost. MIT would have been defensible; it simply offers nothing
@@ -55,8 +55,8 @@ defended thesis, so redistribution raises no embargo question. They ship with th
 
 This matters beyond permission: it is the only data in the package that can show a design rule to
 be **wrong** rather than merely unconventional, and removing it would leave the validation harness
-unable to run. Its range restriction — every sequence was built to pass Wang's gate, so it can
-reveal a gate that is too strict but never one too permissive — travels with it in
+unable to run. Its range restriction (every sequence was built to pass Wang's gate, so it can
+reveal a gate that is too strict but never one too permissive) travels with it in
 `CHAPTER4_CAVEATS`.
 
 ## Also removed: the unused `api` extra
@@ -75,7 +75,7 @@ is ever asserted, which is the likely case.
 
 This ADR records the terms of what is bundled **today**. Adapters planned for archived EPDnew,
 DepMap, FANTOM5 and ENCODE each carry their own terms, and none has been audited here. Any
-dataset that an optional adapter reads from local disk — the AF22 histone tracks today — is not
+dataset that an optional adapter reads from local disk (the AF22 histone tracks today) is not
 redistributed and keeps whatever terms it was obtained under; that distinction must survive as
 more local sources are added.
 

@@ -18,7 +18,7 @@ The detector is right and the fixture is wrong.
 ## Why
 
 A CpG island is defined by CpG dinucleotides being *more frequent than base composition predicts*
-— observed over expected at least 0.65 under Takai & Jones. Uniform random sequence has obs/exp
+observed over expected at least 0.65 under Takai & Jones. Uniform random sequence has obs/exp
 ≈ 1.0 **by construction**, because expected is derived from the same composition that generated
 it. Any correct island detector therefore calls random GC-balanced sequence an island.
 
@@ -32,7 +32,7 @@ an island to stand out from, so everything is an island.
 
 A synthetic promoter fixture must either:
 
-- be generated with CpG depletion — suppress most `CG` dinucleotides, targeting obs/exp around
+- be generated with CpG depletion, suppress most `CG` dinucleotides, targeting obs/exp around
   0.2; or
 - be real genomic sequence, which is the better option for any fixture used to make a scientific
   claim.
@@ -42,7 +42,7 @@ A test fixture built that way and used with `not-in-cpg-island` selected will re
 candidate, and the failure will look like a bug in the design rules rather than in the fixture.
 
 The same caution applies to interpreting any result: if a user pastes a sequence that is not CpG-
-depleted — a synthetic construct, a shuffled control, a designed plasmid promoter — the island
+depleted (a synthetic construct, a shuffled control, a designed plasmid promoter) the island
 rule will fire across it. That is the rule behaving correctly on input it was not designed for,
 and the UI should say so rather than silently returning no candidates.
 

@@ -124,7 +124,7 @@ class RuleResult(BaseModel):
     def not_applicable(cls, rule: Rule | ResolvedRule, reason: str) -> "RuleResult":
         """Report that ``rule`` could not be evaluated, and why.
 
-        Used when the inputs the rule needs are absent rather than unsatisfactory — most often a
+        Used when the inputs the rule needs are absent rather than unsatisfactory, most often a
         TSS-relative rule on a pasted promoter with no coordinates (ADR 0007).
 
         Args:
@@ -183,7 +183,7 @@ class RuleResult(BaseModel):
         """Return the points this result contributes to the rank: one, or none.
 
         One only for a preference that was met. Mandatory rules and tie-breaks score nothing,
-        and an unevaluated preference scores nothing — it should also be left out of the
+        and an unevaluated preference scores nothing, it should also be left out of the
         denominator when a rank is presented as "meets 5 of 7", since a preference nobody could
         check is not one the candidate failed to meet.
         """

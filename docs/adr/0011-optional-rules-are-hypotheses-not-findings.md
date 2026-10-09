@@ -16,7 +16,7 @@ are exploratory.
 They are weaker than exploratory. Reanalysis
 (`docs/scientific/positional-motif-analysis.md`) reproduces every reported value exactly and
 then measures what the chapter does not: a max-statistic permutation test over the grid that was
-searched. At every motif width the observed maximum sits **below the median of the null** — a
+searched. At every motif width the observed maximum sits **below the median of the null**, a
 random relabelling of the same 125 sequences produces more positional structure than the real
 activity labels do. Family-wise p = 0.94, 0.67 and 0.73 for 1-, 2- and 3-mers.
 
@@ -29,7 +29,7 @@ it from the paper this project treats as canonical.
 
 The forces in tension:
 
-- A user asked for these options, and refusing to offer them is not neutrality — it just moves
+- A user asked for these options, and refusing to offer them is not neutrality, it just moves
   the choice outside the tool, where it is made without provenance.
 - Adding a rule to the default ranking changes every design the project recommends. The evidence
   above does not come close to justifying that.
@@ -55,7 +55,7 @@ one. This bounds the damage a bad hypothesis can do: a user who selects every op
 sees the same candidate set as the default, differently sorted. A test asserts no optional rule
 is a gate.
 
-**The `consequence` field carries the argument against.** Not a disclaimer — the specific reason.
+**The `consequence` field carries the argument against.** Not a disclaimer, the specific reason.
 For `pos10-u`: activation does not proceed by cleavage, so the geometric reason the criterion
 exists in knockdown does not apply. For `pos10-g`: it fails correction, and it contradicts
 `pos10-u`. For `central-stability`: it partly double-counts the mandatory asymmetry rule.
@@ -68,8 +68,8 @@ diverge after that, and only knockdown cleaves anything.
 
 | Rule | Class | Why |
 |---|---|---|
-| `au-rich-guide-5-prime` | ESTABLISHED | Strand selection — shared mechanism, three agreeing sources |
-| `no-gc-stretch` | ESTABLISHED | Duplex stability and secondary structure — shared |
+| `au-rich-guide-5-prime` | ESTABLISHED | Strand selection (shared mechanism, three agreeing sources |
+| `no-gc-stretch` | ESTABLISHED | Duplex stability and secondary structure) shared |
 | `pos3-a` | EXPLORATORY | No mechanism offered by its source |
 | `pos10-u` | EXPLORATORY | Mechanism is cleavage geometry, which activation does not use |
 | `no-g-at-13` | EXPLORATORY | No mechanism offered by its source |
@@ -84,7 +84,7 @@ something. Chapter 4 found it without looking for it.
 
 ### Two new presets
 
-`strict` promotes Wang's own softer statements to requirements — the −500 to −200 bp region the
+`strict` promotes Wang's own softer statements to requirements, the −500 to −200 bp region the
 paper reports activity in becomes the admission window, no CpG is tolerated, asymmetry must exceed
 0.5 kcal/mol. It adds no preferences, so its scores stay comparable with the default's. Both
 divergences are declared, including that the asymmetry threshold is this project's invention.
@@ -135,5 +135,5 @@ survives a reader asking where a number came from.
 
 **Report the thesis positions as a separate "hypothesis score".** Rejected as premature. A second
 number next to the first invites a comparison the data cannot support. If the positional
-hypotheses are ever tested prospectively — which needs one pre-registered position, not 76 — a
+hypotheses are ever tested prospectively (which needs one pre-registered position, not 76), a
 score becomes worth building.

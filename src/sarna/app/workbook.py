@@ -10,7 +10,7 @@ An `.xlsx` has no such ambiguity. It also keeps a sequence a string: left to gue
 some values as numbers and will happily turn a target id into a date.
 
 **Deliberately not a spreadsheet library.** No formulas, no styling beyond a bold header, column
-widths and a frozen top row, no shared-string table — every cell is an inline string or a
+widths and a frozen top row, no shared-string table, every cell is an inline string or a
 number. That is enough for an export and it keeps `pydantic` the only runtime dependency, which
 is what makes :doc:`the install </INSTALL>` two commands.
 

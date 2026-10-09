@@ -3,7 +3,7 @@
 The number shown beside a rating is **computed from the bundled chapter 4 dataset**, not a
 constant transcribed from a document. A transcribed figure drifts the moment a rule changes and
 nobody re-runs the benchmark; a computed one cannot. These tests pin the values anyway, so that
-a change to a published threshold breaks a test that names the measurement — which is the point
+a change to a published threshold breaks a test that names the measurement, which is the point
 of measuring it.
 
 Values come from `docs/scientific/empirical-validation.md`, measured over the same 125 assayed

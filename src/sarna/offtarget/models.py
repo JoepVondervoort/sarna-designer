@@ -3,7 +3,7 @@
 A screening result is only meaningful with its own provenance. NCBI's databases change week to
 week, so "no off-target hits" is a statement about one database on one day with one set of
 parameters, and re-running it in six months can legitimately give a different answer. Every type
-here therefore carries when, where and how it was searched — which is also why a screening is a
+here therefore carries when, where and how it was searched, which is also why a screening is a
 separate dated record rather than something written back into the frozen design record
 (ADR 0019).
 """
@@ -79,7 +79,7 @@ class PromoterProximity:
     **No threshold decides whether this "is" a promoter hit.** Reporting the distance and the
     gene invents nothing; choosing a cutoff would invent a scientific claim this project has not
     defended. The one flag that is set, :attr:`inside_run_window`, says only that the hit falls
-    inside *the same window this run designed against* — a statement about the run's own
+    inside *the same window this run designed against*, a statement about the run's own
     configuration rather than a new definition of a promoter (ADR 0019).
     """
 
@@ -122,7 +122,7 @@ class SearchParameters:
 
     Not a refinement: ``refseq_rna`` and ``refseq_genomic`` span every species RefSeq holds, and
     an unrestricted search of a 19-mer returns hundreds of alignments in plants, fish and frogs.
-    They are real alignments and entirely irrelevant — they swamp the measures and would make a
+    They are real alignments and entirely irrelevant, they swamp the measures and would make a
     specific duplex look promiscuous. Measured on a live search before this was added: 500
     alignments returned, 230 of them "near-perfect", none of them human.
     """

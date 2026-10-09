@@ -7,7 +7,7 @@ here does index arithmetic.
 **A resolved ambiguity, recorded rather than forgotten.** Table 1's position rules are written
 for a 19 nt target: position 18 is the second-to-last base and position 19 the last. For a
 longer target "position 18" could mean the eighteenth base or the second-to-last, and the two
-readings disagree about mechanism — at 21 nt, position 19 is no longer the 3' terminal base, so
+readings disagree about mechanism, at 21 nt, position 19 is no longer the 3' terminal base, so
 the reasoning behind ``pos19-a`` (an A there puts a U at the guide's 5' end) stops holding.
 
 The project has now settled the question from the other end: its duplexes are 19 nt cores with

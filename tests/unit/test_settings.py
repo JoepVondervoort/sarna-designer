@@ -1,7 +1,7 @@
 """Tests for the environment contract.
 
-The defect these exist to prevent: ``.env.example`` documented three variables — a contact email
-for Ensembl, a cache root and an offline switch — that no code read. Two were merely inert. The
+The defect these exist to prevent: ``.env.example`` documented three variables (a contact email
+for Ensembl, a cache root and an offline switch) that no code read. Two were merely inert. The
 third was worse than inert: the file told the user Ensembl needs a contact address so they can be
 reached about abusive usage, and the ``User-Agent`` the client actually sent carried a dangling
 ``https://github.com/`` and no address at all. Documenting a courtesy and then not extending it is

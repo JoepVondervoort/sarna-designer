@@ -259,3 +259,46 @@ def test_batch_requires_explicit_references_for_one_normalised_gene():
 def test_invalid_batches_are_rejected_before_lookup(requests: list[dict[str, Any]]):
     with pytest.raises(ValidationError):
         BatchRequest.model_validate({"requests": requests})
+
+
+def test_the_default_reference_is_offered_first_whatever_order_ensembl_returns(tmp_path: Path):
+    """The reference list leads with MANE Select, then canonical, then coding, then the rest.
+
+    Built from a payload whose recorded order is the reverse of the wanted one, so the
+    assertion is about the sort and not about the order the fixture happens to carry.
+    """
+    transcripts = deepcopy(TRANSCRIPTS_PAYLOAD)
+    recorded = transcripts["Transcript"]
+    mane = recorded[0]
+    # A non-coding transcript and a second coding one, each on their own start coordinate, so
+    # every tier of the ordering is represented and the groups cannot collapse into one.
+    extra = [
+        {**mane, "id": "ENST_LNC", "biotype": "lncRNA", "end": mane["end"] + 300,
+         "is_canonical": 0, "MANE": None},
+        {**mane, "id": "ENST_CODING", "end": mane["end"] + 600, "is_canonical": 0,
+         "MANE": None},
+    ]
+    for entry in extra:
+        entry.pop("MANE")
+    transcripts["Transcript"] = [*extra, *recorded[1:], mane]
+    client = client_for({GENE_ROUTE: GENE_PAYLOAD, TRANSCRIPTS_ROUTE: transcripts})
+    overview = DesignService(tmp_path, lambda _: client).lookup("SCN1A")
+
+    assert overview["transcripts"][0]["id"] == "ENST00000674923"
+    assert overview["transcripts"][0]["mane"] is True
+    assert overview["default_transcript"] == "ENST00000674923"
+    # The MANE group leads the grouped list the picker renders, not only the flat list.
+    assert overview["tss_groups"][0]["mane"] is True
+    assert "ENST00000674923" in overview["tss_groups"][0]["transcript_ids"]
+    # Non-coding transcripts sort behind every coding one, and ties break on the identifier
+    # so two lookups of the same gene offer the same order.
+    identifiers = [record["id"] for record in overview["transcripts"]]
+    biotypes = {record["id"]: record["biotype"] for record in overview["transcripts"]}
+    coding = [i for i, name in enumerate(identifiers) if biotypes[name] == "protein_coding"]
+    non_coding = [i for i, name in enumerate(identifiers) if biotypes[name] != "protein_coding"]
+    assert max(coding) < min(non_coding)
+    # Within the plain-coding tier nothing distinguishes the members but their identifier, so
+    # the order is alphabetical and therefore the same on every lookup.
+    plain = [name for name in identifiers
+             if biotypes[name] == "protein_coding" and name != "ENST00000674923"]
+    assert plain == sorted(plain)

@@ -2,10 +2,14 @@
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-# Single package, single virtualenv — not a monorepo. See ADR 0005.
+# Single package, single virtualenv, not a monorepo. See ADR 0005.
 [project]
 name = "sarna-designer"
-version = "0.1.0.dev0"
+version = "0.2.0"
+# A real release number, not a frozen placeholder. Every saved run records this as its
+# engine_version and `sarna-designer-check` prints it, so two runs produced by different code
+# must not be able to report the same version. tests/unit/test_release_metadata.py keeps the
+# wheel filename quoted in README.md and INSTALL.md in step with this line.
 description = "Design and rank promoter-targeting small activating RNA (saRNA) duplexes"
 requires-python = "==3.11.*"
 license = "Apache-2.0"

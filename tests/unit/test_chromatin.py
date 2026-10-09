@@ -2,7 +2,7 @@
 
 Almost everything here is about refusing to answer. The tracks are GRCh37 and the engine is
 GRCh38, and on SCN1A's TSS those differ by 856 kb, so a conversion this adapter cannot guarantee
-must produce a stated reason rather than a number — a signal value from the wrong locus is worse
+must produce a stated reason rather than a number, a signal value from the wrong locus is worse
 than no value, because it looks like data.
 
 Run against stubs, so the suite needs none of the 890 MB of real tracks. The tests that use the
@@ -559,7 +559,7 @@ class TestSignalTracks:
 
     def test_a_minus_strand_track_is_reversed_into_transcript_order(self) -> None:
         # The promoter is drawn 5'->3' in transcript orientation, so a profile read in reference
-        # order would be mirrored — the peak would appear at the wrong end of the drawing.
+        # order would be mirrored, the peak would appear at the wrong end of the drawing.
         minus = GenomicInterval(Assembly.GRCH38, "2", 166_127_520, 166_130_020, Strand.MINUS)
         track = self.reader().signal_track(minus, HistoneMark.H3K4ME3, bins=5)
         assert track == (4.0, 3.0, 2.0, 1.0, 0.0)

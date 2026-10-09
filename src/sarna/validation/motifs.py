@@ -22,7 +22,7 @@ percentage scale.
 The test is a max-statistic permutation test, which handles both at once: shuffle the labels,
 recompute every cell, keep the largest absolute difference, and repeat. The fraction of shuffles
 whose maximum reaches the observed maximum is a family-wise error rate over the whole grid, with
-no independence assumption — appropriate here, because neighbouring positions and overlapping
+no independence assumption, appropriate here, because neighbouring positions and overlapping
 k-mers are strongly dependent.
 """
 

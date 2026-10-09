@@ -1,4 +1,4 @@
-# ADR 0001 — `saRNA Promoter Scanner.py` is the scientific ground truth
+# ADR 0001: `saRNA Promoter Scanner.py` is the scientific ground truth
 
 - **Status**: Accepted
 - **Date**: 2026-10-06
@@ -7,7 +7,7 @@
 ## Context
 
 Three legacy files were supplied. Two (`saRNA Promoter Scanner.py`,
-`saRNA by Promoter Sequence.py`) are **byte-identical** — one implementation, not two. The
+`saRNA by Promoter Sequence.py`) are **byte-identical**, one implementation, not two. The
 third, `EpiMarker checker .py`, is a separate pipeline that locates *already-designed* 19-mers
 and analyses histone signal around them.
 

@@ -1,4 +1,4 @@
-# ADR 0009 — Guide-strand prediction reports every table's verdict, each explaining itself
+# ADR 0009: Guide-strand prediction reports every table's verdict, each explaining itself
 
 - **Status**: Accepted
 - **Date**: 2026-10-06
@@ -25,7 +25,7 @@ The algorithm is sound. Its **table is not**: defect B2 assigns three stacks to 
 parameter, so `AC` carries `CA`'s value, `AG` carries `GA`'s and `TC` carries `CT`'s, where the
 nearest-neighbour model requires `AC ≡ GT`, `AG ≡ CT` and `TC ≡ GA`. The individual errors are
 around 0.1 kJ/mol, but they enter every end-stability sum, so some candidates fall on the other
-side of the threshold — and the threshold is a mandatory gate. The table also applies DNA
+side of the threshold, and the threshold is a mandatory gate. The table also applies DNA
 parameters in kJ/mol to an RNA:RNA duplex and omits the initiation and terminal penalties.
 
 [ADR 0002](0002-wang-2015-default-legacy-preset.md) requires `legacy-scanner` to keep that table
@@ -48,7 +48,7 @@ Three requirements follow.
 
 **Every assessment states its reasoning in words, not just a number.** Each carries the per-stack
 breakdown it summed, the two end energies, the difference, and a plain-language explanation of
-why that difference implies that guide — naming the strand whose 5' end is weaker and the
+why that difference implies that guide, naming the strand whose 5' end is weaker and the
 mechanism it rests on. A researcher must be able to answer "why does it think that?" without
 reading the source.
 
@@ -71,7 +71,7 @@ alongside as context; they never silently change which candidates pass.
 **Report only the active preset's verdict.** Simpler, and arguably the purist position: a preset
 is a configuration and the user chose it. Rejected because the most useful thing the project can
 tell a researcher about a legacy design is precisely that the corrected parameters disagree about
-its guide strand — and that is invisible if only the active table is shown.
+its guide strand, and that is invisible if only the active table is shown.
 
 **Silently correct the legacy table.** Rejected by ADR 0002: it is a reproduction target, and a
 corrected `legacy-scanner` reproduces nothing.
@@ -94,7 +94,7 @@ mis-assigned. Averaging would manufacture a number with no source.
   how many candidates it actually moves. That number belongs in the scientific documentation once
   a promoter fixture exists.
 
-## Addendum — a second criterion, newly identified
+## Addendum: a second criterion, newly identified
 
 Working through `endbase` for this decision showed it is not an independent thermodynamic test at
 all. It compares one terminal base per end, scoring `A`/`U` as `AAE/2` and `G`/`C` as `GGE/2`, and
@@ -104,7 +104,7 @@ condition reduces exactly to:
 > position 1 is G or C **and** position 19 is A or U
 
 So the legacy script enforces **as a mandatory gate** what Wang 2015 Table 1 marks only as
-"preferably" — a G or C at position 1. Combined with the existing `pos19-a` gate, the second half
+"preferably", a G or C at position 1. Combined with the existing `pos19-a` gate, the second half
 is automatically satisfied, leaving `endbase` equivalent to a required G/C at position 1.
 
 This is recorded in the legacy inventory as finding B16. It is not a defect in the arithmetic; it

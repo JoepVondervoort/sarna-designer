@@ -1,7 +1,7 @@
 """Off-target screening: what else in the human genome or transcriptome a duplex could bind.
 
 The engine designs against one promoter. Nothing in the design rules asks whether the resulting
-duplex also matches somewhere else, and until this package existed the answer was simply absent —
+duplex also matches somewhere else, and until this package existed the answer was simply absent,
 every order export said ``off-target-screening: not-performed`` (ADR 0017).
 
 Screening is **opt-in and asynchronous**: a run completes first, the researcher reads the designs,

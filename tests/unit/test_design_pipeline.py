@@ -424,7 +424,7 @@ class TestTheStrandPredictionHonoursTheConfiguredEndLength:
 
     ``_compare`` once counted four terminal bases regardless of configuration. A run that
     deliberately evaluated a different end length would then be shown the *opposite* strand from
-    the one its own asymmetry rule admitted the candidate on — a wrong duplex to order, reported
+    the one its own asymmetry rule admitted the candidate on, a wrong duplex to order, reported
     with full confidence and agreed on by every table.
 
     ``ASYMMETRY_FLIP`` is the fixture that makes the difference observable: a 19-mer found by

@@ -1,4 +1,4 @@
-# ADR 0020 — Localhost, or a hosted service?
+# ADR 0020: Localhost, or a hosted service?
 
 Date: 2026-10-07. Status: accepted. Revisits the delivery decision in
 [ADR 0014](0014-local-delivery-and-wang-default.md) now that colleagues are about to use the tool.
@@ -18,7 +18,7 @@ advantages and this ADR does not pretend otherwise.
 **Stay local for now.** Three reasons, none of them inertia.
 
 **1. The gene symbol is the research question.** Running locally means the only parties who learn
-which gene is being worked on are Ensembl, and NCBI if the researcher opts into a screening — and
+which gene is being worked on are Ensembl, and NCBI if the researcher opts into a screening, and
 the interface says so beside that button. A hosted service adds its operator, anyone who can read
 its database, and its backups. For unpublished work on a disease gene, that is a disclosure
 decision, not an implementation detail, and it should not be made silently by a convenience.
@@ -27,7 +27,7 @@ decision, not an implementation detail, and it should not be made silently by a 
 to an upstream service, which is better for everyone. Here, [ADR 0019](0019-off-target-screening.md)
 records that NCBI rate-limits and can block an **IP address**, and that a block would hit the whole
 institution rather than one researcher. A hosted service funnels every screening through one
-address, concentrating exactly the risk the current design spreads. Ensembl is different — it is
+address, concentrating exactly the risk the current design spreads. Ensembl is different, it is
 happy to be cached, and the shared-cache option below addresses that without a server.
 
 **3. What runs today is not a server, and hosting it would be a rewrite.** `http.server` is
@@ -48,7 +48,7 @@ safe before today: entries were written with a plain `write_text`, so a reader c
 half-written file. Writes are now atomic, which is the precondition for sharing a directory.
 
 **Runs are not shareable.** A colleague cannot send a link to a result. They can send the offline
-HTML export, which is self-contained and carries the full record — that is the honest substitute,
+HTML export, which is self-contained and carries the full record, that is the honest substitute,
 and it has the advantage that the recipient gets a frozen artefact rather than a live page whose
 answer may change.
 
@@ -58,7 +58,7 @@ one.
 
 **Someone has to install Python.** `uv` fetches its own interpreter, so the install is two
 commands and does not touch the system Python. Fresh Windows and macOS runs remain unverified by a
-human, which is the real open risk in the local path and is not fixed by hosting — it is fixed by
+human, which is the real open risk in the local path and is not fixed by hosting. It is fixed by
 somebody running `sarna-designer-check` on those machines.
 
 ## What would change this decision
@@ -74,7 +74,7 @@ Any one of these, and the answer flips:
 If that happens, the path is not to expose the current server. It is an ASGI application behind
 institutional identity, with per-user run storage, and with screening still submitted under
 credentials that make the NCBI rate limit attributable to a person rather than to a building. The
-engine itself — `design_sarnas`, the rules, the exports — is already a library with no web
+engine itself (`design_sarnas`, the rules, the exports) is already a library with no web
 framework in it ([ADR 0005](0005-python-core-with-thin-web-ui.md)), so that rewrite touches `sarna.app` and
 nothing below it. That is the property worth protecting, and it is protected.
 

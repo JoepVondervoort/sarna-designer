@@ -3,7 +3,7 @@
 ADR 0003 makes this mandatory metadata rather than documentation. The legacy Scanner buried its
 science in bare module constants, so a reader could not tell that GC <= 0.65 was a local
 deviation or that the position-7 rule had no source at all. Here a rule cannot be constructed
-without stating where it came from, and ``unsourced`` is a permitted, *visible* answer — the
+without stating where it came from, and ``unsourced`` is a permitted, *visible* answer, the
 one thing that is not permitted is silence.
 """
 
@@ -123,13 +123,13 @@ class Provenance(BaseModel):
             return f"{self.source}, {self.locator}"
         if self.kind is ProvenanceKind.LEGACY_SCRIPT:
             return f"inherited from the legacy script ({self.locator})"
-        return f"unsourced — {self.note}"
+        return f"unsourced, {self.note}"
 
     def to_dict(self) -> dict[str, Any]:
         """Return the provenance as JSON-serialisable data.
 
         Structured rather than flattened to one string, because a consumer that receives only the
-        display line cannot tell a citation from an unsourced rule without parsing English — and
+        display line cannot tell a citation from an unsourced rule without parsing English, and
         marking the unsourced ones is the whole point of recording the kind. ``display`` is kept
         beside the parts so a caller wanting one line gets the same line the rest of the project
         renders, rather than reassembling its own.

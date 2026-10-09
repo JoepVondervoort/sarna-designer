@@ -3,7 +3,7 @@
 Python 3.11 picks the *locale* encoding when `open`, `read_text` or `write_text` is called
 without one. That is UTF-8 on Linux and macOS and **cp1252 on Windows**, so code that works
 here can raise `UnicodeEncodeError` on a colleague's laptop the first time Ensembl returns a
-gene description containing a Greek letter — which it does, for many genes.
+gene description containing a Greek letter, which it does, for many genes.
 
 The failure is invisible in development and arrives as a crash in someone else's hands, so this
 is checked by parsing the source rather than by hoping a reviewer spots it. Binary modes are

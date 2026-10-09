@@ -406,7 +406,7 @@ TSS_WINDOW = _gate(
             label="-2000 to -1 bp (upstream part of thesis chapter 4 window)",
             provenance=Provenance.citation(
                 "van de Vondervoort 2026",
-                "chapter 4, Material and methods — saRNA design, promoter defined as -2000 to "
+                "chapter 4, Material and methods, saRNA design, promoter defined as -2000 to "
                 "+500 bp of the MANE Select TSS",
             ),
             values={"window-start-bp": -2000, "window-end-bp": -1},
@@ -414,7 +414,7 @@ TSS_WINDOW = _gate(
                 "The thesis defined its promoter as -2000 to +500 bp. This option implements "
                 "only its upstream portion, -2000 to -1; it does not reproduce the full thesis "
                 "window. Activation was measured outside Wang's window: KLF4 worked at -45, "
-                "closer than Wang's -100 edge, and CEBPA — in human clinical trials — at -1088, "
+                "closer than Wang's -100 edge, and CEBPA (in human clinical trials) at -1088, "
                 "just beyond the -1000 edge. Choose this to avoid excluding candidates like "
                 "those; expect a longer candidate list, without evidence that the added "
                 "candidates are more effective. Downstream targeting is not expressed by this "

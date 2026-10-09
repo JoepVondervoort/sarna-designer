@@ -1,7 +1,7 @@
 """Tests for the Ensembl client, run entirely offline against recorded payloads.
 
-The client is the boundary where three silent assumptions become explicit decisions — which
-assembly, which transcript, which coordinate convention — so the tests concentrate there rather
+The client is the boundary where three silent assumptions become explicit decisions (which
+assembly, which transcript, which coordinate convention) so the tests concentrate there rather
 than on HTTP mechanics. The payloads are trimmed copies of real Ensembl responses for SCN1A, a
 **minus-strand** gene with five distinct protein-coding TSSs, which is the hardest realistic case
 and the one the project's primary target happens to be.
@@ -87,7 +87,7 @@ AUTO_SEQUENCE = "<auto>"
 """Sentinel for a sequence route that should size its reply to the region requested.
 
 A fixed-length stub reply makes ``Promoter.from_reference_sequence`` reject any window of another
-length — correctly, since an interval whose length disagrees with its sequence would shift every
+length, correctly, since an interval whose length disagrees with its sequence would shift every
 candidate's coordinates. Sizing the reply keeps the tests about the thing under test.
 """
 

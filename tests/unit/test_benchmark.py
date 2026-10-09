@@ -244,7 +244,7 @@ class TestWithRecoveredCoordinates:
     """Supplying coordinates changes what the benchmark measures, and that is the point.
 
     Without them the location rules report not-applicable for all 125 sequences, which is five of
-    the seven preferences and three of the gates. With them, the gate can be shown too strict —
+    the seven preferences and three of the gates. With them, the gate can be shown too strict,
     the one direction this range-restricted dataset is able to detect.
     """
 

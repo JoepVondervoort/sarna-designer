@@ -2,7 +2,7 @@
 
 A stacking table is reference data with a citation, not a pile of module constants. Modelling
 it this way lets the application offer more than one table, show the user where each came from,
-and — importantly — *detect* a table that is internally inconsistent instead of trusting it.
+and (importantly) *detect* a table that is internally inconsistent instead of trusting it.
 
 In the nearest-neighbour model a stack and its reverse complement are the same physical
 interaction, so ``AC`` must carry the same energy as ``GU``. A table where they differ has its

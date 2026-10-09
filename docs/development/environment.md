@@ -13,7 +13,7 @@ Verified on this machine, 2026-10-06.
 
 ## Filesystem placement
 
-The repository lives at `~/sarna-designer`, i.e. on the **Linux** filesystem — deliberately
+The repository lives at `~/sarna-designer`, i.e. on the **Linux** filesystem, deliberately
 **not** under `/mnt/c`. Cross-OS filesystem access in WSL2 is slow and `inotify` file-watching
 is unreliable there, which breaks test watchers and frontend dev servers. Keep it here.
 

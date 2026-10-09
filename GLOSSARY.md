@@ -1,7 +1,7 @@
 # Glossary
 
 The project's canonical vocabulary. Terms here are used consistently in code, API, UI and docs.
-No implementation details — this file defines *what words mean*, nothing else.
+No implementation details, this file defines *what words mean*, nothing else.
 
 Status: in progress. Built during requirements grilling.
 
@@ -29,7 +29,7 @@ reported alongside that intent and can disagree with it.
 
 **Duplex**
 The deliverable: a 19 bp Target/antisense core plus a 2 nt **dTdT** 3' overhang on **both**
-strands, i.e. two 21-mers. The overhang is deoxythymidine, not ribo-`UU` — chapter 2's
+strands, i.e. two 21-mers. The overhang is deoxythymidine, not ribo-`UU`, chapter 2's
 supplementary material settles that for this project's own duplexes. It is a synthesis choice
 and does not change the 19 nt core, which is what every rule is evaluated against. The overhang
 is not part of the Target and is never scanned or scored.
@@ -45,15 +45,15 @@ project and must never be conflated.
 
 ## Genomic context
 
-**TSS** — Transcription Start Site
+**TSS**. Transcription Start Site
 The first transcribed base of a given **Transcript**, as annotated by the chosen annotation
 source. A TSS belongs to a transcript, never to a gene. Written **+1**; there is no position 0.
 
 **Promoter anchor**
 What a **promoter window** is measured from. Usually a **TSS**, but not always: a promoter mapped
 in a publication may have no annotated transcript at all. Chapter 2 of the thesis designed SCN1A
-against promoters from Dong et al. 2014 and Long et al. 2008, and the Dong distal region — which
-produced two of three SCN1A activators — has no Ensembl transcript within 5.5 kb. Every anchor
+against promoters from Dong et al. 2014 and Long et al. 2008, and the Dong distal region, which
+produced two of three SCN1A activators, has no Ensembl transcript within 5.5 kb. Every anchor
 carries its citation and a **reference kind** saying how well its zero point is established:
 `annotated-tss`, `mapped-tss`, `inferred`, or `none`. An anchor of kind `none` has no zero point,
 so no offset can be computed from it and the TSS rules report *not-applicable*.
@@ -96,9 +96,9 @@ A rule that contributes to ranking but cannot reject a candidate.
 
 **Evidence class**
 How well-supported a rule is. Exactly one of:
-- **Established** — strong, direct experimental support.
-- **Empirical** — a useful, reported design observation without established mechanism.
-- **Exploratory** — plausible but unvalidated. Never enabled in a default preset.
+- **Established**, strong, direct experimental support.
+- **Empirical**, a useful, reported design observation without established mechanism.
+- **Exploratory**, plausible but unvalidated. Never enabled in a default preset.
 
 **Provenance**
 For every rule: the specific source it came from (citation and locator, e.g. "Wang et al. 2015,
@@ -143,7 +143,7 @@ A rule a configuration has deliberately removed. *Off* is not *failed* and not
 that the omission was a choice. See *Three outcomes* in `CLAUDE.md`.
 
 **Custom configuration**
-A configuration that departs from its base preset in any way — a parameter value, a selected
+A configuration that departs from its base preset in any way, a parameter value, a selected
 option or an effective role. A custom configuration is labelled as custom wherever it appears,
 and it carries its **frozen baseline** so a reader can see what it departed from.
 
@@ -156,7 +156,7 @@ enough to reconstruct what was run.
 One recorded difference between a custom configuration and its frozen baseline, naming the rule,
 what changed and the **choice origin**: preset default, named sourced option, or researcher
 custom value. A value that merely happens to equal a published option's value does not acquire
-that option's provenance — origin is declared, never inferred from a number.
+that option's provenance, origin is declared, never inferred from a number.
 
 **Run**
 One execution of the engine over one promoter with one resolved configuration, with its inputs,
@@ -169,7 +169,7 @@ remote source and no current software default; everything needed to interpret it
 
 **Derived run**
 A run produced by changing a setting on an earlier run, linked to its parent so the difference
-can be explained. Candidates are compared across runs by sequence, location and orientation —
+can be explained. Candidates are compared across runs by sequence, location and orientation,
 never by rank or display id, which both move.
 
 **Viewer** vs **workbench**
@@ -190,7 +190,7 @@ The summed NN free energy over the terminal `end` nucleotides (default 4) of a T
 
 **Stability difference** (`stabilitydiff`)
 `E(3' end) − E(5' end)` of the **Target**. A **positive** value means the Target's 5' end is
-more stable, which implies the guide strand's 5' end is *less* stable — the condition that
+more stable, which implies the guide strand's 5' end is *less* stable, the condition that
 favours guide loading. Positive is desirable. The sign convention is counter-intuitive and is
 preserved from the legacy script deliberately.
 
@@ -250,16 +250,16 @@ enhances transcription from a locus that already has some rather than switching 
 
 ## Terms deliberately avoided
 
-**"saRNA score"** — too vague; say *score contribution*, *final score* or *rank*.
-**"Promoter"** alone, where a window is meant — say **promoter window** with its TSS.
-**"Position"** alone — say **target position** (1–19), **offset** (TSS-relative) or
+**"saRNA score"**, too vague; say *score contribution*, *final score* or *rank*.
+**"Promoter"** alone, where a window is meant, say **promoter window** with its TSS.
+**"Position"** alone, say **target position** (1–19), **offset** (TSS-relative) or
 **genomic coordinate**.
-**"The promoter sequence"** for a pasted input — that is an **input sequence**; it becomes a
+**"The promoter sequence"** for a pasted input, that is an **input sequence**; it becomes a
 promoter window only once a TSS is known.
-**"Target strand"** — ambiguous between three different things: the DNA strand the Target is
+**"Target strand"**, ambiguous between three different things: the DNA strand the Target is
 read from, the duplex strand complementary to the Target, and the strand RISC retains. Say
 **sense strand** or **antisense strand** for sequence identity, **guide strand** for strand
 fate, **predicted guide** for a model's expectation, and **genomic strand** for the locus.
-**"X% match"**, **"confidence"** or **"likelihood of activation"** for a rating — the rating
+**"X% match"**, **"confidence"** or **"likelihood of activation"** for a rating, the rating
 counts criteria met out of criteria evaluated. Nothing in this project estimates a probability
 of activation, and no ranking here has been shown to beat chance.

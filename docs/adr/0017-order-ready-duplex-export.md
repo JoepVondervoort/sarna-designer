@@ -1,4 +1,4 @@
-# ADR 0017 — The order-ready duplex is a separate export, computed in Python, carrying its caveats
+# ADR 0017: The order-ready duplex is a separate export, computed in Python, carrying its caveats
 
 Date: 2026-10-07. Status: accepted implementation of accepted constraints 4, 11 and 15.
 
@@ -8,7 +8,7 @@ A candidate carries a 19 nt RNA core, which is what every rule is evaluated agai
 researcher buys is two 21-mers. `CLAUDE.md` named this the largest gap before bench use: the
 chemistry question was already settled and only the export was missing.
 
-Chapter 2's supplementary material settles the chemistry — a 2 nt **dTdT** 3' overhang on **both**
+Chapter 2's supplementary material settles the chemistry, a 2 nt **dTdT** 3' overhang on **both**
 strands, written `[dT][dT]`, not the ribo-`UU` the legacy scripts assumed. Nothing in this ADR
 reopens that; `docs/scientific/scn1a-design-coordinates.md` records the finding and `GLOSSARY.md`
 the vocabulary. What needed deciding was where the chemistry is computed, what travels with it
@@ -19,7 +19,7 @@ and what the export may not imply.
 **The ordered strand is not a `NucleicSequence`.** A 21-mer carrying ribonucleotides and two
 deoxythymidines is chimeric: the RNA alphabet has no `T` and the DNA alphabet has no `U`, so
 neither can hold it. Forcing one would fail validation or silently convert the overhang and record
-a chemistry nobody chose — and `Nucleic` exists precisely to stop that class of error. `OrderStrand`
+a chemistry nobody chose, and `Nucleic` exists precisely to stop that class of error. `OrderStrand`
 therefore keeps the core as an RNA `NucleicSequence` and the overhang as a separate, explicitly
 deoxy value, joined only for display. The export emits core, overhang and joined form as separate
 fields, because vendor notation for a chimeric oligo differs between suppliers and a researcher
@@ -38,7 +38,7 @@ the alternative is caveats that detach from the thing they qualify.
 
 **Off-target screening reports `not-performed`, on every duplex, forever until it exists.** This
 project implements no off-target analysis. Omitting the row would read as a clean screen, and the
-engine's own three-outcome rule — missing data is not a negative assay — applies here as much as to
+engine's own three-outcome rule (missing data is not a negative assay) applies here as much as to
 a rule verdict. Accepted constraint 15 asks for off-target findings in this report; this records
 that the requirement is *not* met, rather than quietly shipping without it. Promoter-level
 off-target analysis remains the prerequisite it always was.
@@ -49,7 +49,7 @@ researcher who disagrees with a model's strand prediction may still order the du
 **Order rows are computed in Python and stored in the run record.** A frozen archive has no
 backend, so its download must come from somewhere. Re-deriving the chemistry in JavaScript would
 breach accepted constraint 11 and create two implementations that could name different molecules
-for the same candidate — the ordering equivalent of the two-renderer risk in ADR 0015. Python
+for the same candidate, the ordering equivalent of the two-renderer risk in ADR 0015. Python
 computes the rows once at run completion; JavaScript filters them by candidate id and joins
 strings. A test asserts the stored rows and the live route's output are identical.
 
@@ -73,7 +73,7 @@ grows every snapshot slightly, and adds a field that a future schema change must
 
 **This export does not establish that a duplex works, is specific, or is safe.** It states the
 molecule, the chemistry's source, and what was not checked. The strand-prediction checks report a
-named model's expectation about duplex loading — not the identity of a promoter-associated target
+named model's expectation about duplex loading, not the identity of a promoter-associated target
 RNA, and not activation. Ranking has not demonstrated performance above chance on the chapter 4
 dataset, and nothing in an order file changes that.
 

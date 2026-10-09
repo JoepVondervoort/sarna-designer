@@ -1,4 +1,4 @@
-# ADR 0013 — Researchers can adjust scientific rules and their roles
+# ADR 0013: Researchers can adjust scientific rules and their roles
 
 - **Status**: Accepted; engine and frozen-page support implemented, interactive editor pending
 - **Date**: 2026-10-07

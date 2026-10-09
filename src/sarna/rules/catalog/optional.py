@@ -6,7 +6,7 @@ al. 2015, and nothing in this module changes which candidates it admits unless a
 Two bodies of work motivate them, and they carry different weight.
 
 **Established siRNA design criteria.** Reynolds et al. 2004 and Ui-Tei et al. 2004 derived
-sequence criteria from large siRNA panels — 180 and 62 duplexes respectively — and these are among
+sequence criteria from large siRNA panels (180 and 62 duplexes respectively) and these are among
 the most replicated rules in the field. The caveat that governs all of them: they were derived for
 **knockdown**, where the loaded guide finds a cytoplasmic mRNA and directs its cleavage. Promoter-
 targeted activation shares the first half of that path (duplex recognition, strand selection, AGO2
@@ -15,7 +15,7 @@ whose mechanism is *strand selection* has a reasonable claim to transfer, and on
 is *target-site accessibility or cleavage geometry* does not. Each rule below says which it is.
 
 **Thesis chapter 4's positional analysis.** Observational, n = 14 activators, and the enrichments
-do not survive correction for the grid they were found in — a random relabelling of the same 125
+do not survive correction for the grid they were found in, a random relabelling of the same 125
 sequences produces more positional structure than the activity labels do
 (`docs/scientific/positional-motif-analysis.md`). They are offered so a hypothesis can be stated
 and tested deliberately, never because the project believes them (ADR 0011).
@@ -231,7 +231,7 @@ POS10_U = _optional(
         _TRANSFER_CAVEAT + "This is the clearest case against transfer: activation does not "
         "proceed by cleavage, so the reason the criterion exists in knockdown does not apply. "
         "Chapter 4's data points the other way, finding G at position 10 its single largest "
-        "enrichment (+24.8 pp) — see `pos10-g`, which contradicts this rule. Selecting both "
+        "enrichment (+24.8 pp), see `pos10-g`, which contradicts this rule. Selecting both "
         "guarantees every candidate loses one of the two points."
     ),
     group=SIRNA_GROUP,

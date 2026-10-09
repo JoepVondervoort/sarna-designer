@@ -5,7 +5,7 @@ These tables are reference data, not configuration. They exist so that an assemb
 read directly from the AF22 bigWig headers that identified those tracks as GRCh37
 (see ``docs/scientific/legacy-inventory.md`` section 12).
 
-Names follow Ensembl convention — bare, unprefixed, with the mitochondrion as ``MT``. The
+Names follow Ensembl convention, bare, unprefixed, with the mitochondrion as ``MT``. The
 UCSC ``chr`` prefix used by the bigWig files is a file-format detail handled at that adapter
 and never appears in the domain model (ADR 0004).
 
@@ -15,7 +15,7 @@ differing: UCSC hg19 carries the superseded NC_001807 sequence (16,571 bp) while
 GRCh37 ``MT`` is the rCRS (16,569 bp). They are *different sequences*, so coordinates are not
 transferable between them at all. The value below is Ensembl's, which is correct for this
 model; the bigWig adapter rejects ``MT`` outright rather than pretending the two agree. This
-costs nothing scientifically — mitochondrial DNA is not nucleosomal, so histone marks are not
+costs nothing scientifically, mitochondrial DNA is not nucleosomal, so histone marks are not
 meaningful there, and saRNA targets are nuclear promoters.
 """
 

@@ -253,9 +253,9 @@ class DesignConfig:
         """Return the configuration as JSON-serialisable data, for export and provenance.
 
         Records the resolved parameter values rather than the preset name, because a preset's
-        meaning can change between versions. Each entry is the full rule *record* — its rationale,
+        meaning can change between versions. Each entry is the full rule *record* (its rationale,
         consequence, structured provenance, every parameter's unit and legal range, and the options
-        not chosen with their own provenance — so a reader can judge the configuration without this
+        not chosen with their own provenance) so a reader can judge the configuration without this
         codebase to hand (ADR 0003).
 
         Each rule appears once here, and a candidate's results reference it by ``id``. Repeating

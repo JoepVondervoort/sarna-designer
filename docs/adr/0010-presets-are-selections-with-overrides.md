@@ -1,4 +1,4 @@
-# ADR 0010 — A preset is a named selection of rules with per-rule overrides, and `legacy-scanner` reproduces the original with two stated exceptions
+# ADR 0010: A preset is a named selection of rules with per-rule overrides, and `legacy-scanner` reproduces the original with two stated exceptions
 
 - **Status**: Accepted
 - **Date**: 2026-10-06
@@ -14,11 +14,11 @@ required the resolved configuration to be inspectable and exportable. Neither sa
 The question is not cosmetic, because the two presets differ in three distinct ways and the model
 has to express all of them:
 
-1. **A parameter value** — the GC ceiling is 0.60 under the paper and 0.65 in the script.
-2. **Whether a rule applies at all** — the original has no concept of a TSS, so the TSS window
+1. **A parameter value** (the GC ceiling is 0.60 under the paper and 0.65 in the script.
+2. **Whether a rule applies at all**) the original has no concept of a TSS, so the TSS window
    rules cannot meaningfully run under `legacy-scanner`; `no-simple-repeats` is absent from the
    script entirely; and `not-in-cpg-island` is present but commented out (defect B8).
-3. **Whether a rule is enabled against its own default** — `pos7-u` is off by default under
+3. **Whether a rule is enabled against its own default**, `pos7-u` is off by default under
    `wang-2015`, being unsourced, but the original script scored it as one of two dominant terms,
    so reproducing historical rankings requires it on.
 
@@ -35,7 +35,7 @@ therefore leave residue behind, and two presets can be diffed by comparing selec
 overrides rather than by diffing program behaviour.
 
 **A disabled rule is absent, not failed.** A rule a preset does not select is not evaluated and
-produces no result at all — distinct from a rule that was evaluated and reported
+produces no result at all, distinct from a rule that was evaluated and reported
 `not-applicable` (ADR 0007), which means "this run could not answer this question". The
 difference matters when reading a candidate: "`tss-window` was not part of this preset" and
 "`tss-window` could not be checked because the promoter has no TSS" are different statements and
@@ -71,12 +71,12 @@ being unsourced.
 
 **1. Position-1 G/C is a preference, not a gate.** Finding B16 established that the script's
 `endbase` reduces exactly to "position 1 is G or C and position 19 is A or U", making a required
-G/C at position 1 — which Wang Table 1 marks only as "preferably". The decision taken here is to
+G/C at position 1, which Wang Table 1 marks only as "preferably". The decision taken here is to
 **follow `wang-2015` and treat it as a preference in both presets**, rather than add a
 legacy-only gate.
 
 The cost, stated so it is not discovered later: `legacy-scanner` will **admit candidates the
-original script rejected** — specifically every candidate whose position 1 is A or T. Those
+original script rejected**, specifically every candidate whose position 1 is A or T. Those
 candidates will appear in its output, ranked, where the original would have discarded them. For
 anyone re-deriving a historical design list, that is a visible difference in the candidate set,
 not merely in ordering.
@@ -93,8 +93,8 @@ here because together with the above it means the legacy preset reproduces the o
 
 ## Consequences
 
-- No preset is a bit-for-bit reproduction of the original script. ADR 0002's wording — "reproduces
-  the original script bit-for-bit" — is accordingly too strong and the README must say "closely,
+- No preset is a bit-for-bit reproduction of the original script. ADR 0002's wording ("reproduces
+  the original script bit-for-bit") is accordingly too strong and the README must say "closely,
   with two stated exceptions" instead.
 - A regression test against the legacy script therefore compares the candidate **set** under
   stated exclusions, not the output file. That is weaker evidence than a byte comparison, and it

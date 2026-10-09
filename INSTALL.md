@@ -37,18 +37,18 @@ not inside any other program. Step 1 shows how to open it.
 > installed on Windows and opens in your normal Windows browser. A copy installed inside WSL
 > will not be on your Start menu and its saved runs will be somewhere you cannot easily find.
 
-### How you will get the tool — read this first
+### How you will get the tool: read this first
 
 There are two routes, and **which one applies to you is not a preference**:
 
-| | **Route A — a file you were sent** | **Route B — from GitHub** |
+| | **Route A: a file you were sent** | **Route B: from GitHub** |
 |---|---|---|
 | You need | the `.whl` file, nothing else | a GitHub account **with access to the repository**, and **Git installed** |
 | Works for | anyone | collaborators on the repository only |
 | Use it when | you were emailed or handed a file | you have been added to the repository |
 
 **The repository is private.** A GitHub link will fail with *"repository not found"* for
-anyone who has not been given access — that is what a private repository looks like from
+anyone who has not been given access. That is what a private repository looks like from
 outside, and it is not a sign that anything is broken. If you were not explicitly added to it,
 you want **Route A**.
 
@@ -56,7 +56,7 @@ Route A is also the only one that needs no Git and no GitHub account at all, whi
 is written first below.
 
 > **If you are the person sending the file**, see
-> [Sending it to a colleague](#sending-it-to-a-colleague) at the end — it tells you how to
+> [Sending it to a colleague](#sending-it-to-a-colleague) at the end. It tells you how to
 > build the file and exactly where it appears.
 
 ---
@@ -66,7 +66,7 @@ is written first below.
 Most people will use this. Everything happens in a program called **PowerShell**, which is
 already on your computer.
 
-### Step 1 — Open PowerShell
+### Step 1: Open PowerShell
 
 Press the **Windows key**, type `powershell`, and press **Enter**. A blue window opens with a
 blinking cursor. You type commands here and press Enter after each one.
@@ -79,7 +79,7 @@ If you see `>>`, PowerShell is waiting for an unfinished command (often a missin
 Press **Ctrl+C**, then paste the complete command again. Do not type a command in pieces or
 drag a file into a partially typed command.
 
-### Step 2 — Install `uv`
+### Step 2: Install `uv`
 
 Copy this whole line, paste it into PowerShell (right-click pastes), and press **Enter**:
 
@@ -90,15 +90,15 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 This installs a small program called `uv` that manages the installation for you. If your
 organisation blocks that command, `winget install --id=astral-sh.uv -e` does the same thing.
 
-**Now close PowerShell completely and open it again.** This is necessary — the new program is
+**Now close PowerShell completely and open it again.** This is necessary, because the new program is
 only visible to a freshly opened window.
 
-### Step 3 — Install saRNA Designer
+### Step 3: Install saRNA Designer
 
-**Route A — from the file you were sent (recommended for colleagues).**
+**Route A: from the file you were sent (recommended for colleagues).**
 
 **A. Save the attachment.** You need a **file**, called
-`sarna_designer-0.1.0.dev0-py3-none-any.whl`, in your **Downloads** folder.
+`sarna_designer-0.2.0-py3-none-any.whl`, in your **Downloads** folder.
 
 - If you received the `.whl` directly, use your email's **Save attachment** option. Do not
   open or extract it.
@@ -113,7 +113,7 @@ name extensions**). If the actual wheel file was renamed to `.whl.zip`, remove o
 **B. Check that the file is there.** Paste this whole line and press Enter:
 
 ```powershell
-Test-Path -LiteralPath "$env:USERPROFILE\Downloads\sarna_designer-0.1.0.dev0-py3-none-any.whl" -PathType Leaf
+Test-Path -LiteralPath "$env:USERPROFILE\Downloads\sarna_designer-0.2.0-py3-none-any.whl" -PathType Leaf
 ```
 
 It must print **`True`**. If it prints `False`, stop: the file is missing, is a folder, or has
@@ -125,7 +125,7 @@ only that filename in both commands with the one you received.
 and press Enter:
 
 ```powershell
-uv tool install --python 3.11 "$env:USERPROFILE\Downloads\sarna_designer-0.1.0.dev0-py3-none-any.whl[app]"
+uv tool install --python 3.11 "$env:USERPROFILE\Downloads\sarna_designer-0.2.0-py3-none-any.whl[app]"
 ```
 
 `$env:USERPROFILE` automatically uses your Windows user folder; leave it exactly as written.
@@ -135,7 +135,7 @@ the quoted path will just print the path; it does **not** install anything.
 Already have Python 3.14 or another version? Leave it installed. This command selects Python
 3.11 separately, as required by this tool.
 
-**Route B — from GitHub**, only if you have been added to the repository and have
+**Route B: from GitHub**, only if you have been added to the repository and have
 [Git](https://git-scm.com/download/win) installed:
 
 ```powershell
@@ -154,32 +154,32 @@ Installed 2 executables: sarna-designer, sarna-designer-check
 > Send the command and its output to the person who sent you the tool. Task Manager activity
 > alone cannot tell you whether the command was entered correctly or why it is waiting.
 
-**If you do not see that line, stop here** and read the last few lines of output — the rest of
+**If you do not see that line, stop here** and read the last few lines of output. The rest of
 these steps will not work.
 
-### Step 3b — Close and reopen PowerShell, again
+### Step 3b: Close and reopen PowerShell, again
 
 `uv` may print a warning that its folder *"is not on your PATH"*. Closing PowerShell and
 opening it again fixes that. Do it even if you saw no warning; it costs five seconds and it is
 the single most common reason step 4 fails.
 
-### Step 4 — Check that it works
+### Step 4: Check that it works
 
 ```powershell
 sarna-designer-check
 ```
 
 You should see a list of checks and then **`RESULT: PASS`**. If any line says `FAIL`, the
-check tells you what to do — see [If something goes wrong](#if-something-goes-wrong).
+check tells you what to do. See [If something goes wrong](#if-something-goes-wrong).
 
-### Step 5 — Start it
+### Step 5: Start it
 
 ```powershell
 sarna-designer
 ```
 
 It prints a web address like `http://localhost:8001/`. Open that in your browser. **Leave the
-PowerShell window open** while you work — closing it stops the tool.
+PowerShell window open** while you work. Closing it stops the tool.
 
 To stop it, click the PowerShell window and press **Ctrl+C**.
 
@@ -187,11 +187,11 @@ To stop it, click the PowerShell window and press **Ctrl+C**.
 
 ## macOS
 
-### Step 1 — Open Terminal
+### Step 1: Open Terminal
 
 Press **Cmd+Space**, type `terminal`, press **Enter**.
 
-### Step 2 — Install `uv`
+### Step 2: Install `uv`
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -199,12 +199,12 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 Then close Terminal and open it again.
 
-### Step 3 — Install saRNA Designer
+### Step 3: Install saRNA Designer
 
-From the file you were sent (Route A — drag the `.whl` into Terminal to paste its path):
+From the file you were sent (Route A, and you can drag the `.whl` into Terminal to paste its path):
 
 ```bash
-uv tool install --python 3.11 "/Users/you/Downloads/sarna_designer-0.1.0.dev0-py3-none-any.whl[app]"
+uv tool install --python 3.11 "/Users/you/Downloads/sarna_designer-0.2.0-py3-none-any.whl[app]"
 ```
 
 Or from GitHub (Route B), if you have access to the repository and `git` installed:
@@ -216,7 +216,7 @@ uv tool install --python 3.11 "sarna-designer[app] @ git+https://github.com/Joep
 It should end with `Installed 2 executables`. Then close Terminal and open it again, so the
 new commands are on your PATH.
 
-### Steps 4 and 5 — Check and start
+### Steps 4 and 5: Check and start
 
 ```bash
 sarna-designer-check
@@ -238,7 +238,7 @@ or open a new terminal.
 
 Open the address the tool printed. Then:
 
-1. Type a human gene symbol — `SCN1A`, `TP53`, `KCNQ2` — and click **Look up**.
+1. Type a human gene symbol such as `SCN1A`, `TP53` or `KCNQ2`, then click **Look up**.
 2. Choose which promoter reference to design against. The tool picks the MANE Select transcript
    when there is exactly one; everything else is yours to choose, and the tool explains what
    each choice means.
@@ -249,7 +249,7 @@ The first lookup of any gene needs internet. After that the gene is cached and w
 
 **Read [what the tool can and cannot tell you](docs/development/local-workbench.md) before
 acting on its output.** In short: it is a filter and an explainer with every decision traceable
-to a published source — it is **not** a predictor of whether a design will work. Its ranking has
+to a published source. It is **not** a predictor of whether a design will work. Its ranking has
 been measured against 125 assayed sequences and does not beat chance. The tool shows you that
 number next to the ranking rather than hiding it.
 
@@ -264,7 +264,7 @@ Transparency about this matters, so here it is in full.
 | Looking up a gene for the first time | The gene symbol or Ensembl ID | Ensembl (rest.ensembl.org) |
 | Fetching promoter DNA | Genomic coordinates | Ensembl |
 | **Only if you click the off-target button** | The 19-nucleotide candidate sequences | NCBI BLAST |
-| Everything else | Nothing | — |
+| Everything else | Nothing | n/a |
 
 Your designs, settings, saved runs and exports stay in a folder on your own machine
 (`~/.sarna-designer` on macOS/Linux, `C:\Users\<you>\.sarna-designer` on Windows). The tool
@@ -272,54 +272,54 @@ listens only on `127.0.0.1`, which means your own computer and nothing else on t
 reach it.
 
 The sequences sent to NCBI are drawn from the public human genome, so no novel sequence is
-disclosed — but running a search does tell NCBI which gene you are working on. That is why the
+disclosed, but running a search does tell NCBI which gene you are working on. That is why the
 off-target search is a button you press, not something that happens automatically.
 
 ---
 
 ## If something goes wrong
 
-**`error: ... <PACKAGE>` is missing** — only the beginning of the install command was
+**`error: ... <PACKAGE>` is missing**. Only the beginning of the install command was
 entered. Copy the whole line from Step 3C, including the quoted path and `[app]`.
 
-**PowerShell prints the file path and nothing else** — only the quoted path was entered.
+**PowerShell prints the file path and nothing else**. Only the quoted path was entered.
 Run the whole Step 3C command, starting with `uv tool install`.
 
-**`neither pyproject.toml nor setup.py are present in the directory`** — check whether the
+**`neither pyproject.toml nor setup.py are present in the directory`**. Check whether the
 `.whl` is actually an extracted folder. Run the Step 3B file check; it must print `True`.
 Rename the extracted folder, then save the original wheel attachment to Downloads. Do not
 create either of those missing files. If the check is `True` and the error persists, send the
 full command and output to the sender.
 
-**PowerShell shows `>>`** — press **Ctrl+C** and paste the complete command again; see Step 1.
+**PowerShell shows `>>`**. Press **Ctrl+C** and paste the complete command again; see Step 1.
 
-**`uv` is not recognised** — you did not close and reopen the terminal after step 2. Do that.
+**`uv` is not recognised**. You did not close and reopen the terminal after step 2. Do that.
 
-**`sarna-designer` is not recognised** — almost always step 3b: close PowerShell or Terminal
+**`sarna-designer` is not recognised**. Almost always step 3b: close PowerShell or Terminal
 completely and open a new one. If it still is not found, run `uv tool update-shell` and open
-another new window. If that does not help either, step 3 did not finish — run it again and
+another new window. If that does not help either, step 3 did not finish. Run it again and
 read the last few lines for an error.
 
-**`repository not found`, or Git asks for a password** — the repository is private and your
+**`repository not found`, or Git asks for a password**. The repository is private and your
 account has not been given access. Use Route A: ask for the `.whl` file.
 
-**`git` is not recognised** — Route B needs [Git for Windows](https://git-scm.com/download/win).
+**`git` is not recognised.** Route B needs [Git for Windows](https://git-scm.com/download/win).
 Route A does not need it at all.
 
-**The check says `httpx is missing` or `the local web interface is incomplete`** — the `[app]`
+**The check says `httpx is missing` or `the local web interface is incomplete`**. The `[app]`
 was left off the end of the command in step 3. This is the most common single mistake. Run
 `uv tool uninstall sarna-designer` and do step 3 again, with `[app]` on the end.
 
-**The check says FAIL** — each failing line prints a `what to do:` with it. If it says to report
+**The check says FAIL**. Each failing line prints a `what to do:` with it. If it says to report
 the output, copy the whole thing and send it on; it is written to be useful to whoever maintains
 the tool.
 
-**Windows warns about a firewall** — allow it. The tool only listens on your own machine.
+**Windows warns about a firewall**. Allow it. The tool only listens on your own machine.
 
-**The browser page is blank** — make sure the terminal window is still open and shows no error,
+**The browser page is blank**. Make sure the terminal window is still open and shows no error,
 then reload.
 
-**Nothing above helped** — run this and send the output:
+**Nothing above helped**. Run this and send the output:
 
 ```
 sarna-designer-check --online
@@ -327,19 +327,66 @@ sarna-designer-check --online
 
 ---
 
-## Updating
+## Updating to a newer version
 
-If you installed from GitHub (Route B):
+The right command depends on which route you installed with in step 3. Using the wrong one is
+not harmless: one of them reports success while leaving you on the old version.
+
+### If you installed from GitHub (Route B)
 
 ```
 uv tool upgrade sarna-designer
 ```
 
-If you installed from a file (Route A), there is nothing for `uv` to upgrade *from* — ask for
-the new `.whl` and install it over the top with the same step 3 command. Your saved runs are
-kept.
+That is the whole update. `uv` remembers which repository you installed from and fetches
+whatever is there now. It follows the **code**, not the version number, so this works even when
+the version has not changed.
 
-Either way, run `sarna-designer-check` afterwards.
+### If you installed from a file (Route A)
+
+**`uv tool upgrade` will not work, and will not tell you that it did not work.** It prints
+`Nothing to upgrade`, because there is no repository for it to look at. That message does not
+mean you are up to date.
+
+Instead, ask for the new `.whl` file, save it to **Downloads** as before, and run the step 3
+install command again with the new filename:
+
+```
+uv tool install --python 3.11 "$env:USERPROFILE\Downloads\sarna_designer-0.2.0-py3-none-any.whl[app]"
+```
+
+On macOS or Linux, use the path to where you saved it:
+
+```
+uv tool install --python 3.11 "/Users/you/Downloads/sarna_designer-0.2.0-py3-none-any.whl[app]"
+```
+
+Installing over the top replaces the old version. You do not need to uninstall first.
+
+> **Delete the old `.whl` from Downloads once the new one works.** Two files with different
+> version numbers in the same folder is the easiest way to install the old one by accident.
+
+### Afterwards, either way
+
+Close the terminal, open a new one, and run:
+
+```
+sarna-designer-check
+```
+
+The last line names the version you now have. If it still shows the old number, the install did
+not take: check that you used the new filename, then run the command again.
+
+### Your saved work is not touched
+
+Runs, snapshots and exports live in a `.sarna-designer` folder, separate from the program.
+Updating, reinstalling and uninstalling all leave them alone.
+
+### Which version am I on?
+
+`sarna-designer-check` prints it, and so does the footer of the page in your browser. Every run
+you save records the same version, so a result from today can be told apart from one produced by
+an older build. Quote that number if you report a problem.
 
 ## Uninstalling
 
@@ -358,7 +405,7 @@ Three choices worth explaining, since you are running this on your own machine.
 
 **Why `uv` rather than `pip`.** The tool is pinned to Python 3.11. Windows and macOS usually
 ship a different version, so `pip install` would simply refuse. `uv` fetches the right Python
-itself, in a private folder, so you never have to touch or change your system Python — and
+itself, in a private folder, so you never have to touch or change your system Python, and
 nothing this tool installs can affect other software.
 
 **Why it runs locally rather than as a website.** Recorded in
@@ -367,8 +414,8 @@ nothing this tool installs can affect other software.
 hosted service set out in full, [ADR 0020](docs/adr/0020-localhost-or-a-hosted-service.md): your
 sequences and designs stay on your machine, the tool works offline once a gene is cached, and
 there is no server to maintain or trust. The short version is that the gene you are working on
-*is* the research question, and running locally means only Ensembl — and NCBI, if you ask for an
-off-target screen — ever learns it.
+*is* the research question. Running locally means only Ensembl, plus NCBI if you ask for an
+off-target screen, ever learns it.
 
 **Why there are two commands.** `sarna-designer-check` makes a broken installation say so
 clearly instead of failing later in a way that looks like a scientific problem. It is quick and
@@ -388,7 +435,7 @@ it is fetched once:
 Then restart the app. Whoever looks a gene up first fills the cache; everyone else reads it, and
 can work offline afterwards.
 
-This is safe to share while somebody else is using it — cache entries are written to a temporary
+This is safe to share while somebody else is using it, because cache entries are written to a temporary
 name and renamed, so you never read a half-written file. It holds only public Ensembl records,
 no designs: your runs stay in your own `--data-dir`. If the shared folder is unreachable the tool
 fetches from Ensembl as usual rather than failing.
@@ -398,7 +445,7 @@ fetches from Ensembl as usual rather than failing.
 ## Optional: AF22 histone tracks, the one thing that needs WSL
 
 Skip this unless you have been given the AF22 bigWig files and want the tool to read them.
-**The design tool does not need any of it** — without the tracks, chromatin simply reports
+**The design tool does not need any of it**. Without the tracks, chromatin simply reports
 "not loaded", which is an honest answer rather than a broken one.
 
 The reader for those files, [pyBigWig](https://pypi.org/project/pyBigWig/), publishes **no
@@ -406,7 +453,7 @@ Windows wheel** and lists MacOS, POSIX and Unix as its supported platforms; buil
 `libcurl` and `zlib` headers. So on Windows this extra cannot be installed natively, and WSL
 is the way round it.
 
-**1. Install WSL** from an **administrator** PowerShell — right-click PowerShell in the Start
+**1. Install WSL** from an **administrator** PowerShell. Right-click PowerShell in the Start
 menu and choose *Run as administrator*:
 
 ```powershell
@@ -422,7 +469,7 @@ in place of `[app]`:
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 # then, from a new terminal:
-uv tool install --python 3.11 "/path/to/sarna_designer-0.1.0.dev0-py3-none-any.whl[app,genomics]"
+uv tool install --python 3.11 "/path/to/sarna_designer-0.2.0-py3-none-any.whl[app,genomics]"
 ```
 
 **3. Point it at the tracks**, then start it:
@@ -456,13 +503,13 @@ From a checkout, on any platform:
 If that says `No module named build`, install it once with
 `.venv/bin/python -m pip install build`.
 
-It prints `Successfully built sarna_designer-0.1.0.dev0-py3-none-any.whl` and puts that one
+It prints `Successfully built sarna_designer-0.2.0-py3-none-any.whl` and puts that one
 file in the **`dist/`** folder next to the code.
 
 ### 2. Find it
 
 ```
-<your checkout>/dist/sarna_designer-0.1.0.dev0-py3-none-any.whl
+<your checkout>/dist/sarna_designer-0.2.0-py3-none-any.whl
 ```
 
 **If you develop inside WSL**, that path is inside Linux and Outlook cannot see it. Two ways
@@ -487,7 +534,7 @@ send a folder named `.whl`, and do not extract the wheel before packaging it.
 From the project folder, you can create the outer ZIP with:
 
 ```bash
-.venv/bin/python -m zipfile -c dist/sarna-designer-install.zip dist/sarna_designer-0.1.0.dev0-py3-none-any.whl
+.venv/bin/python -m zipfile -c dist/sarna-designer-install.zip dist/sarna_designer-0.2.0-py3-none-any.whl
 ```
 
 Open `dist` in Explorer as described above and attach `sarna-designer-install.zip`.
@@ -520,7 +567,7 @@ would remove both, and is a decision about publishing the work rather than a tec
 
 ```bash
 # From a wheel you were sent (works without Git or repository access):
-uv tool install --python 3.11 "./sarna_designer-0.1.0.dev0-py3-none-any.whl[app]"
+uv tool install --python 3.11 "./sarna_designer-0.2.0-py3-none-any.whl[app]"
 # Or, with access to the private repository and git on PATH:
 uv tool install --python 3.11 "sarna-designer[app] @ git+https://github.com/JoepVondervoort/sarna-designer"
 
@@ -530,7 +577,7 @@ sarna-designer --port 8001
 
 - The repository is **private**: the git URL resolves only for collaborators, and needs `git`
   installed. The wheel needs neither. Build one with `python -m build --wheel`.
-- Requires Python 3.11 exactly; `[app]` adds `httpx` on top of `pydantic`. No compiler needed —
+- Requires Python 3.11 exactly; `[app]` adds `httpx` on top of `pydantic`. No compiler needed,
   both ship universal wheels.
 - `[genomics]` additionally pulls `pyBigWig`, `numpy` and `pyliftover` for local AF22 histone
   tracks. **Not installable on Windows**: pyBigWig publishes no Windows wheel and lists only

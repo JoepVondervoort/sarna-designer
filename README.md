@@ -12,14 +12,14 @@ ranked, annotated, exportable duplex candidates.
 > saved runs, an off-target screen against NCBI, and exports including a spreadsheet of every
 > candidate with its values.
 >
-> The engine is now validated against measured activity for the first time — 125 assayed
+> The engine is now validated against measured activity for the first time, against 125 assayed
 > sequences, 14 of them activators. The position-19 gate excludes CEBPA, a known activator;
 > the default window excludes 10 of 14 when recovered locations are used.
 > Read [`docs/scientific/empirical-validation.md`](docs/scientific/empirical-validation.md) for
 > what that does and does not establish. Treat a high rank as a prioritisation aid, not a
 > prediction of activity.
 
-## Installing it — complete steps
+## Installing it, complete steps
 
 Everything needed is below. [`INSTALL.md`](INSTALL.md) is the same thing with more hand-holding
 and a troubleshooting section; this is the whole procedure.
@@ -29,7 +29,7 @@ and a troubleshooting section; this is the whole procedure.
 | | Needed? | How |
 |---|---|---|
 | **PowerShell** | Yes, it is where you type | Already on Windows. Press <kbd>Win</kbd>, type `powershell`, Enter. |
-| **`uv`** | Yes — the only install | One line, in step 1 below. |
+| **`uv`** | Yes, the only install | One line, in step 1 below. |
 | **Python** | No | `uv` downloads the right version (3.11) into its own folder. Your system Python is untouched. |
 | **WSL** | **No** | Not used. See [the one exception](#optional-af22-histone-tracks) below. |
 | **Administrator rights** | No | Everything goes under your own user account. |
@@ -46,7 +46,7 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 
 If your organisation blocks that, `winget install --id=astral-sh.uv -e` does the same job.
 
-**2. Close PowerShell and open it again.** Required — the new command is only visible to a
+**2. Close PowerShell and open it again.** This is required, because the new command is only visible to a
 fresh window. Check it worked:
 
 ```powershell
@@ -55,7 +55,7 @@ uv --version
 
 **3. Install the tool.** This repository is **private**, so pick the route that applies:
 
-*Route A — from a `.whl` file you were sent* (needs no GitHub account and no Git):
+*Route A, from a `.whl` file you were sent* (needs no GitHub account and no Git):
 
 Save the wheel into **Downloads** without extracting it. If you received an outer ZIP,
 choose **Extract All** once, then copy the `.whl` file inside into Downloads. Do not extract
@@ -67,7 +67,7 @@ only the quoted path, and do not drag a file into a partially typed command.
 First verify the file:
 
 ```powershell
-Test-Path -LiteralPath "$env:USERPROFILE\Downloads\sarna_designer-0.1.0.dev0-py3-none-any.whl" -PathType Leaf
+Test-Path -LiteralPath "$env:USERPROFILE\Downloads\sarna_designer-0.2.0-py3-none-any.whl" -PathType Leaf
 ```
 
 It must print **`True`**. If it prints `False`, check the filename and location using
@@ -78,14 +78,14 @@ another name. Leave `$env:USERPROFILE` as written; it uses your own user folder 
 Then install:
 
 ```powershell
-uv tool install --python 3.11 "$env:USERPROFILE\Downloads\sarna_designer-0.1.0.dev0-py3-none-any.whl[app]"
+uv tool install --python 3.11 "$env:USERPROFILE\Downloads\sarna_designer-0.2.0-py3-none-any.whl[app]"
 ```
 
 The `[app]` installs the browser interface and must stay inside the quotes. An existing Python
 3.14 installation is fine; this command selects 3.11 separately. If PowerShell shows `>>`,
 press **Ctrl+C** and paste the entire command again.
 
-*Route B — from this repository*, if you have been added to it and have
+*Route B, from this repository*, if you have been added to it and have
 [Git for Windows](https://git-scm.com/download/win):
 
 ```powershell
@@ -99,7 +99,7 @@ Wait for the `PS ...>` prompt to return. If installation fails, stop and send th
 command and output to the sender; see [troubleshooting](INSTALL.md#if-something-goes-wrong).
 Do not continue to the check or start commands until installation succeeds.
 
-**4. Close PowerShell and open it again** — the same PATH reason as step 2.
+**4. Close PowerShell and open it again**, for the same PATH reason as step 2.
 
 **5. Check it works:**
 
@@ -132,7 +132,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 **This is the only part that needs WSL on Windows, and almost nobody needs it.** The
 `[genomics]` extra reads local AF22 bigWig files, and it depends on
 [pyBigWig](https://pypi.org/project/pyBigWig/), which publishes **no Windows wheel** and lists
-only MacOS, POSIX and Unix as supported — it needs `libcurl` and `zlib` headers to build. The
+only MacOS, POSIX and Unix as supported, because it needs `libcurl` and `zlib` headers to build. The
 design tool does not use it; chromatin simply reports "not loaded" without it.
 
 If you do want those tracks on Windows, install
@@ -153,10 +153,51 @@ Because the repository is private, send them a file rather than a link:
 python -m build --wheel      # one ~320 kB .whl appears in dist/
 ```
 
-They need no GitHub account, no Git and no Python — that is route A above.
+They need no GitHub account, no Git and no Python. That is route A above.
 [`INSTALL.md`](INSTALL.md#sending-it-to-a-colleague) has a message you can copy into the email,
-and — if you develop inside WSL — how to reach the file from Windows at all, since a path
+and, if you develop inside WSL, how to reach the file from Windows at all, since a path
 inside WSL is invisible to Outlook.
+
+### Updating to a newer version
+
+Which command works depends on how it was installed, and the difference is not cosmetic.
+
+**Installed from this repository (route B):**
+
+```powershell
+uv tool upgrade sarna-designer
+```
+
+`uv` remembers the repository and reinstalls whatever is on the default branch now. It tracks
+the **commit**, not the version number, so this picks up new work even when the version has not
+changed. Measured against a local clone on 8 October 2026, and written up in
+[`docs/development/releasing.md`](docs/development/releasing.md).
+
+**Installed from a `.whl` file (route A):**
+
+`uv tool upgrade` prints `Nothing to upgrade`, because there is no repository for it to upgrade
+from. That message is correct and is not an error. Ask for the new file, then run the same
+install command again with the new filename:
+
+```powershell
+uv tool install --python 3.11 "$env:USERPROFILE\Downloads\sarna_designer-0.2.0-py3-none-any.whl[app]"
+```
+
+Installing over the top replaces the old build. Saved runs in `.sarna-designer` are kept.
+
+**Either way, afterwards:**
+
+```powershell
+sarna-designer-check
+```
+
+It prints the version that is now installed, which is how anyone tells one build from another.
+Every saved run records the same string as its `engine_version`, so a result can be traced back
+to the code that produced it.
+
+**Publishing an update** is the maintainer's side of the same question:
+[`docs/development/releasing.md`](docs/development/releasing.md) is the checklist, including why
+the work has to reach the default branch before `uv tool upgrade` can deliver it.
 
 ### Running it from a checkout instead
 
@@ -187,16 +228,16 @@ universal biological requirements; researchers can investigate alternatives in c
 Four rule presets ship (see [ADR 0002](docs/adr/0002-wang-2015-default-legacy-preset.md) and
 [ADR 0011](docs/adr/0011-optional-rules-are-hypotheses-not-findings.md)):
 
-- **`wang-2015`** — the default. Conformant with Table 1.
-- **`strict`** — tightens only the *location* criteria. The range-restricted dataset does not
+- **`wang-2015`** is the default. Conformant with Table 1.
+- **`strict`** tightens only the *location* criteria. The range-restricted dataset does not
   establish better efficacy for these settings. Two sequence tightenings were tried, measured and
   rejected: requiring zero CpG excludes 4 of the 14 known activators, and requiring an asymmetry
   margin of 0.5 kcal/mol excludes 2 more.
-- **`exploratory`** — adds optional criteria from Reynolds et al. 2004, Ui-Tei et al. 2004 and the
+- **`exploratory`** adds optional criteria from Reynolds et al. 2004, Ui-Tei et al. 2004 and the
   thesis's own positional analysis. Admits exactly the same candidates as the default, since every
   added rule is a preference; it reorders them. Its score denominator is 13, so its numbers are
   **not comparable** with any other preset's.
-- **`legacy-scanner`** — reproduces the original script's *filtering* closely, defects included,
+- **`legacy-scanner`** reproduces the original script's *filtering* closely, defects included,
   so historical designs can be re-derived. **Not bit-for-bit**, and the two known divergences are
   declared on the preset itself so they appear in exports and the UI: position 1 G/C is scored as
   a preference where the original required it (so this preset admits candidates the original
@@ -211,7 +252,7 @@ source are labelled `unsourced` rather than quietly presented as established bio
 
 Mandatory criteria are a **gate**: fail one and the candidate is excluded, with the failing rule
 named. Everything else is a **checklist of preferences, each worth one point, all weighted
-equally** — a candidate reads as "meets 5 of 7 preferences", itemised. Ties break on
+equally**. A candidate reads as "meets 5 of 7 preferences", itemised. Ties break on
 thermodynamic asymmetry, reported as a tie-break rather than folded into the score. See
 [ADR 0006](docs/adr/0006-criteria-count-ranking.md).
 
@@ -322,7 +363,7 @@ for lost in report.rejected_activators:        # duplexes that worked and the ga
   21-mer with a 3' dTdT overhang on both strands. Order-ready CSV and chemistry validation
   remain to be implemented.
 - **Empirical validation is narrow.** 125 assayed sequences exist, but all were designed to pass
-  Wang's gate, so the set cannot show a gate to be too permissive — only too strict. The sequences
+  Wang's gate, so the set cannot show a gate to be too permissive, only too strict. The sequences
   have recovered coordinates and 519 bp context for 123 of 125 designs, enabling window and
   flank checks through `benchmark(..., locations=load_chapter4_locations())`. This context is
   insufficient for the default 500 bp CpG-island definition. Ranking remains unvalidated.
@@ -334,7 +375,7 @@ for lost in report.rejected_activators:        # duplexes that worked and the ga
   CC BY-NC-SA label was wrong and *more* restrictive than the real terms. See [`NOTICE`](NOTICE)
   and [ADR 0018](docs/adr/0018-apache-2-and-bundled-data-licensing.md).
 - Promoter fixtures must be CpG-depleted or real sequence. Uniform random sequence is called as
-  one large CpG island by any correct detector, which rejects nearly every candidate — see
+  one large CpG island by any correct detector, which rejects nearly every candidate. See
   [`docs/scientific/synthetic-promoter-fixtures.md`](docs/scientific/synthetic-promoter-fixtures.md).
 - The legacy scripts have **18 catalogued defects**, three scientifically material. They are
   preserved unfixed by design; see [`legacy/README.md`](legacy/README.md). The `legacy-scanner`
@@ -352,7 +393,7 @@ for lost in report.rejected_activators:        # duplexes that worked and the ga
 
 ```
 sarna-designer/
-├── GLOSSARY.md              Canonical project vocabulary — read this first
+├── GLOSSARY.md              Canonical project vocabulary, read this first
 ├── legacy/                  Original scripts, preserved verbatim. Never edited.
 ├── src/sarna/               The engine. No HTTP, no UI, no web framework (ADR 0005).
 │   ├── sequence/            Validated sequence primitives and CpG-island detection
@@ -361,13 +402,17 @@ sarna-designer/
 │   ├── thermo/              Nearest-neighbour tables, duplex ends, guide prediction
 │   ├── design/              Contexts, evaluators, presets and the design pipeline
 │   ├── regulatory/          TF motifs, Ensembl Regulatory Build, the evidence model
+│   ├── expression/          Per-tissue transcript expression, and the gaps it cannot fill
+│   ├── offtarget/           Screening a finished run against RefSeq RNA and the genome
+│   ├── sources/             Cached, retrying, offline-aware access to external services
 │   ├── validation/          Assayed sequences and the benchmark that can refute a rule
+│   ├── app/                 The local workbench: routes, storage, exports, browser files
 │   └── view/                View model and the self-contained HTML browser
 ├── docs/
 │   ├── adr/                 Architecture decision records
 │   ├── scientific/          Legacy inventory, rule provenance, validation records
 │   ├── architecture/        Component and data-flow documentation
-│   └── development/         Environment and workflow notes
+│   └── development/         Environment, workflow notes and how to publish a release
 ├── tests/                   Unit, regression, strand and integration tests
 └── pyproject.toml           Package metadata and tooling configuration
 ```
@@ -411,7 +456,7 @@ The page carries its own data, so it can be mailed or committed beside a manuscr
 
 ### Configuration
 
-Everything is optional and `.env.example` documents all of it — a test asserts that file and the
+Everything is optional and `.env.example` documents all of it. A test asserts that file and the
 code name the same set of variables, so neither can drift from the other.
 
 | Variable | Effect |
@@ -419,7 +464,7 @@ code name the same set of variables, so neither can drift from the other.
 | `SARNA_CONTACT_EMAIL` | Sent to Ensembl in the `User-Agent`, as their usage guidance asks. Unset sends the tool's name and purpose without an address; the placeholder in `.env.example` counts as unset. |
 | `SARNA_CACHE_DIR` | Cache root, default `.cache`. On WSL keep it off `/mnt/c`. |
 | `SARNA_OFFLINE` | Refuse every external lookup and serve only cached responses, so a recorded run cannot quietly re-fetch a changed annotation. A cache miss fails naming what was missing. |
-| `SARNA_ANCHORS` | Extra promoter anchors — a `.toml` file or a directory of them. |
+| `SARNA_ANCHORS` | Extra promoter anchors, as a `.toml` file or a directory of them. |
 | `SARNA_CELL_LINES` | Extra cell lines, each declaring evidence along three axes. |
 | `SARNA_AF22_DIR` | Where the AF22 bigWigs live, default `~/af22_data`. Absence is normal; chromatin then reports unavailable. |
 
@@ -428,13 +473,13 @@ and never silently replace a shipped entry.
 
 ## Licence
 
-**Apache License 2.0** — see [`LICENSE`](LICENSE). Copyright 2026 Joep Vondervoort.
+**Apache License 2.0**, see [`LICENSE`](LICENSE). Copyright 2026 Joep Vondervoort.
 
 Bundled data keep their own terms, listed in [`NOTICE`](NOTICE):
 
 | Bundled asset | Terms |
 |---|---|
-| JASPAR CORE subset | CC BY 4.0 — redistribution and commercial use permitted with attribution |
+| JASPAR CORE subset | CC BY 4.0, redistribution and commercial use permitted with attribution |
 | Chapter 4 screening dataset | From a publicly defended thesis; redistributed here under Apache-2.0 |
 | Promoter anchors, cell-line registry | Compiled for this project; Apache-2.0 |
 

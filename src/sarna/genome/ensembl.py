@@ -1,7 +1,7 @@
 """Ensembl REST client: gene symbol to transcript to TSS to promoter.
 
-This is the adapter that makes Workflow A possible — a researcher types `SCN1A` and gets a
-promoter — and it is the boundary where three silent assumptions in the legacy pipeline are
+This is the adapter that makes Workflow A possible (a researcher types `SCN1A` and gets a
+promoter) and it is the boundary where three silent assumptions in the legacy pipeline are
 turned into explicit, checked decisions.
 
 **The assembly is named, not inherited.** Ensembl's main endpoint serves GRCh38 and a separate
@@ -723,8 +723,8 @@ def anchor_for_transcript(transcript: Transcript) -> PromoterAnchor:
 def _is_mane_select(entry: Mapping[str, Any]) -> bool:
     """Return whether an Ensembl transcript record is MANE Select.
 
-    Ensembl has reported this in more than one shape over time — a top-level ``is_mane`` flag and
-    an ``MANE`` list of annotations — so both are checked rather than relying on the current one.
+    Ensembl has reported this in more than one shape over time (a top-level ``is_mane`` flag and
+    an ``MANE`` list of annotations) so both are checked rather than relying on the current one.
     """
     if entry.get("is_mane") in (True, 1, "1"):
         return True

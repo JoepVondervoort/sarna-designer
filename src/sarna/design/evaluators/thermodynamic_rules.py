@@ -7,7 +7,7 @@ direction; the tie-break reports its magnitude for ordering candidates that are 
 
 **Units are converted, not assumed.** The threshold parameter is stated in kcal/mol, but the
 legacy table's values are in kJ/mol. Comparing a kcal threshold against a kJ difference would be
-wrong by a factor of 4.184 — invisible at the default threshold of 0.0, where only the sign
+wrong by a factor of 4.184, invisible at the default threshold of 0.0, where only the sign
 matters, and silently wrong for any other value. The threshold is therefore converted into
 whichever unit the selected table uses.
 

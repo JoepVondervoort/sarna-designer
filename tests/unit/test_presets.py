@@ -231,8 +231,8 @@ class TestConfigShape:
 def resolved_values(entry: dict[str, Any]) -> dict[str, Any]:
     """Return a rule export entry's resolved parameter values, keyed by name.
 
-    The export carries each parameter as a self-describing object — value beside its unit, legal
-    range and description — so a value lookup is derived rather than the shape on the wire.
+    The export carries each parameter as a self-describing object (value beside its unit, legal
+    range and description) so a value lookup is derived rather than the shape on the wire.
     """
     return {p["name"]: p["value"] for p in entry["parameters"]}
 

@@ -67,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     real_gene = (
-        '<li><a href="scn1a.html">SCN1A with Wang defaults</a> — cached real promoter, '
+        '<li><a href="scn1a.html">SCN1A with Wang defaults</a>, cached real promoter, '
         'MANE Select anchor; histone tracks skipped in this preview.</li>'
         if (destination / "scn1a.html").is_file() else ""
     )
@@ -83,9 +83,9 @@ a {{color:#0f6e76;}} li {{margin:16px 0;}} code {{background:#e6e9e3;padding:2px
 and regenerated; the settings editor and saved-run workbench are still planned.</p>
 <ul>
 {real_gene}
-<li><a href="demo-default.html">Synthetic demo: Wang defaults</a> — all default settings,
+<li><a href="demo-default.html">Synthetic demo: Wang defaults</a> (all default settings,
 with location-dependent checks explicitly unavailable.</li>
-<li><a href="demo-custom.html">Synthetic demo: custom settings</a> — upper GC bound 65%,
+<li><a href="demo-custom.html">Synthetic demo: custom settings</a>) upper GC bound 65%,
 position-19 as a preference, TSS window deliberately off. See the recorded custom departures.</li>
 </ul>
 <p>The two synthetic pages use identical DNA. The custom page changes three settings together;

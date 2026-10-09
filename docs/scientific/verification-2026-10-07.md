@@ -66,7 +66,7 @@ from the model's own verdict.
 
 **This check was found to be vacuous and was fixed.** Planting a wrong pairing table
 (`G→G`, `C→C`) still produced PASS, because the assertion only required *drawn* rungs to be real
-pairs — and a wrong table draws fewer rungs rather than wrong ones. It now requires a rung exactly
+pairs, and a wrong table draws fewer rungs rather than wrong ones. It now requires a rung exactly
 where the bases pair, in both directions, and re-planting the same defect fails with
 "column 0 pairs G with C (a real pair) but did not draw a rung".
 
@@ -81,7 +81,7 @@ strand. `tests/network/test_ensembl_live.py`, run live:
 - **CHD2** (plus strand): likewise, with the flip correctly *not* applied.
 - TSS-relative spans agree with genomic coordinates, which are computed independently of them.
 
-All 11 live tests pass, in 11 minutes. This is the test that could catch defect B1 — a sign error
+All 11 live tests pass, in 11 minutes. This is the test that could catch defect B1, a sign error
 in `genomic_interval`, `offset_of` or `span_of` produces candidates that are internally consistent,
 pass every rule, export cleanly and point at the wrong DNA.
 

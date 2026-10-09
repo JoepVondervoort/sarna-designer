@@ -5,7 +5,7 @@ including the P21 control that works reliably in HeLa, and the discussion propos
 chromatin is more restrictive. The AF22 histone tracks (GSE108506) make that testable per locus.
 
 The housekeeping promoters are not decoration. Without GAPDH and ACTB showing strong H3K4me3, a
-null result at a target promoter is indistinguishable from the adapter reading the wrong place —
+null result at a target promoter is indistinguishable from the adapter reading the wrong place,
 and it would be reading the wrong place by about 856 kb, since the tracks are GRCh37 and the
 engine is GRCh38 (defect B15).
 
@@ -68,7 +68,7 @@ def main() -> int:
     )
     print("Tracks are GRCh37/hg19; queries are GRCh38 and converted per request.\n")
 
-    print("Positive controls — these must be strongly marked or nothing below means anything:")
+    print("Positive controls, these must be strongly marked or nothing below means anything:")
     _table(reader, client, CONTROLS)
 
     print("\nTarget promoters:")
@@ -86,7 +86,7 @@ def main() -> int:
         folds = []
         for mark in REPORTED:
             signal = profile.signal(mark)
-            folds.append(f"{signal.fold_over_background:9.2f}x" if signal else "        —")
+            folds.append(f"{signal.fold_over_background:9.2f}x" if signal else ", ")
         verdict = "open" if profile.activating_marks else "closed"
         print(f"  {label:40s} " + " ".join(folds) + f"   {verdict}")
 
@@ -123,7 +123,7 @@ def _table(reader: Af22ChromatinReader, client: EnsemblClient, symbols: tuple[st
         folds = []
         for mark in REPORTED:
             signal = profile.signal(mark)
-            folds.append(f"{signal.fold_over_background:9.2f}x" if signal else "        —")
+            folds.append(f"{signal.fold_over_background:9.2f}x" if signal else ", ")
         verdict = "open" if profile.activating_marks else "CLOSED"
         print(f"  {symbol:10s} " + " ".join(folds) + f"   {verdict}")
 

@@ -183,7 +183,7 @@ class TestBlockedLookupsAreACacheAndNotAChangeOfAnswer:
 
     Snapping those queries to a grid is only legitimate if it is invisible in the result. These
     tests pin that: the same hits, placed through the cache and placed directly, must agree
-    exactly — and the cache must actually save requests, measured rather than asserted.
+    exactly, and the cache must actually save requests, measured rather than asserted.
     """
 
     @staticmethod

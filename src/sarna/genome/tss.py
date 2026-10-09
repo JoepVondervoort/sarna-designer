@@ -56,7 +56,7 @@ class TssPosition:
     def __str__(self) -> str:
         """Return the position with an explicit sign, e.g. ``-347`` or ``+1``.
 
-        The sign is the information — it says which side of the TSS the position is on — so it is
+        The sign is the information (it says which side of the TSS the position is on) so it is
         never omitted for downstream positions.
         """
         return f"{self.value:+d}"

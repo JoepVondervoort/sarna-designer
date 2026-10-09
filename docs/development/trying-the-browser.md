@@ -129,12 +129,12 @@ pages: **Current multi-promoter workbench** and **Remaining continuation**.
 
 Page one is the dataflow as built: input, reference choice, one Python run per reference, saved
 local comparison, the opt-in off-target screen, and the order-ready duplex that the exports are
-written from. The amber boxes are the only place anything leaves the machine — pressing the
+written from. The amber boxes are the only place anything leaves the machine (pressing the
 screening button sends candidate 19-mers to NCBI, and nothing else does. On page two, green
 marks work that is finished.
 
 [website-flow.svg](../architecture/website-flow.svg) is a browser-viewable preview, and it is
-**generated** — edit the `.drawio` and re-run:
+**generated**) edit the `.drawio` and re-run:
 
 ```bash
 .venv/bin/python scripts/render_flow_diagram.py

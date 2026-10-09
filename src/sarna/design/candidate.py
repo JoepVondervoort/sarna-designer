@@ -2,7 +2,7 @@
 
 A candidate is the unit a researcher reads, so it carries the whole evaluation rather than a
 summary of it: every rule's outcome, reason and measurements, the per-table guide predictions, and
-the arithmetic behind its rank. Nothing here is computed again later for display — if the
+the arithmetic behind its rank. Nothing here is computed again later for display, if the
 interface shows it, this object already said it.
 
 The design follows from two commitments made earlier:
@@ -139,7 +139,7 @@ class Candidate:
     def evaluated_preference_points(self) -> int:
         """Return how many preferences could be evaluated at all.
 
-        The honest denominator where some preference could not be checked — a candidate at the
+        The honest denominator where some preference could not be checked, a candidate at the
         promoter's 3' edge has no flank to read, and scoring those positions zero would silently
         penalise the last candidates of every promoter.
         """

@@ -321,8 +321,8 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
 
   /* ---------------- the rules this run applied ----------------
      Rule records appear once in the configuration and each candidate's results reference them by
-     id, so everything that explains a verdict — the citation, the evidence class, the reasoning,
-     every threshold with its unit and legal range, and the options not chosen — is one lookup
+     id, so everything that explains a verdict (the citation, the evidence class, the reasoning,
+     every threshold with its unit and legal range, and the options not chosen) is one lookup
      away rather than repeated on every result. */
   const RULES = Object.fromEntries((DATA.configuration.rules || []).map((r) => [r.id, r]));
 
@@ -339,7 +339,7 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
 
   /* Read from the configuration that produced these candidates, never assumed. These bounds used
      to be hardcoded to Wang's -1000..-100, so a run using the thesis's -2000..0 option or the
-     strict preset's -500..-200 drew a band contradicting its own rules — and captioned it as
+     strict preset's -500..-200 drew a band contradicting its own rules, and captioned it as
      "the window the rules admit". A rule the run did not apply yields null and draws nothing. */
   function windowOf(ruleId, startName, endName) {
     const start = valueOf(ruleId, startName), end = valueOf(ruleId, endName);
@@ -465,7 +465,7 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
     }
     for (const p of lay(items, width, 2)) {
       html += `<div class="feat ${p.item.clipped ? "clipped" : ""}" data-detail="${esc(p.item.detail)}"
-        title="${esc(p.item.label + " — " + p.item.detail)}"
+        title="${esc(p.item.label + ": " + p.item.detail)}"
         style="left:${p.left}px;width:${p.right - p.left}px;top:${16 + p.row * 17}px;height:15px;background:${REG_COLOUR[p.item.kind] || "var(--na)"}">${esc(p.item.label)}</div>`;
     }
     t.innerHTML = html;
@@ -558,12 +558,12 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
       });
     const rows = ranked.slice(0, 400).map((c) => {
       const rejected = (c.excluded_by || []).length > 0;
-      const span = c.tss_span ? `${signed(c.tss_span[0])} to ${signed(c.tss_span[1])}` : "—";
+      const span = c.tss_span ? `${signed(c.tss_span[0])} to ${signed(c.tss_span[1])}` : "n/a";
       const max = c.max_preference_points ?? 0;
       const meter = Array.from({ length: max }, (_, i) =>
         `<i class="${i < c.preference_points ? "on" : ""}"></i>`).join("");
       return `<tr data-id="${esc(c.id)}" aria-selected="${state.selected === c.id}">
-        <td class="n">${c.rank == null ? "—" : c.rank}</td>
+        <td class="n">${c.rank == null ? "n/a" : c.rank}</td>
         <td class="mono">${esc(c.id)}</td>
         <td class="num">${esc(span)}</td>
         <td class="n num">${c.gc_percent}</td>
@@ -809,7 +809,7 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
     }
 
     return `<section class="card"><header><h2>${esc(c.id)}</h2>
-      <span class="eyebrow">${rejected ? "rejected" : "rank " + (c.rank || "—")}</span></header>
+      <span class="eyebrow">${rejected ? "rejected" : "rank " + (c.rank || "n/a")}</span></header>
       <div class="body scroll">${body}</div></section>`;
   }
 
@@ -836,7 +836,7 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
     if (!chrom) return "";
     if (!chrom.readable) {
       return `<p class="cellnote"><b>Chromatin state could not be read.</b> ${esc(chrom.problem || "")}
-        — ${esc(chrom.problem_detail || "")}</p>`;
+        ${esc(chrom.problem_detail || "")}</p>`;
     }
     const rows = (chrom.signals || []).map((s) => `<div class="markrow">
       <span class="mk" title="${esc(s.interpretation)}">${esc(s.mark)}</span>
@@ -902,7 +902,7 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
       <td><b>${esc(s.motif)}</b> <span class="mono" style="font-size:.72rem;color:var(--ink-soft)">${esc(s.matrix_id)}</span></td>
       <td class="n num">${s.sites}</td>
       <td class="n num">${s.expected}</td>
-      <td class="n num">${s.enrichment == null ? "—" : s.enrichment.toFixed(2) + "×"}</td>
+      <td class="n num">${s.enrichment == null ? "n/a" : s.enrichment.toFixed(2) + "×"}</td>
       <td>${s.exceeds_chance ? `<span class="pill pass">above chance</span>` : `<span class="pill na">chance</span>`}</td>
     </tr>`).join("");
     return `<section class="card"><header><h2>Motifs scanned</h2>
@@ -942,7 +942,7 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
     return `<footer class="src">
       <p><b>Provenance.</b> Every rule above carries its citation and evidence class, the reasoning
       behind it, the thresholds it was judged against with their units and legal ranges, and the
-      sourced alternatives not chosen — see <i>Rules and their sources</i>, or open any verdict.
+      sourced alternatives not chosen. See <i>Rules and their sources</i>, or open any verdict.
       The resolved configuration is embedded in this page's data rather than named by preset,
       because a preset's meaning can change between versions.</p>
       ${caveat ? `<p><b>Regulatory annotation.</b> ${esc(caveat.provenance)}. ${esc(caveat.summary)}

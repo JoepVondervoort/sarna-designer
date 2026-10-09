@@ -24,8 +24,33 @@ def transcript_record(transcript: Transcript) -> dict[str, Any]:
     }
 
 
+def reference_priority(transcript: Transcript) -> tuple[int, int, int, str]:
+    """Order transcripts so the reference most researchers want is offered first.
+
+    MANE Select leads, because it is the one reference this project either picks or refuses to
+    pick (ADR 0012); Ensembl's canonical choice follows, then protein-coding transcripts, then
+    the rest by identifier so the order is stable across lookups instead of following whatever
+    order the API happened to return.
+
+    This is **presentation order only**. Every annotated transcript stays selectable, and being
+    first does not make an annotated coordinate a measured start site: chapter 2's own SCN1A
+    hits came from a distal region with no Ensembl TSS within 5.5 kb.
+    """
+    return (
+        0 if transcript.is_mane_select else 1,
+        0 if transcript.is_canonical else 1,
+        0 if transcript.is_protein_coding else 1,
+        transcript.ensembl_id,
+    )
+
+
 def tss_groups(transcripts: tuple[Transcript, ...]) -> list[dict[str, Any]]:
     """Group identical contig/strand/TSS coordinates; nearby starts remain distinct.
+
+    Groups come back in the order their first transcript appears, and each group lists its
+    transcripts in the order given, so passing transcripts already sorted by
+    :func:`reference_priority` puts the MANE Select group (and the MANE transcript inside it)
+    at the top without this function needing to know what a preferred reference is.
 
     These groups describe annotation coordinates, not experimentally verified promoters.
     Transcript identities remain available for deliberate reference selection.
@@ -45,12 +70,13 @@ def tss_groups(transcripts: tuple[Transcript, ...]) -> list[dict[str, Any]]:
 def gene_overview(gene: Gene, transcripts: tuple[Transcript, ...]) -> dict[str, Any]:
     """Freeze complete reference choices and their source beside every gene result."""
     mane = [transcript for transcript in transcripts if transcript.is_mane_select]
+    ordered = tuple(sorted(transcripts, key=reference_priority))
     return {
         "symbol": gene.symbol, "id": gene.ensembl_id, "description": gene.description,
         "assembly": str(gene.interval.assembly), "strand": str(gene.strand),
         "contig": gene.contig, "start": gene.interval.start, "end": gene.interval.end,
-        "transcripts": [transcript_record(transcript) for transcript in transcripts],
-        "tss_groups": tss_groups(transcripts),
+        "transcripts": [transcript_record(transcript) for transcript in ordered],
+        "tss_groups": tss_groups(ordered),
         "default_transcript": mane[0].ensembl_id if len(mane) == 1 else None,
         "anchors": [anchor_record(anchor) for anchor in load_anchors().for_gene(gene.symbol)],
         "source": "Ensembl REST (cached responses reused when present)",

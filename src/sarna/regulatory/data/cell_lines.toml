@@ -3,7 +3,7 @@
 # Three axes, because they answer different questions and are rarely all available:
 #
 #   expression     is the target gene transcribed here at all? The first question, because a
-#                  saRNA enhances transcription from a locus that already has some — it does not
+#                  saRNA enhances transcription from a locus that already has some. It does not
 #                  switch a silent gene on.
 #   chromatin      is the promoter accessible here? Histone marks.
 #   tf_occupancy   which factors are actually bound here? ChIP-seq.

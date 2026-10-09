@@ -113,7 +113,7 @@ class AsymmetryAssessment:
         return (
             f"{measured} The 5' end is the less stable of the two, which is the 5' end of the "
             f"sense strand itself. {_MECHANISM}, so the sense strand is predicted to be the "
-            f"guide — the undesirable outcome, since the antisense strand is the one intended to "
+            f"guide, the undesirable outcome, since the antisense strand is the one intended to "
             f"engage the promoter."
         )
 
@@ -219,7 +219,7 @@ class AsymmetryComparison:
             for assessment in self.assessments
         )
         return (
-            f"The parameter sets disagree about which strand becomes the guide — {verdicts}. "
+            f"The parameter sets disagree about which strand becomes the guide, {verdicts}. "
             f"The asymmetry is small enough that the choice of parameters decides the answer, "
             f"so treat this candidate's strand selection as uncertain."
         )

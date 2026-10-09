@@ -1,4 +1,4 @@
-# ADR 0006 — Rank by counting criteria met, not by a weighted sum
+# ADR 0006: Rank by counting criteria met, not by a weighted sum
 
 - **Status**: Accepted
 - **Date**: 2026-10-06
@@ -15,7 +15,7 @@ The legacy Scanner ranks with
 score = 0.01·Δstab + 1000·pos18 + 1000·pos7 + 1·flank
 ```
 
-Three things are wrong with it. The `1000 / 1000 / 1 / 0.01` weights are **local invention** —
+Three things are wrong with it. The `1000 / 1000 / 1 / 0.01` weights are **local invention**,
 Wang et al. 2015 publishes no weights for any criterion. The weights **collide**: `pos18=2,
 pos7=0` ties `pos18=1, pos7=1` at 2000, so the tiers the weights were presumably chosen to
 create do not cleanly exist. And the single dominant term `pos7` is **unsourced**: position 7
@@ -54,7 +54,7 @@ that excluded it. These are not scored; they are admission requirements.
 | Nucleotide 19 is A | Table 1 |
 | Thermodynamic asymmetry satisfied | Table 1; Schwarz 2003, Khvorova 2003 |
 
-### 2. Preference count — the rank
+### 2. Preference count: the rank
 
 Each preference met contributes **exactly one point. All preferences are weighted equally.**
 Range 0–7.
@@ -77,7 +77,7 @@ derives from the paper's narrative preference for that sub-region (see
 
 **Why equal weights:** the evidence provides no basis for ranking these preferences against one
 another. Assigning unequal weights would be inventing an effect size the literature does not
-report — precisely what produced the legacy `1000/1000/1/0.01` artefact. Equal weighting is a
+report, precisely what produced the legacy `1000/1000/1/0.01` artefact. Equal weighting is a
 deliberate, stated position, not a default.
 
 ### 3. Tie-breaking
@@ -98,7 +98,7 @@ number is what made the legacy score uninterpretable.
 
 The position-7 rule stays where [ADR 0002](0002-wang-2015-default-legacy-preset.md) put it:
 evidence class `exploratory`, off by default in `wang-2015`. If enabled it appears as an
-eighth preference worth one point, like every other — never a dominant term.
+eighth preference worth one point, like every other, never a dominant term.
 
 ## Consequences
 

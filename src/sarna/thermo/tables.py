@@ -42,7 +42,7 @@ def _expand(unique: Mapping[str, float], alphabet: Nucleic) -> dict[str, float]:
 
 
 # --------------------------------------------------------------------------------------
-# RNA — Xia et al. 1998. The recommended default.
+# RNA. Xia et al. 1998. The recommended default.
 # --------------------------------------------------------------------------------------
 
 _XIA_1998_UNIQUE: Mapping[str, float] = {
@@ -81,7 +81,7 @@ RNA_XIA_1998 = NearestNeighbourTable(
 
 
 # --------------------------------------------------------------------------------------
-# DNA — SantaLucia 1998 unified parameters, in kcal/mol.
+# DNA. SantaLucia 1998 unified parameters, in kcal/mol.
 # --------------------------------------------------------------------------------------
 
 _SANTALUCIA_1998_UNIQUE: Mapping[str, float] = {
@@ -154,7 +154,7 @@ LEGACY_DNA_KJ = NearestNeighbourTable(
     alphabet=Nucleic.DNA,
     unit="kJ/mol",
     provenance=Provenance.legacy_script(
-        "sarna_promoter_scanner.py:23-32 — SantaLucia 1998 DNA values multiplied by 4.184"
+        "sarna_promoter_scanner.py:23-32. SantaLucia 1998 DNA values multiplied by 4.184"
     ),
     stacks=_LEGACY_STACKS,
     initiation=0.0,

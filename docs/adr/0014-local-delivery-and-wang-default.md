@@ -1,4 +1,4 @@
-# ADR 0014 — Local delivery with Wang as the default
+# ADR 0014: Local delivery with Wang as the default
 
 - **Status**: Accepted; local application and packaging pending
 - **Date**: 2026-10-07

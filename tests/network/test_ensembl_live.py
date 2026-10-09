@@ -2,7 +2,7 @@
 
 These exist because the offline tests cannot catch the one class of failure that matters most
 here: Ensembl changing the shape or content of a response. The MANE annotation bug was exactly
-that — `expand=1` alone returns no MANE field, so every gene looked as though it had no MANE
+that, `expand=1` alone returns no MANE field, so every gene looked as though it had no MANE
 Select transcript, and no amount of recorded-payload testing would have found it.
 
 Run with::
@@ -105,13 +105,13 @@ class TestEveryDesignedTargetIsWhereItSaysItIs:
 
     Every other test in this project asks the engine to agree with the engine. This one takes a
     finished design, reads the genomic interval the candidate reports, asks Ensembl separately
-    what sequence lives there, and requires it to be the target site — reverse-complemented
+    what sequence lives there, and requires it to be the target site, reverse-complemented
     when the gene is on the minus strand.
 
     It is the only test that can catch an off-by-one or an inverted strand in
     ``Promoter.genomic_interval``, ``offset_of`` and ``span_of``, which CLAUDE.md names as
     defect B1's home. A sign error there produces candidates that are internally consistent,
-    pass every rule, export cleanly, and point at the wrong piece of DNA — the exact failure
+    pass every rule, export cleanly, and point at the wrong piece of DNA, the exact failure
     this project exists to prevent, and one no amount of recorded-payload testing would reveal.
 
     SCN1A is deliberate: it is on the minus strand, so the flip is exercised rather than

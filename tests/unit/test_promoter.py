@@ -2,7 +2,7 @@
 
 This is the defect-B1 surface. The legacy EpiMarker asked Ensembl for a minus-strand region,
 received the reverse complement, then added the match index to the region start as though it
-were a forward offset — so every minus-strand position and every TSS-relative distance it
+were a forward offset, so every minus-strand position and every TSS-relative distance it
 reported was wrong. The mapping tested here is the one place that arithmetic happens, and the
 minus-strand cases below are written out with explicit coordinates rather than derived, so that
 a regression cannot hide behind the same formula it broke.

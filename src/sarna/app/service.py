@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from sarna import __version__, settings
+from sarna.app.expression_view import expression_overview, unavailable
 from sarna.app.models import DesignRequest
 from sarna.app.references import (
     anchor_record,
@@ -19,6 +20,7 @@ from sarna.app.store import RunStore
 from sarna.design.candidate import Candidate
 from sarna.design.order import CSV_COLUMNS, csv_row, order_for
 from sarna.design.pipeline import design_sarnas
+from sarna.expression.gtex import DEFAULT_DATASET, GtexClient, GtexError
 from sarna.genome.anchors import PromoterAnchor, load_anchors
 from sarna.genome.coordinates import GenomicInterval
 from sarna.genome.ensembl import (
@@ -43,6 +45,7 @@ from sarna.rules.catalog import CATALOGUE
 from sarna.rules.resolved import ResolvedRule
 from sarna.rules.results import RuleOutcome
 from sarna.sequence.nucleic import NucleicSequence
+from sarna.sources.json_http import SourceCacheMissError, SourceError
 from sarna.validation.ranking_performance import performance_summary
 from sarna.view.promoter_view import PromoterView, alternative_tss_spans, cell_panels_for
 
@@ -89,6 +92,7 @@ class DesignService:
     def __init__(
         self, data_dir: Path, client_factory: Callable[[bool], EnsemblClient] | None = None,
         blast_factory: Callable[[], BlastClient] | None = None,
+        gtex_factory: Callable[[bool], GtexClient] | None = None,
     ) -> None:
         """Use an injectable client for recorded-source tests and cached/offline requests.
 
@@ -105,6 +109,14 @@ class DesignService:
                                           timeout=15, backoff_seconds=0.5)
         )
         self.blast_factory = blast_factory or BlastClient
+        self.gtex_factory = gtex_factory or (
+            lambda offline: GtexClient(dataset_id=DEFAULT_DATASET,
+                                       cache_dir=settings.cache_dir("gtex"),
+                                       offline=None if settings.is_offline() else offline,
+                                       timeout=15, backoff_seconds=0.5)
+        )
+        """How expression evidence is fetched. Injectable for the same reason as
+        ``client_factory``: a test of this route must not reach the GTEx Portal."""
         self.poll_sleep: Callable[[float], None] = time.sleep
         """How a screening waits between polls. The route cannot pass ``sleep`` to ``screen``,
         so a test exercising the route would otherwise spend NCBI's real poll interval."""
@@ -206,6 +218,34 @@ class DesignService:
         gene = self._gene(client, symbol)
         transcripts = client.transcripts(gene)
         return gene_overview(gene, transcripts)
+
+    def expression(self, symbol: str, offline: bool = False) -> dict[str, Any]:
+        """Return per-tissue expression evidence for every transcript of one gene.
+
+        A **separate** request from :meth:`lookup`, deliberately. Gene lookup is on the path to
+        designing anything and GTEx is not: folding this in would make every lookup wait on a
+        second service and fail when that service is down. The page asks for this after it has
+        already offered the transcripts, so the picker works whether or not the evidence
+        arrives.
+
+        A failure comes back as a description of the failure rather than as an exception,
+        because the page has to be able to say "evidence not retrieved" beside options it is
+        already showing. The one exception is a gene Ensembl itself cannot resolve, which is
+        the caller's question being wrong rather than evidence being missing.
+        """
+        client = self.client_factory(offline)
+        gene = self._gene(client, symbol)
+        transcripts = client.transcripts(gene)
+        identifiers = [transcript.ensembl_id for transcript in transcripts]
+        try:
+            profile = self.gtex_factory(offline).expression_for(gene.ensembl_id, identifiers)
+        except SourceCacheMissError as error:
+            return unavailable(str(error), "offline-cache-miss")
+        except GtexError as error:
+            return unavailable(str(error), "gtex-no-record")
+        except SourceError as error:
+            return unavailable(str(error), "gtex-unavailable")
+        return expression_overview(profile)
 
     def run(self, run_id: str, request: DesignRequest) -> None:
         """Execute a submitted request, publishing progress and preserving errors."""

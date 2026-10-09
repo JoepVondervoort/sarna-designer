@@ -3,7 +3,7 @@
 `docs/scientific/empirical-validation.md` names this as the single most valuable addition to the
 dataset and the only one that needs no new experiments. The chapter 4 appendix tabulates target
 sequences without coordinates, so the TSS windows, CpG-island overlap and the 3' flank preferences
-report not-applicable for all 125 — five of the seven preferences and three of the gates.
+report not-applicable for all 125, five of the seven preferences and three of the gates.
 
 Each 19-mer is searched for in its gene's locus plus padding, in both orientations, and its offset
 is computed against **every** annotated TSS rather than an assumed one. A design is only accepted

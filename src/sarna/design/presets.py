@@ -19,8 +19,8 @@ of it.
 
 ``legacy-scanner``
     Reproduces the original Promoter Scanner's filtering closely, including its defects.
-    **Not bit-for-bit**, and the two exceptions are declared on the preset itself — in
-    :attr:`Preset.divergences` — rather than only in an ADR, so that they reach an export and the
+    **Not bit-for-bit**, and the two exceptions are declared on the preset itself (in
+    :attr:`Preset.divergences`) rather than only in an ADR, so that they reach an export and the
     interface rather than living where nobody reads them at the bench.
 """
 
@@ -165,8 +165,8 @@ LEGACY_SCANNER = Preset(
     divergences=(
         "Position 1 G/C is scored as a preference here, as Wang et al. have it, but the "
         "original script enforces it as a requirement through its `endbase` check (finding "
-        "B16). This preset therefore admits candidates the original rejected — every candidate "
-        "whose position 1 is A or T — so its candidate set is wider than the original's, not "
+        "B16). This preset therefore admits candidates the original rejected (every candidate "
+        "whose position 1 is A or T) so its candidate set is wider than the original's, not "
         "merely ordered differently.",
         "Candidates are ranked by counting criteria met (ADR 0006), not by the original's "
         "weighted sum of 0.01 x stability difference + 1000 x position 18 + 1000 x position 7 "
@@ -232,8 +232,8 @@ EXPLORATORY = Preset(
     description=(
         "Wang et al. 2015 plus optional criteria from the siRNA design literature (Reynolds et "
         "al. 2004, Ui-Tei et al. 2004) and from thesis chapter 4's positional analysis. Admits "
-        "exactly the same candidates as the default — every added rule is a preference, so none "
-        "can exclude anything — and reorders them. Use it to see whether the hypotheses would "
+        "exactly the same candidates as the default (every added rule is a preference, so none "
+        "can exclude anything) and reorders them. Use it to see whether the hypotheses would "
         "have changed your shortlist; do not use it to justify a design."
     ),
     rule_ids=(*_DEFAULT_RULE_IDS, *_EXPLORATORY_ADDED),

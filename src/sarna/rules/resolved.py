@@ -5,7 +5,7 @@ evaluator's life boring: by the time one runs, every parameter has a value, ever
 checked against the parameter's own type and bounds, and asking for a value by the wrong type
 raises instead of silently coercing.
 
-The alternative — handing evaluators the raw override mapping — would scatter "what if this is
+The alternative (handing evaluators the raw override mapping) would scatter "what if this is
 missing" and "what if this is out of range" across ten rules, which is where a preset typo turns
 into a default quietly left in place.
 

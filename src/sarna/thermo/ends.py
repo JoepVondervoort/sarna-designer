@@ -2,8 +2,8 @@
 
 The quantity that decides which strand RISC loads is not the stability of the whole duplex but of
 its two **ends**. Schwarz et al. 2003 report that the unwinding helicase reads roughly four bases
-at a time, which is why the legacy script defines an end as four nucleotides — three
-nearest-neighbour stacks — and the default here is the same.
+at a time, which is why the legacy script defines an end as four nucleotides (three
+nearest-neighbour stacks) and the default here is the same.
 
 Energies are sums of stacking free energies from a chosen :class:`~sarna.thermo.model.
 NearestNeighbourTable` and are therefore negative: a **more negative** value is a more stable end.

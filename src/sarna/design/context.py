@@ -2,9 +2,9 @@
 
 ADR 0007 settles the evaluator contract: every rule is a pure function of a
 :class:`CandidateContext` and its resolved parameters. The context exists so that one uniform
-signature serves rules with very different appetites — ``gc-content`` reads only the target,
+signature serves rules with very different appetites (``gc-content`` reads only the target,
 ``flank-20-au`` needs the promoter beyond it, ``tss-window`` needs a strand-aware distance to a
-start site — and so that promoter-level work happens once per promoter rather than once per rule
+start site) and so that promoter-level work happens once per promoter rather than once per rule
 per window.
 
 Two conventions are enforced here rather than in each evaluator:
@@ -21,7 +21,7 @@ here would let a sequence-only run reject every candidate for a check that never
 CpG islands are passed **in** rather than computed here. They are a property of the whole
 promoter, so detecting them once per promoter and sharing the result across every candidate keeps
 the scan linear; computing them per candidate would make it quadratic. Passing ``None`` means
-they were not computed, which is distinct from an empty tuple meaning none were found — a rule
+they were not computed, which is distinct from an empty tuple meaning none were found, a rule
 reading ``None`` reports not-applicable rather than passing.
 
 Not yet present, deliberately: the thermodynamic duplex features. Those are assessed per
@@ -133,7 +133,7 @@ class CandidateContext:
 
         Raises:
             IndexError: If the position lies outside the target. Positions beyond the target are
-                the flank's business — see :meth:`flank_base_at`.
+                the flank's business, see :meth:`flank_base_at`.
         """
         return self.target.base_at(position)
 

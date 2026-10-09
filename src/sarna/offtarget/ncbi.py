@@ -6,12 +6,12 @@ Three things about this interface drive the design.
 and E-value threshold return *nothing*, which is indistinguishable from a clean result and is
 exactly the misreading this project exists to prevent. The web interface calls the right
 configuration ``blastn-short``; ``TASK`` is not a documented URL API parameter, so the
-configuration is reproduced explicitly — ``MEGABLAST=off``, ``WORD_SIZE=7``, a generous
+configuration is reproduced explicitly, ``MEGABLAST=off``, ``WORD_SIZE=7``, a generous
 ``EXPECT`` and low-complexity filtering off. :class:`~sarna.offtarget.models.SearchParameters`
 records what was actually sent, so a reader never has to guess.
 
 **It is asynchronous by nature.** ``CMD=Put`` returns a request id; results arrive later. That
-suits the accepted design — the researcher reads their candidates while the search runs — and it
+suits the accepted design (the researcher reads their candidates while the search runs) and it
 is why nothing here blocks: :meth:`submit` and :meth:`poll` are separate calls.
 
 **NCBI's usage policy is a shared resource, not a rate limit to tune.** Exceeding it can get the
@@ -64,7 +64,7 @@ _ENTITY_DECLARATION = re.compile(rb"<!ENTITY", re.IGNORECASE)
 """The actual attack vector, and the only one worth refusing.
 
 NCBI's real replies open with a ``<!DOCTYPE BlastOutput PUBLIC ... NCBI_BlastOutput.dtd>``, so
-refusing every DOCTYPE — as an earlier version of this guard did — rejects every genuine report.
+refusing every DOCTYPE (as an earlier version of this guard did) rejects every genuine report.
 What makes "billion laughs" and quadratic blowup possible is an *internal entity declaration*;
 ``xml.etree`` never fetches an external DTD, so a bare DOCTYPE expands nothing."""
 
@@ -270,8 +270,8 @@ def parse_hits(raw: bytes, max_hits: int = 500) -> tuple[OffTargetHit, ...]:
     """Parse BLAST XML into hits, attributing each to the candidate that produced it.
 
     Args:
-        raw: The XML body, treated as untrusted input. A DOCTYPE is accepted — every
-            genuine NCBI report has one — but an entity declaration is not.
+        raw: The XML body, treated as untrusted input. A DOCTYPE is accepted (every
+            genuine NCBI report has one) but an entity declaration is not.
         max_hits: Stop after this many alignments, so one pathological query cannot produce an
             unbounded result.
 

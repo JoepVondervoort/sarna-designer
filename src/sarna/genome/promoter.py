@@ -16,9 +16,9 @@ that pipeline reported was wrong.
 
 Both anchors are optional and independent:
 
-- **No interval** — a pasted sequence with no genomic context (Workflow B). Candidates are still
+- **No interval** (a pasted sequence with no genomic context (Workflow B). Candidates are still
   designed; coordinate-dependent annotations are unavailable.
-- **No TSS** — the promoter's position relative to a start site is unknown, so the TSS window
+- **No TSS**) the promoter's position relative to a start site is unknown, so the TSS window
   rules report ``not-applicable`` rather than passing (ADR 0007).
 """
 
@@ -49,7 +49,7 @@ class Promoter:
 
         Raises:
             ValueError: If the sequence is not DNA, or if an interval is given whose length
-                differs from the sequence length — a mismatch that would silently shift every
+                differs from the sequence length, a mismatch that would silently shift every
                 candidate's coordinates.
         """
         if self.sequence.alphabet is not Nucleic.DNA:
@@ -180,7 +180,7 @@ class Promoter:
         """Return the promoter offset of a genomic ``coordinate``, or ``None`` if outside.
 
         The inverse of :meth:`genomic_interval`, and needed to place anything that arrives in
-        genomic coordinates — a regulatory feature, another transcript's TSS — onto a promoter
+        genomic coordinates (a regulatory feature, another transcript's TSS) onto a promoter
         held in transcript orientation. Kept here beside its inverse so the two cannot drift
         apart, and because this is the only other place strand arithmetic is allowed to live.
 

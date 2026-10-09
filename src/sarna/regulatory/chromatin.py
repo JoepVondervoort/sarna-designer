@@ -8,7 +8,7 @@ hypothesis is testable per locus rather than argued in general.
 
 **Everything here crosses an assembly boundary, which is defect B15.** The tracks are
 GRCh37/hg19; the engine is GRCh38. Measured on SCN1A's MANE Select TSS: GRCh38 chr2:166,128,019 is
-hg19 chr2:166,984,529 — **856,510 bp apart**. Reading a GRCh38 coordinate straight out of these
+hg19 chr2:166,984,529, **856,510 bp apart**. Reading a GRCh38 coordinate straight out of these
 files does not return noisy data, it returns a different gene's data, and the legacy pipeline did
 exactly that. So conversion happens here, explicitly, and four ways it can go wrong are checked
 rather than assumed:
@@ -311,7 +311,7 @@ class ChromatinProfile:
         if not self.is_readable:
             return (
                 f"Chromatin state in {self.cell_type} could not be read: "
-                f"{self.problem} — {self.problem_detail}"
+                f"{self.problem}, {self.problem_detail}"
             )
         if not self.signals:
             return f"No {self.cell_type} tracks were available to read."

@@ -12,7 +12,7 @@ pooling is the whole character of the resource and governs how it may be read:
 Both halves are enforced here rather than left to the caller. Every feature carries
 :data:`~sarna.regulatory.evidence.EvidenceKind.AGGREGATED_ANNOTATION`, which the evidence model
 forbids attaching a cell type to, and a query that finds nothing returns a
-:class:`RegulatoryAnnotation` that says so in words — `no_features_note` — rather than an empty list
+:class:`RegulatoryAnnotation` that says so in words (`no_features_note`) rather than an empty list
 a caller can quietly render as a clean promoter.
 
 Measured consequence, from `docs/scientific/scn1a-design-coordinates.md`: the Build annotates a
@@ -244,7 +244,7 @@ def promoter_support(
         ids = ", ".join(f.feature_id for f in overlapping)
         return True, (
             f"Overlaps an annotated promoter ({ids}). Independent support for this being a "
-            f"promoter, from pooled cell types — not evidence that it is active in yours."
+            f"promoter, from pooled cell types, not evidence that it is active in yours."
         )
     if annotation.is_empty:
         return False, (

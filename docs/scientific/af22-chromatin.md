@@ -2,12 +2,12 @@
 
 **Two findings, pulling in opposite directions.**
 
-All six of chapter 4's target promoters are **open** in AF22, as is the P21 positive control —
+All six of chapter 4's target promoters are **open** in AF22, as is the P21 positive control,
 H3K4me3 at 17–147× background, with H3K27me3 depleted at every one. So the chapter's proposed
 explanation for AF22's failure, that restrictive chromatin limits promoter accessibility, is **not
 supported at these loci**. The limitation lies downstream of chromatin.
 
-SCN1A is the exception, and it is closed — no mark enriched at any of its four candidate TSSs. By
+SCN1A is the exception, and it is closed: no mark is enriched at any of its four candidate TSSs. By
 the mechanism the chapter itself states, a saRNA cannot activate a locus that is not already
 transcribed, so SCN1A saRNAs screened in undifferentiated AF22 are being tested at a promoter that
 is not yet active.
@@ -19,7 +19,7 @@ adapter now exists.
 ## Why the controls come first
 
 The tracks are GRCh37/hg19; the engine is GRCh38. At SCN1A's MANE Select TSS those differ by
-**856,510 bp** — GRCh38 chr2:166,128,019 is hg19 chr2:166,984,529. Reading a GRCh38 coordinate
+**856,510 bp**. GRCh38 chr2:166,128,019 is hg19 chr2:166,984,529. Reading a GRCh38 coordinate
 straight out of these files does not return noisy data, it returns a different gene's data, and the
 legacy pipeline did exactly that.
 
@@ -48,7 +48,7 @@ makes everything below readable.
 | SCN1A | 1.15× | 2.08× | 0.92× | **closed** |
 
 Every target except SCN1A carries strong H3K4me3 and H3K27ac, and **no target is
-polycomb-repressed** — H3K27me3 is depleted at all eight, between 0.00× and 0.92×.
+polycomb-repressed**. H3K27me3 is depleted at all eight, between 0.00× and 0.92×.
 
 ### This contradicts the chapter's stated hypothesis
 
@@ -122,7 +122,7 @@ those, the null result is real and needs a different explanation.
   caught.
 - **One dataset, one line, no replicate comparison.** GSE108506 provides single tracks per mark.
 - **Absence of a mark is not silence.** A gene can be transcribed at low level without detectable
-  H3K4me3, and a 5× threshold is a convention — though nothing here sits near it, with every open
+  H3K4me3, and a 5× threshold is a convention, though nothing here sits near it, with every open
   promoter above 16× and every SCN1A position below 1.3×.
 - **Progenitors are not neurons.** Everything above describes AF22 in the proliferating state.
 

@@ -1,4 +1,4 @@
-# ADR 0015 — Local Python jobs and one UI for live and frozen workbench results
+# ADR 0015: Local Python jobs and one UI for live and frozen workbench results
 
 Date: 2026-10-07. Status: accepted implementation of the user's local, adjustable app request.
 

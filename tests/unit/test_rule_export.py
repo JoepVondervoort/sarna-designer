@@ -1,8 +1,8 @@
 """Tests for what a rule record carries into an export.
 
 ADR 0003 commits to exports that carry the rule *records*, not just the resolved values. They did
-not. ``rationale`` and ``consequence`` are required non-blank on all 26 shipped rules — the largest
-body of "why this choice" text in the project — and reached no export and no screen. Nor did a
+not. ``rationale`` and ``consequence`` are required non-blank on all 26 shipped rules (the largest
+body of "why this choice" text in the project) and reached no export and no screen. Nor did a
 parameter's unit, range or description, so a reader saw ``0.6`` with no way to know what it measured
 or what values were legal. Nor did the options, each of which carries its own provenance and a
 required statement of what choosing it costs.

@@ -5,7 +5,7 @@ An saRNA duplex carries a risk ordinary siRNA screening does not look for: it ma
 cannot see that, so genomic hits are placed against annotated TSSs here.
 
 **No threshold decides whether a hit "is" in a promoter.** This project has not defended a
-definition of promoter proximity, and inventing one — ±2 kb, say — would turn a convenience into
+definition of promoter proximity, and inventing one (±2 kb, say) would turn a convenience into
 a scientific claim. What is reported instead is the distance to the nearest annotated TSS and
 which gene it belongs to, which invents nothing. One flag is set,
 :attr:`~sarna.offtarget.models.PromoterProximity.inside_run_window`, and it says only that the

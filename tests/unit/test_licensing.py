@@ -60,7 +60,7 @@ def test_every_bundled_data_file_is_attributed_in_notice(path: Path) -> None:
 
 def test_jaspar_is_recorded_as_cc_by_four_not_the_non_commercial_licence() -> None:
     # The repository previously claimed CC BY-NC-SA 4.0. JASPAR's own about page states CC BY
-    # 4.0, so the old label was wrong *and more restrictive than reality* — it would have made
+    # 4.0, so the old label was wrong *and more restrictive than reality*, it would have made
     # users refuse permitted uses. This pins the correction in both places it is stated.
     data = json.loads(
         (ROOT / "src/sarna/regulatory/data/jaspar_core_selection.json").read_text(encoding="utf-8")

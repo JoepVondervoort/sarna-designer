@@ -1,4 +1,4 @@
-# ADR 0007 — Rule evaluators are pure functions over a single `CandidateContext`
+# ADR 0007: Rule evaluators are pure functions over a single `CandidateContext`
 
 - **Status**: Accepted
 - **Date**: 2026-10-06
@@ -43,8 +43,8 @@ needs none of the genomic fields simply does not read them.
 
 Three consequences are deliberate.
 
-**The context is built once per candidate, not once per rule.** Promoter-level work — CpG-island
-detection, which is O(n·200) in the legacy implementation (defect B7) — happens once for the
+**The context is built once per candidate, not once per rule.** Promoter-level work (CpG-island
+detection, which is O(n·200) in the legacy implementation (defect B7)) happens once for the
 promoter, not once per window per rule.
 
 **Genomic fields are optional, and a rule says so.** Workflow B (a pasted promoter with no
@@ -60,12 +60,12 @@ quietly never fires.
 
 ## Alternatives considered
 
-**Typed per-rule inputs** — each rule declaring exactly the arguments it needs. More honest
+**Typed per-rule inputs**, each rule declaring exactly the arguments it needs. More honest
 about dependencies and the smallest test setup per rule, but it needs a dispatch layer to call
 heterogeneous signatures from a generic loop, and that layer is where the "which rules ran"
 bookkeeping would get lost.
 
-**An `evaluate` method on `Rule`** — metadata and logic in one place per rule. Rejected because
+**An `evaluate` method on `Rule`**, metadata and logic in one place per rule. Rejected because
 it couples the declarative catalogue to execution and gives up importing the catalogue without
 the engine, which ADR 0003 bought on purpose.
 
@@ -75,7 +75,7 @@ the engine, which ADR 0003 bought on purpose.
   no fixtures. This is what makes the strand tests cheap enough to be exhaustive.
 - The context must be constructible without coordinates, so its genomic fields are `| None` and
   every evaluator reading them handles the `None` case explicitly.
-- `RuleResult` needs a third outcome beyond pass/fail — `not applicable` — and the ranking must
+- `RuleResult` needs a third outcome beyond pass/fail (`not applicable`) and the ranking must
   treat it as neither a met preference nor a failed gate, reported as unevaluated.
 - Adding a field to the context touches one type rather than every evaluator signature; the risk
   in exchange is a context that accretes fields, so a field is added only when a catalogued rule

@@ -73,6 +73,9 @@ body.frozen .setup,body.frozen .intro-note,body.frozen .saved-label,body.frozen 
 .motif-panel td,.motif-panel th{vertical-align:top}
 .motif-panel .chance{font-size:11px;color:var(--muted)}
 .track-empty{font-size:10px;fill:#8aa0a4;font-style:italic}
+/* The rank printed above a top-ten mark. Bold and dark because it sits over the ticks and
+   the motif row, where a lighter numeral stops being findable at a glance. */
+.rank-label{font-size:10px;font-weight:700;fill:#0b4f57}
 .unevaluated-note{font-size:11px;color:var(--gold);margin-top:8px;font-weight:600}
 .rejection-legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;font-size:11px;
   color:var(--muted);align-items:center}
@@ -194,3 +197,33 @@ body.frozen .setup,body.frozen .intro-note,body.frozen .saved-label,body.frozen 
   .detail-body{gap:32px}
 }
 .motif-swatch{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:baseline}
+
+/* Transcript expression, shown beside the reference picker. Deliberately quiet: it is evidence
+   next to a choice, not a verdict about it, so it carries no rank colour and no score badge. */
+.expression{margin:12px 0 4px;padding:12px 14px;border:1px solid #d9dde4;border-radius:8px;background:#fbfcfd}
+.expression .eyebrow{margin:0 0 6px}
+.expression-headline{margin:0 0 4px;font-size:13px}
+.expression p{margin:2px 0}
+.expression-table{width:100%;border-collapse:collapse;margin:8px 0 2px;font-size:12px}
+.expression-table caption{text-align:left;color:#5d6670;font-size:11px;padding-bottom:4px}
+.expression-table th{text-align:left;font-weight:500;padding:2px 8px 2px 0}
+.expression-table td{padding:2px 8px 2px 0;white-space:nowrap}
+.expression-detail{margin-top:8px}
+.expression-detail summary{font-size:12px;cursor:pointer}
+.expression-list{margin:6px 0;padding-left:20px;font-size:12px}
+.caveat-list{margin:6px 0;padding-left:18px;font-size:12px;color:#444b53}
+.caveat-list li{margin-bottom:4px}
+
+/* What the cell-line box does, printed beside the box. One axis in the whole registry is
+   available, so the panel's job is to make the gaps as legible as the one thing that is there. */
+.cell-evidence{margin:6px 0 10px;font-size:12px}
+.cell-evidence .cell-name{margin:8px 0 2px}
+.axis-brief{list-style:none;margin:8px 0;padding:0}
+.axis-brief li{padding:7px 0 7px 9px;border-left:3px solid #e2e6ea;margin-bottom:5px;line-height:1.5}
+.axis-brief li.axis-loaded{border-left-color:#52a584;background:#f4faf7}
+.axis-brief .axis-state{display:inline-block;margin-bottom:3px}
+.axis-brief strong{display:block;font-size:11px}
+.axis-brief .muted{font-size:10px;display:block}
+.axis-brief summary{font-size:10px;color:var(--teal);cursor:pointer;margin-top:3px}
+.axis-brief .hint{font-size:10px;margin-top:4px}
+.cell-detail summary{cursor:pointer;font-size:12px}

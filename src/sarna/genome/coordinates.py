@@ -5,7 +5,7 @@ with GRCh37 signal tracks. ADR 0004 responds by making a coordinate without an a
 *unrepresentable*: :class:`GenomicInterval` requires one, refuses to compare or measure across
 assemblies, and validates itself against that assembly's contig lengths.
 
-Intervals are **0-based, half-open** — ``[start, end)``, so ``(0, 19)`` is the first 19 bases.
+Intervals are **0-based, half-open**, ``[start, end)``, so ``(0, 19)`` is the first 19 bases.
 This matches bigWig and BED. Ensembl REST is 1-based inclusive, so its client converts at the
 boundary rather than letting two conventions coexist in the model.
 """

@@ -2,8 +2,8 @@
 
 These are the rules a sequence-only run cannot answer. Each one checks for the context it needs
 and reports ``not-applicable`` when it is absent, which under ADR 0007 neither excludes the
-candidate nor counts as a pass. Without that, Workflow B — a pasted promoter with no coordinates
-— would either lose every candidate to the TSS window or quietly claim checks that never ran.
+candidate nor counts as a pass. Without that, Workflow B, a pasted promoter with no coordinates
+would either lose every candidate to the TSS window or quietly claim checks that never ran.
 """
 
 from sarna.design.context import CandidateContext

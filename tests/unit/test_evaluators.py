@@ -4,7 +4,7 @@ Each evaluator is a pure function of a context and a resolved rule (ADR 0007), s
 here is built from a hand-made context with no promoter file, no network and no fixtures.
 
 Three things are checked for every rule: the verdict, that the stated reason names the measured
-value, and — where the rule depends on something a sequence-only run does not have — that it
+value, and (where the rule depends on something a sequence-only run does not have) that it
 reports not-applicable rather than passing or failing.
 """
 
@@ -322,7 +322,7 @@ class TestThermodynamicAsymmetry:
     ANTISENSE_FAVOURED = "GCGCACGGATCCAAGTTAA"
     SENSE_FAVOURED = "TTAAACGGATCCAAGGCGC"
     # 3' end UUAG stacks to -4.34 against the same 5' GCGC at -9.20, so the margin is only
-    # +4.86 kcal/mol — enough to pass the default, not enough for a raised threshold.
+    # +4.86 kcal/mol, enough to pass the default, not enough for a raised threshold.
     WEAKLY_ASYMMETRIC = "GCGCACGGATCCAAGTTAG"
 
     def test_an_asymmetric_target_favouring_the_antisense_strand_passes(self) -> None:
@@ -382,7 +382,7 @@ class TestThermodynamicAsymmetry:
 
         This target's legacy asymmetry is +16.77 kJ/mol, which is +4.01 kcal/mol. A threshold of
         5.0 kcal/mol is 20.92 kJ/mol, so the candidate must be rejected. Compared unconverted,
-        5.0 against 16.77 would wrongly pass — so this threshold distinguishes the two.
+        5.0 against 16.77 would wrongly pass, so this threshold distinguishes the two.
         """
         context = context_for(self.ANTISENSE_FAVOURED)
         legacy = check(

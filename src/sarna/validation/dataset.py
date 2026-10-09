@@ -12,7 +12,7 @@ into 125 labelled sequences than they carry.
 structural criteria, so the set is range-restricted by construction: it contains almost no
 candidate the gate would reject. Asking "does the gate separate activators from non-activators?"
 of this set asks about variation it does not contain. What it can test is whether anything
-*beyond* the gate — ranking, preferences, thermodynamics — separates the two classes.
+*beyond* the gate (ranking, preferences, thermodynamics) separates the two classes.
 
 **"Not activating" is a measurement, not a property.** The 111 negatives failed to show
 reproducible upregulation in HeLa or AF22 at 50 nM, 72 h, lipofected, by qPCR. A sequence that
@@ -313,7 +313,7 @@ class DesignLocation:
         The context is already in transcript orientation, so it is passed straight to
         :class:`~sarna.genome.promoter.Promoter` rather than through
         ``from_reference_sequence``. The interval is derived from the target's, which makes
-        ``promoter.genomic_interval(context_offset, 19)`` reproduce the target interval — the
+        ``promoter.genomic_interval(context_offset, 19)`` reproduce the target interval, the
         check that the orientation and offsets agree.
         """
         length = len(self.context)

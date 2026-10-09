@@ -37,7 +37,7 @@ class Report:
 
     def ok(self, label: str, detail: str = "") -> None:
         """Record a passing check."""
-        print(f"  {self._paint('OK  ', GREEN)} {label}{f' — {detail}' if detail else ''}")
+        print(f"  {self._paint('OK  ', GREEN)} {label}{f': {detail}' if detail else ''}")
 
     def fail(self, label: str, fix: str) -> None:
         """Record a failure, with the action that resolves it."""
@@ -47,7 +47,7 @@ class Report:
 
     def warn(self, label: str, detail: str) -> None:
         """Record something worth knowing that does not block use."""
-        print(f"  {self._paint('NOTE', YELLOW)} {label} — {detail}")
+        print(f"  {self._paint('NOTE', YELLOW)} {label}: {detail}")
         self.warnings.append(label)
 
 
@@ -112,7 +112,7 @@ def check_engine(report: Report) -> None:
         else:
             report.fail(
                 f"The design engine produced {generated} candidates, which is the wrong number",
-                "Report this output — it means the installation is damaged, not misconfigured.",
+                "Report this output. It means the installation is damaged, not misconfigured.",
             )
             return
         order = order_for(result.generated[0])
@@ -158,7 +158,7 @@ def check_storage(report: Report) -> None:
 
 def check_text_encoding(report: Report) -> None:
     """Check non-ASCII text survives a write and read, which cp1252 would break."""
-    sample = "sodium channel α-subunit — naïve"  # noqa: RUF001 - the point is non-ASCII text
+    sample = "sodium channel α-subunit ±1, naïve"  # noqa: RUF001 - the point is non-ASCII text
     try:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "encoding.txt"
@@ -236,7 +236,7 @@ def main() -> int:
     args = parser.parse_args()
 
     report = Report(colour=not args.no_colour and sys.stdout.isatty())
-    print("\nsaRNA Designer — installation check")
+    print("\nsaRNA Designer installation check")
     print(f"  {platform.system()} {platform.release()}, Python {platform.python_version()}\n")
     check_python(report)
     check_imports(report)
@@ -251,11 +251,11 @@ def main() -> int:
 
     print()
     if report.failures:
-        print(f"RESULT: FAIL — {len(report.failures)} check(s) did not pass.")
+        print(f"RESULT: FAIL. {len(report.failures)} check(s) did not pass.")
         print("Copy everything above and send it to whoever gave you the tool.")
         return 1
     extra = f" ({len(report.warnings)} note(s) above)" if report.warnings else ""
-    print(f"RESULT: PASS — saRNA Designer works on this machine{extra}.")
+    print(f"RESULT: PASS. saRNA Designer works on this machine{extra}.")
     print("Start it with:  sarna-designer")
     return 0
 

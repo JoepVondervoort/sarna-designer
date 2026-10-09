@@ -109,6 +109,114 @@ class Browser:
         path.write_bytes(base64.b64decode(data))
 
 
+def check_expression(browser: Browser) -> None:
+    """Check the expression panel beside the picker, and that it changes no ordering.
+
+    The panel is optional evidence from a second service, so this does not require it to load.
+    What it does require is that the picker's order is the annotation's either way, and that a
+    median of zero never reads as missing data. Both are claims a reader would act on.
+    """
+    order_before = browser.evaluate(
+        "[...document.getElementById('reference').options].map(o=>o.value).join('|')")
+    # The panel is filled by a request the lookup deliberately does not wait for.
+    browser.wait("!document.getElementById('expression').hidden")
+    panel = browser.evaluate(r"""(()=>{
+      const box=document.getElementById('expression');
+      const options=[...document.getElementById('reference').options];
+      const payload=state.expression;
+      return {
+        available: payload?.available !== false,
+        text: box.textContent,
+        order: options.map(o=>o.value).join('|'),
+        selected: document.getElementById('reference').value,
+        annotated: options.filter(o=>o.textContent.includes(' TPM')).length,
+        transcripts: payload?.transcripts ? Object.keys(payload.transcripts).length : 0,
+        keyed: payload?.transcripts && !Array.isArray(payload.transcripts),
+      };
+    })()""")
+    assert isinstance(panel, dict), panel
+    assert panel["order"] == order_before, (
+        "the expression panel changed the order of the promoter reference picker; annotation "
+        "decides that order (ADR 0012) and expression is evidence beside it"
+    )
+    if not panel["available"]:
+        # A GTEx outage or a cold cache offline. It must say so without implying absence.
+        assert "says nothing about whether these transcripts are expressed" in str(
+            panel["text"]), panel["text"]
+        print("    expression: not retrieved, and the panel says so")
+        return
+    assert panel["keyed"] is True, "the payload is a list, which invites sorting by expression"
+    assert panel["transcripts"] > 0, panel
+    assert panel["annotated"] > 0, "no option carries its expression summary"
+    text = str(panel["text"])
+    # The claim, not its wording: the panel must say GTEx holds no cell lines and must name
+    # AF22, because "is my transcript expressed in AF22" is the question that prompted it.
+    assert "AF22" in text, text
+    assert "no cell lines" in text, text
+    assert "supports or contradicts" in text, text
+    # The finding this panel exists for: a transcript measured at zero says measured, not
+    # missing. Rendering the two alike turns ignorance into a finding and back again.
+    zero = browser.evaluate(
+        "Object.values(state.expression.transcripts).find(t=>t.label.includes('0.00'))?.label")
+    if zero:
+        assert "measured at 0.00" in str(zero), zero
+        assert "no data" not in str(zero).lower(), zero
+    print(f"    expression: {panel['transcripts']} transcripts, "
+          f"{panel['annotated']} options annotated, order unchanged")
+
+
+def check_cell_evidence(browser: Browser) -> None:
+    """Check that the cell-line box says what choosing a line does, and what it does not.
+
+    The control looked inert because it nearly is: one of the registry's 24 (line x axis) pairs
+    is available. That is worth stating rather than leaving a researcher to infer, and the
+    statement has to stay true, so this measures the registry rather than trusting a number
+    written into the page.
+    """
+    totals = browser.evaluate(r"""(()=>{
+      const cells = state.catalogue.cells || [];
+      const axes = cells.flatMap(c => c.data || []);
+      return {lines: cells.length, axes: axes.length,
+              available: axes.filter(a => a.available).length};
+    })()""")
+    assert isinstance(totals, dict), totals
+    assert totals["available"] >= 1, (
+        "no cell line has any available evidence axis, so the control carries nothing at all"
+    )
+
+    def panel(value: str) -> str:
+        browser.evaluate(
+            "(()=>{const box=document.getElementById('cell-line');"
+            f"box.value={json.dumps(value)};"
+            "box.dispatchEvent(new Event('input'));})()")
+        return str(browser.evaluate("document.getElementById('cell-evidence').innerText"))
+
+    # Whatever is typed, the panel must say the choice does not touch ranking. It does not:
+    # nothing downstream of this field reaches a gate, a preference or a rank.
+    for typed in ("", "AF22 (lt-NES)", "NotARealLine-7"):
+        assert "does not change which candidates pass" in panel(typed), typed
+
+    known = panel("AF22 (lt-NES)")
+    assert "CVCL_A5CW" in known, "the accession is missing, so the line cannot be checked"
+    assert "AVAILABLE" in known.upper(), known
+    assert "NO ROUTE" in known.upper(), (
+        "every axis reads as available, which would hide the gaps this registry exists to record"
+    )
+    assert "GSE108506" in known, "the one available axis does not name its source"
+
+    unknown = panel("NotARealLine-7")
+    assert "not in the registry" in unknown, unknown
+    assert "No measurement is implied" in unknown, unknown
+    assert "AVAILABLE" not in unknown.upper(), (
+        "an unknown name shows an availability claim, which would invent evidence for it"
+    )
+    browser.evaluate(
+        "(()=>{const box=document.getElementById('cell-line');box.value='';"
+        "box.dispatchEvent(new Event('input'));})()")
+    print(f"    cell lines: {totals['available']} of {totals['axes']} evidence axes available "
+          f"across {totals['lines']} lines, and the panel names which")
+
+
 def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
              screenshots: Path | None, online: bool = False) -> None:
     """Check draft preservation, rerun, explanations, persistence and an offline archive."""
@@ -120,6 +228,7 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     assert browser.evaluate("document.getElementById('gene-symbol').value") == ""
     forced = browser.evaluate("state.catalogue.data_access.offline_forced")
     assert browser.evaluate("document.getElementById('offline').disabled") is forced
+    check_cell_evidence(browser)
     if gene:
         browser.evaluate(f"document.getElementById('gene-symbol').value={json.dumps(gene)};"
                          "document.getElementById('offline').checked=true;"
@@ -136,6 +245,7 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
         assert browser.evaluate("document.getElementById('gene-symbol').value") == gene.upper()
         assert browser.evaluate("document.getElementById('offline').checked") is not online
         assert browser.evaluate("document.getElementById('error-recovery').hidden") is True
+        check_expression(browser)
     else:
         browser.evaluate("document.querySelector('[data-source=sequence]').click();"
                          f"document.getElementById('dna-sequence').value={json.dumps(DNA)}")
@@ -182,6 +292,50 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     drawn = browser.evaluate(
         "document.querySelectorAll('#promoter-map rect[data-candidate]').length")
     assert isinstance(drawn, int) and drawn > 0
+    # The ten highest-ranked targets have to be findable among the passing ones. Before this
+    # they were drawn in the same colour at the same height as rank 900, so the map could not
+    # answer which marks a reader would actually order. Checked on all three channels the
+    # drawing uses, because any one alone fails somebody. Checked at full extent, where every
+    # candidate is in view: the preceding zoom and pan leave some of the ten off screen, and
+    # a mark outside the viewport is correctly not drawn rather than missing.
+    browser.evaluate("document.getElementById('zoom-reset').click()")
+    top = browser.evaluate(r"""(()=>{
+      const fill = r => (r.getAttribute('fill')||'').toLowerCase();
+      const marks = [...document.querySelectorAll('#promoter-map rect[data-candidate]')];
+      const byId = new Map(state.result.candidates.map(c => [c.id, c]));
+      const rankOf = r => byId.get(r.getAttribute('data-candidate'))?.rank ?? null;
+      // Only marks in the passing lane: the selection outline and the excluded row also
+      // carry data-candidate, and neither is a passing-target mark.
+      const lane = marks.filter(r => fill(r) === TRACK_COLOURS.candidate.fill.toLowerCase()
+                                  || fill(r) === TRACK_COLOURS.topCandidate.fill.toLowerCase());
+      const marked = lane.filter(r => fill(r) === TRACK_COLOURS.topCandidate.fill.toLowerCase());
+      const labels = [...document.querySelectorAll('#promoter-map text.rank-label')]
+        .map(t => +t.textContent);
+      return {
+        expected: state.result.candidates.filter(c => c.rank !== null && c.rank <= TOP_MARKED)
+          .length,
+        marked: marked.length,
+        ranks: marked.map(rankOf),
+        heights: [...new Set(marked.map(r => +r.getAttribute('height')))],
+        plainHeights: [...new Set(lane.filter(r => !marked.includes(r))
+          .map(r => +r.getAttribute('height')))],
+        labels, labelled: new Set(labels).size,
+      };})()""")
+    assert isinstance(top, dict)
+    if top["expected"]:
+        assert top["marked"] == top["expected"], (
+            f"{top['expected']} targets rank in the top ten but {top['marked']} are drawn as "
+            f"such; the rest are indistinguishable from rank 900")
+        assert all(isinstance(rank, int) and 1 <= rank <= 10 for rank in top["ranks"]), (
+            f"a mark drawn in the top-ten colour does not hold a top-ten rank: {top['ranks']}")
+        # Height carries the same claim as colour, for a reader who cannot use colour.
+        assert top["heights"] and max(top["heights"]) > max(top["plainHeights"] or [0]), (
+            f"top-ten marks are {top['heights']} high against {top['plainHeights']} for the "
+            f"rest; height has to separate them too")
+        assert 1 in top["labels"], "rank 1 is not numbered on the map"
+        assert top["labelled"] == len(top["labels"]), (
+            f"a rank is printed more than once on the map: {top['labels']}")
+        assert all(1 <= rank <= 10 for rank in top["labels"]), top["labels"]
     # At full-region zoom a target is generated at every offset, so drawing each excluded one
     # produced about three overlapping marks per pixel: a band that claimed to show every
     # rejection and resolved none of them. They are binned instead. The promise that a

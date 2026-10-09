@@ -72,7 +72,7 @@ class NucleicSequence:
         Raises:
             InvalidSequenceError: If the text is empty once whitespace is removed, or contains
                 any character outside ``alphabet``. ``U`` in DNA and ``T`` in RNA are errors
-                rather than silent conversions — use :meth:`as_rna` or :meth:`as_dna` to
+                rather than silent conversions, use :meth:`as_rna` or :meth:`as_dna` to
                 convert deliberately.
         """
         bases = text.translate(_WHITESPACE).upper()

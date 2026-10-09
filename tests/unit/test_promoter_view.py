@@ -512,7 +512,7 @@ class TestCellPanelExport:
 class TestRanksReachTheExport:
     """DesignResult.generated carries no ranks; exporting it directly loses the ordering.
 
-    The failure is silent — a renderer sorting by rank sees ``None`` everywhere and falls back to
+    The failure is silent, a renderer sorting by rank sees ``None`` everywhere and falls back to
     position, so the list looks plausible and is not ranked. Found by checking a generated page.
     """
 

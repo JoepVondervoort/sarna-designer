@@ -16,12 +16,12 @@ without. Three limits decide what any number here means, and they are not incide
 
 **The gate is largely untestable, in one direction.** Every sequence was designed to satisfy
 Wang's structural criteria, so the set contains almost nothing the gate should reject. It cannot
-show a gate to be too permissive. It *can* show a gate to be too strict — if a sequence that
+show a gate to be too permissive. It *can* show a gate to be too strict (if a sequence that
 demonstrably worked is excluded, that is a real finding, and it is the finding this page leads
 with.
 
 **The coordinates have since been recovered** (`scripts/locate_dataset_designs.py`), so the
-location rules are now testable too — see "The TSS window excludes most of the activators" below.
+location rules are now testable too) see "The TSS window excludes most of the activators" below.
 123 of the 125 designs are placed; CHD8-9 and CHD8-10 each match 12 places in their locus and are
 left unplaced rather than guessed. CpG-island overlap remains unevaluable, because 519 bp of stored
 context cannot support a detector that needs 500 bp of island before it calls one.
@@ -54,11 +54,11 @@ sequence gates admits every duplex known to work.
 ### The CpG gate points the wrong way
 
 The legacy script tolerates **zero** CpG in a target. That excludes P53, SCN1A-10, CEBPA and KLF4
-— four of the fourteen known activators, including two of this project's own SCN1A duplexes.
+four of the fourteen known activators, including two of this project's own SCN1A duplexes.
 
 The direction is what makes it interesting. Activators carry *more* CpG than non-activators, not
 less: mean 0.29 against 0.17, and 71 % of activators have no CpG against 83 % of non-activators.
-A small difference on 14 sequences, so not a finding on its own — but it removes any empirical
+A small difference on 14 sequences, so not a finding on its own, but it removes any empirical
 case for tightening the gate, and tightening it has a measured cost of 29 % of known activators.
 
 Mechanistically this is unsurprising in hindsight. saRNA targets sit in promoters; promoters are
@@ -98,8 +98,8 @@ through Phase I, and Wang et al. 2015 Table 1 would have rejected it at the desi
 Three readings, and the project does not choose between them on 14 sequences:
 
 1. **Position 19 A is over-stated in Table 1.** It is one criterion among many, derived from a
-   limited panel, and the mechanism it serves — an A at target position 19 puts a U at the guide's
-   5' end, which AGO2 prefers — is a bias rather than a requirement. Ui-Tei et al. 2004 state the
+   limited panel, and the mechanism it serves (an A at target position 19 puts a U at the guide's
+   5' end, which AGO2 prefers) is a bias rather than a requirement. Ui-Tei et al. 2004 state the
    same criterion more weakly, as A *or* U at the guide's 5' end.
 2. **CEBPA works for a reason position 19 does not capture.** Its 57.9 % GC and GC-rich 3' end
    make it unusual among the activators in several ways at once.
@@ -127,7 +127,7 @@ three of the four fall slightly below it.
 This is the expected result and it is worth being precise about why, because "the ranking does not
 work" is the wrong conclusion. The ranking orders candidates by how many *preferences* they meet.
 The dataset was built by applying those same criteria and keeping what passed, so it contains
-almost none of the variation the ranking exists to order — and of the seven preferences, four
+almost none of the variation the ranking exists to order, and of the seven preferences, four
 (the 3' flank positions) and one (the preferred TSS window) cannot be evaluated at all without
 promoter coordinates. Two preferences are doing all the work. A near-0.5 AUC under those
 conditions tells you about the dataset, not about the ranking.
@@ -139,7 +139,7 @@ rules in the entire catalogue (+25 pp and +18 pp). Both were derived **from this
 
 The +25 pp for `pos10-g` is the same +24.8 pp from the motif analysis, on the same 125 sequences.
 Measuring it here is not validation; it is reading the training set back. And even with two rules
-fitted to the data it is scored against, `exploratory` reaches p = 0.37 — which is the clearest
+fitted to the data it is scored against, `exploratory` reaches p = 0.37, which is the clearest
 possible statement of how little signal there is to fit.
 
 ## What would make this answerable
@@ -188,7 +188,7 @@ None of the ten from this project does.
 ### The anchor is not the explanation
 
 The obvious objection is that these offsets are measured from the wrong TSS. Several designs
-clearly target a non-MANE TSS — SCN1A's do, as `scn1a-design-coordinates.md` sets out. So the test
+clearly target a non-MANE TSS. SCN1A's do, as `scn1a-design-coordinates.md` sets out. So the test
 was repeated taking, for each design, whichever of the two anchors is **more favourable**:
 
 | Window | Activators inside |
@@ -197,14 +197,14 @@ was repeated taking, for each design, whichever of the two anchors is **more fav
 | thesis chapter 4, −2000…+500 | 10 / 14 |
 | widened further, −3000…+1000 | 10 / 14 |
 
-Even at its most generous, Wang's window excludes 8 of the 14. Four — SCN1A-12 and -14 at about
-−5.5 kb, CHD2-8 and -10 at about +5.4 kb — lie outside any window a promoter definition would
+Even at its most generous, Wang's window excludes 8 of the 14. Four (SCN1A-12 and -14 at about
+−5.5 kb, CHD2-8 and -10 at about +5.4 kb) lie outside any window a promoter definition would
 reasonably draw.
 
 ### What is and is not shown
 
 **Shown:** activation is observed at positions Wang's Table 1 window excludes, including two
-published duplexes just past its edges — KLF4 at −45 and CEBPA, now in human clinical trials, at
+published duplexes just past its edges. KLF4 at −45 and CEBPA, now in human clinical trials, at
 −1088.
 
 **Not shown:** that the window is wrong. The designs were *made* in a −2000…+500 window, so the
@@ -213,7 +213,7 @@ explains why those positions were *tested*; it does not explain why they *worked
 that raised its target is evidence about −45 regardless of why someone tried it.
 
 **Also not shown:** that the window is useless. 36 of 123 designs fall inside it and 4 of the 14
-activators do, which is a hit rate of 11% inside against 10 of 87 outside — indistinguishable on
+activators do, which is a hit rate of 11% inside against 10 of 87 outside, indistinguishable on
 these numbers. The window neither earns nor loses its place here.
 
 ### What the tool does about it
@@ -225,8 +225,8 @@ Table 1 says and conformance is the default preset's job. Three things changed i
   measured trade-off in its note. A user who does not want KLF4-like candidates excluded can select
   it as a recorded decision.
 - The parameter cannot express the `+500` half, because both edges are capped at 0. A target
-  downstream of the TSS overlaps the transcript, where the rule's own rationale — and the
-  distinction from silencing — stops applying. Selecting the thesis option gives −2000…0.
+  downstream of the TSS overlaps the transcript, where the rule's own rationale (and the
+  distinction from silencing) stops applying. Selecting the thesis option gives −2000…0.
 - **Whether `tss-window` should be a gate at all is an open question for the user.** Making it a
   preference would admit every one of the 14 activators while costing the strongest single filter
   in the engine, which currently rejects 64% of candidates on a real promoter. That is a scientific
@@ -234,7 +234,7 @@ Table 1 says and conformance is the default preset's job. Three things changed i
 
 ## How the coordinates were validated
 
-Recovering coordinates by sequence search could go wrong silently — wrong strand, wrong anchor,
+Recovering coordinates by sequence search could go wrong silently, wrong strand, wrong anchor,
 off-by-one. Three checks, the last of them external:
 
 - **Round trip.** For all 123, the promoter built from the stored context reproduces the recorded
@@ -243,6 +243,6 @@ off-by-one. Three checks, the last of them external:
 - **Sequence identity.** Fetching each recorded interval back from Ensembl returns exactly the
   expected target, reverse-complemented where the gene is on the minus strand.
 - **Published positions.** Two of the duplexes are *named* for their TSS-relative position.
-  `VHL-821` recovers at **−818** and `dsP21-322` at **−310** — 3 and 12 bases from the names, across
+  `VHL-821` recovers at **−818** and `dsP21-322` at **−310**, 3 and 12 bases from the names, across
   twenty years of annotation drift. Nothing in the chain can be meaningfully wrong and still land
   there.

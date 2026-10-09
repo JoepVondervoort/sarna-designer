@@ -13,7 +13,7 @@ from sarna.rules.provenance import EvidenceClass, Provenance
 from sarna.rules.rule import Rule, RuleKind
 
 WANG_NARRATIVE = Provenance.citation(
-    "Wang et al. 2015", "Results — preferred -500 to -200 bp region (narrative text, not Table 1)"
+    "Wang et al. 2015", "Results, preferred -500 to -200 bp region (narrative text, not Table 1)"
 )
 
 START_GROUP = "Target 5' start G/C"
@@ -137,7 +137,7 @@ POS7_U = Rule(
     ),
     consequence=(
         "Off by default. Enabling it adds an eighth preference worth one point, like every "
-        "other preference — not the dominant term it was in the original script. Treat any "
+        "other preference, not the dominant term it was in the original script. Treat any "
         "ranking change it causes as untested."
     ),
     enabled_by_default=False,

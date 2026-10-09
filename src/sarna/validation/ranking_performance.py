@@ -1,4 +1,4 @@
-"""How well each preset's ranking actually separates activity — measured, for the interface.
+"""How well each preset's ranking actually separates activity, measured, for the interface.
 
 The interface shows a rating next to every candidate. A reader will take that as a prediction
 unless told otherwise, so the tool states its own measured performance beside it: on the 125
@@ -36,7 +36,7 @@ from sarna.validation.benchmark import UNINFORMATIVE_AUC, BenchmarkResult, bench
 from sarna.validation.dataset import load_chapter4_dataset
 
 CHANCE_AUC = UNINFORMATIVE_AUC
-"""0.5 — an activator outranks a non-activator exactly half the time."""
+"""0.5, an activator outranks a non-activator exactly half the time."""
 
 CIRCULAR_PRESETS = frozenset({"exploratory"})
 """Presets containing rules derived from the dataset they are measured against.
@@ -47,8 +47,8 @@ tests assert it so the circularity stays visible rather than becoming a selling 
 """
 
 CIRCULARITY_NOTE = (
-    "This configuration scores highest because two of its rules — pos10-g and "
-    "central-stability — were fitted to this very dataset. The figure is circular and is not "
+    "This configuration scores highest because two of its rules (pos10-g and "
+    "central-stability) were fitted to this very dataset. The figure is circular and is not "
     "evidence that the configuration predicts activity."
 )
 

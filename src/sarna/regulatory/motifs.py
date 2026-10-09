@@ -3,7 +3,7 @@
 A position weight matrix finds where a factor *could* bind. The gap between that and where a
 factor *does* bind is the whole difficulty, and it is large: a 9 bp motif like SP1's matches
 roughly once every few hundred bases of random sequence at the conventional threshold, and promoter
-sequence is far from random — it is GC-rich, which is exactly what SP1, NRF1, EGR1 and GABPA
+sequence is far from random, it is GC-rich, which is exactly what SP1, NRF1, EGR1 and GABPA
 recognise. Scanning a 2 kb CpG-island promoter for sixteen factors produces dozens of hits, and
 most of them are not bound in any cell.
 
@@ -24,7 +24,7 @@ the matrix came from ChIP-seq or from SELEX.
 Scores are log-odds against a uniform background, reported as a **relative score** in [0, 1]:
 ``(score - minimum) / (maximum - minimum)`` over the matrix's achievable range, which is the
 convention JASPAR's own tools use. The default threshold of 0.80 is that convention's default. It
-is a convention, not a statistic — a relative score has no p-value — which is why the shuffled
+is a convention, not a statistic (a relative score has no p-value) which is why the shuffled
 expectation is reported beside it.
 """
 
@@ -56,7 +56,7 @@ MINIMUM_RAW_SCORE = 0.0
 The relative score rescales a matrix's achievable range onto [0, 1], which makes thresholds
 comparable between matrices but silently depends on how negative the *minimum* is. A matrix with
 one near-zero count has a very negative minimum, so 0.80 of its range can still be a negative
-log-odds — meaning the match is *less* likely under the motif than under background.
+log-odds, meaning the match is *less* likely under the motif than under background.
 
 Measured over this project's sixteen curated matrices, 4 of them are in that state at a relative
 score of 0.80: NRF1 (-10.2), MEF2C (-1.7), YY1 (-1.4) and ETS1 (-1.1). Before this floor, NRF1
@@ -403,7 +403,7 @@ def _expected_hits(
 
     Shuffling rather than sampling from a background model, so the expectation matches the actual
     sequence's GC content. It destroys dinucleotide structure, which overstates the expectation
-    slightly for CpG-dependent motifs — stated rather than corrected, because a dinucleotide-
+    slightly for CpG-dependent motifs, stated rather than corrected, because a dinucleotide-
     preserving shuffle is a larger piece of machinery than this estimate warrants.
     """
     if shuffles <= 0:

@@ -14,7 +14,7 @@ htmlcov/
 .env
 .env.local
 
-# Large genomic data — never commit. See docs/development/data.md
+# Large genomic data, never commit. See docs/development/data.md
 *.bw
 *.bigWig
 *.bam

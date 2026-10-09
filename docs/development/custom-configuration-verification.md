@@ -1,4 +1,4 @@
-# Custom configuration verification — 7 October 2026
+# Custom configuration verification: 7 October 2026
 
 ## Implemented scope
 

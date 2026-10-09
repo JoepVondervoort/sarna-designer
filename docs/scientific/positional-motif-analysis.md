@@ -1,7 +1,7 @@
 # Positional motif enrichment in functional saRNAs
 
 **Question.** Chapter 4 of the thesis reports that functional saRNAs carry particular bases at
-particular positions — G at 10, U at 15, C depleted at 9 — with differences of 20-25 percentage
+particular positions (G at 10, U at 15, C depleted at 9) with differences of 20-25 percentage
 points against non-functional designs. Should those positions become design rules?
 
 **Answer.** No. They reproduce exactly, and none of them survives correction for the size of the
@@ -91,8 +91,8 @@ calls the guide are in fact near the 3′ end of the *target*, which is the **5�
 Re-anchored, the observation becomes more interesting rather than less. A/U-rich sequence at the
 guide's 5′ end is exactly what asymmetric RISC loading predicts: a thermodynamically weak 5′ end
 is what makes a strand the guide (Schwarz et al. 2003; Khvorova et al. 2003), and AGO2 prefers a
-5′ U (Ui-Tei et al. 2004). So the chapter's stability gradient — strong bases centrally, weak
-bases toward target position 15-17 — is a restatement, on the target strand, of established
+5′ U (Ui-Tei et al. 2004). So the chapter's stability gradient (strong bases centrally, weak
+bases toward target position 15-17) is a restatement, on the target strand, of established
 strand-selection thermodynamics the engine already models explicitly in `sarna.thermo.guide`.
 
 That is the useful residue of this analysis: not a new positional rule, but corroboration that

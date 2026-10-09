@@ -1,4 +1,4 @@
-# saRNA Designer — working notes for Claude
+# saRNA Designer: working notes for Claude
 
 Python library that turns a promoter into ranked, explained saRNA candidates. Scientific
 traceability outranks clean code: every rule carries a citation, every verdict carries its reason.
@@ -20,7 +20,7 @@ exercised by separate browser checks, which are not part of that coverage measur
 rules, Python jobs, draft/rerun diff, SQLite snapshots and JSON/HTML/core-CSV exports work.
 The candidate view opens on a **duplex panel**: the two strands drawn antiparallel with a rung
 only where the bases pair, both 3' dTdT overhangs, guide and passenger labelled, and the two
-end energies with the stacks they were summed from — the measurement the guide call *is*, which
+end energies with the stacks they were summed from, the measurement the guide call *is*, which
 until now existed only inside one English sentence. The promoter map pans by dragging and zooms
 on the wheel; excluded targets are binned into a composition histogram above 280 bp because at
 full extent they were three overlapping marks per pixel. Read
@@ -30,10 +30,10 @@ storage and exports. `scripts/verify_workbench_browser.py` uses a supplied Chrom
 pasted DNA and cached SCN1A checks passed, including saved reopening, tooltips, mobile layout
 and complete excluded-candidate verdicts in an offline HTML file. Desktop/mobile screenshots
 were inspected. Fresh-cache live Ensembl browser runs also passed for lowercase `chd2` and
-`kcnq2`, with 13 and 9 candidates passing Wang defaults. All three paths — cached SCN1A, pasted DNA and
-`--gene kcnq2 --online` from an empty cache — were re-run on 8 October and pass; Chromium 1229
+`kcnq2`, with 13 and 9 candidates passing Wang defaults. All three paths, cached SCN1A, pasted DNA and
+`--gene kcnq2 --online` from an empty cache, were re-run on 8 October and pass; Chromium 1229
 is installed at `~/.cache/ms-playwright/chromium-1229/chrome-linux64/chrome`, so this check is
-**not** manual — pass it to `--chrome`. The browser check now also covers the duplex ladder
+**not** manual, pass it to `--chrome`. The browser check now also covers the duplex ladder
 (a rung exactly where the bases pair, both directions), the promoter map's drag and wheel zoom
 (comparing the translated picture against the full redraw), the binned excluded-target track
 (its bins must account for every rejection), and the cell-context panel. Cache-only mode is visible; missing
@@ -42,7 +42,7 @@ Fresh Windows/macOS installations remain unverified.
 Read `docs/development/local-workbench.md` and ADR 0015. Earlier mid-session review observations
 in the continuation plan are historical; its final verification update supersedes them.
 
-## Accepted continuation decisions — 2026-10-07
+## Accepted continuation decisions: 2026-10-07
 
 Read `docs/development/continuation-plan.md` for the user's accepted continuation decisions;
 they supersede corresponding open questions in these older working notes. The latest decision
@@ -68,7 +68,14 @@ Use `.venv/bin/python`; there is a miniconda base environment that must stay unt
 .venv/bin/python -m ruff check .
 ```
 
-`ruff format` is deliberately not part of the workflow — the source is hand-wrapped near 88
+**No em dashes anywhere outside `legacy/`.** The user asked for the GitHub page, the
+documentation and the application's own text to carry no em dashes and no obvious AI phrasing.
+The whole tree was swept on 8 October 2026: prose em dashes became commas, colons or sentence
+breaks, paired ones became parentheses, and the `\u2014` placeholders in tables became `n/a` or
+a word. `legacy/` keeps its own, being immutable. Do not reintroduce them, including as
+`\u2014`, `&mdash;` or in a docstring.
+
+`ruff format` is deliberately not part of the workflow, the source is hand-wrapped near 88
 columns while `line-length` is 100, so running it reformats most files. `ruff check` is the gate.
 
 Scripts that measure rather than assert, which is the house pattern:
@@ -104,8 +111,8 @@ Violating one of these produces wrong science that type-checks and passes unrela
   All arithmetic goes through `TssPosition`, which converts to a continuous offset first.
 - **Promoters are held 5'→3' in the transcript's own orientation.** `Promoter.
   from_reference_sequence` flips a minus-strand reference once, at the boundary. After that the
-  engine is strand-agnostic. **All strand arithmetic lives in three methods on `Promoter`** —
-  `genomic_interval`, `offset_of`, `span_of` — where offset 0 is the *highest* coordinate on the
+  engine is strand-agnostic. **All strand arithmetic lives in three methods on `Promoter`**,
+  `genomic_interval`, `offset_of`, `span_of`, where offset 0 is the *highest* coordinate on the
   minus strand, plus `EnsemblClient.promoter_for`, which mirrors them. Defect B1's home.
 - **Target sites are DNA; duplex strands are RNA.** CpG content is a property of the DNA locus
   and `cpg_count` refuses to answer for RNA.
@@ -156,6 +163,7 @@ Read the ADR before reopening its question; each records the alternatives and wh
 | Apache-2.0, and the bundled data's actual terms | 0018 |
 | Off-target screening: opt-in, remote, dual-scope, reported never filtered | 0019 |
 | Localhost rather than a hosted service, and what would change that | 0020 |
+| Transcript expression is evidence beside the reference, never a reordering | 0021 |
 
 `docs/scientific/`:
 
@@ -170,8 +178,9 @@ Read the ADR before reopening its question; each records the alternatives and wh
 | AF22 chromatin: targets open, SCN1A closed | `af22-chromatin.md` |
 | Table 1, the thermodynamics and the coordinates, checked against their sources | `verification-2026-10-07.md` |
 | Guide prediction: 13% of candidates flip between tables | `guide-prediction-divergence.md` |
+| SCN1A's MANE Select transcript is 0.00 TPM in all 54 GTEx tissues | `transcript-expression.md` |
 
-`GLOSSARY.md` fixes the vocabulary — use its terms rather than coining synonyms.
+`GLOSSARY.md` fixes the vocabulary, use its terms rather than coining synonyms.
 
 ## The empirical dataset
 
@@ -183,7 +192,7 @@ Every sequence was built to pass Wang's gate, so the set is **range-restricted**
 gate too permissive, only one too strict. `CHAPTER4_CAVEATS` carries the rest.
 
 `load_chapter4_locations()` adds recovered GRCh38 coordinates for 123 of the 125, with 519 bp of
-context each, so the TSS windows and 3' flank preferences are evaluable — pass `locations=` to
+context each, so the TSS windows and 3' flank preferences are evaluable, pass `locations=` to
 `benchmark`. Island overlap still is not: 519 bp cannot support a 500 bp island detector.
 
 Headline results:
@@ -199,8 +208,8 @@ Headline results:
 
 ## How to work here
 
-- **Ask before defaulting.** Scientific choices — a threshold, a definition, which error to
-  prefer — are the user's to make. Present the recommendation with its cost, then wait.
+- **Ask before defaulting.** Scientific choices, a threshold, a definition, which error to
+  prefer, are the user's to make. Present the recommendation with its cost, then wait.
 - **Record every accepted choice as an ADR**, including the cost of the option chosen.
 - One question at a time.
 - Tests pin scientific defaults on purpose. A change to a published threshold should break a test
@@ -212,15 +221,15 @@ Headline results:
   chapter 4's motif grid and the exhaustive guide-prediction enumeration are the pattern.
 - **Run the thing and read its output before calling it done.** The rank bug above survived a
   green suite and 100% coverage; it was found by looking at a generated page.
-- Live-API tests earn their keep. Two Ensembl bugs — `mane=1` being required, and a 400 rather
-  than a 404 for an unknown symbol — were invisible to recorded payloads.
+- Live-API tests earn their keep. Two Ensembl bugs, `mane=1` being required, and a 400 rather
+  than a 404 for an unknown symbol, were invisible to recorded payloads.
 
 ## Implementation gaps and remaining decisions
 
 - **Measured alternatives to existing inferred anchors.** Literature-defined anchors already
   exist in `sarna.genome.anchors`. The source adapter remains to be built:
   chapter 2 designed SCN1A against promoters mapped by Dong 2014 and Long 2008, and the Dong distal
-  region — which produced 2 of the 3 SCN1A activators — has no Ensembl TSS within 5.5 kb. A tool
+  region (which produced 2 of the 3 SCN1A activators) has no Ensembl TSS within 5.5 kb. A tool
   that can only design relative to annotated TSSs could not reproduce this project's own hits.
   Preserve explicit uncertainty when adding measured alternatives. See
   `docs/scientific/scn1a-design-coordinates.md`.
@@ -232,7 +241,7 @@ Headline results:
   terminal base and `pos19-a`'s mechanism no longer holds. Maximum is already 19; the library
   still supports 18 with explicit not-applicable results. Order export is fixed at 19 + dTdT.
 - **3' overhangs are modelled, and the order export exists.** `sarna.design.order` builds the two
-  21-mers — 19 nt RNA core plus `[dT][dT]` on both strands, per chapter 2's supplementary material —
+  21-mers, 19 nt RNA core plus `[dT][dT]` on both strands, per chapter 2's supplementary material,
   and the workbench serves them at `GET /api/runs/{id}/export.order.csv`, in rank order, each row
   carrying its own sanity report. [ADR 0017](docs/adr/0017-order-ready-duplex-export.md).
   The ordered strand is deliberately **not** a `NucleicSequence`: a chimeric RNA/dT 21-mer fits
@@ -259,15 +268,45 @@ Headline results:
   [ADR 0019](docs/adr/0019-off-target-screening.md). `export.order.csv` reads the newest
   complete screening per scope and reports its findings with the database and date; no
   screening still reads `not-performed`, and a failed one contributes nothing.
+- **The experimental cell line control is nearly inert, and now says so.** Measured: **1 of the
+  registry's 24 (cell line x evidence axis) pairs is available**, AF22 chromatin, and that one
+  needs the chromatin option switched on and the bigWigs installed. The field never touches a
+  candidate, a gate, a preference or a rank. All of that availability data already reached the
+  browser and none of it was drawn beside the control, which is why it read as doing nothing.
+  The setup panel now shows per-axis status, source and note for whatever is typed, sharing
+  `axisState` with the results banner so the two cannot word the same fact differently.
+- **Transcript expression is wired in, GTEx only.** `sarna.expression` and
+  `sarna.sources.json_http`; `GET /api/genes/{symbol}/expression`, a separate request from
+  lookup so a GTEx outage cannot take gene lookup down. It never reorders the picker, and the
+  browser check asserts the order is identical before and after the evidence loads. GTEx has no
+  cell lines, so AF22 is still unanswered and the panel says that in those words.
 - **No factor occupancy anywhere.** AF22 chromatin *accessibility* is measured, which is not the
   same thing. `CELL_TYPE_OBSERVATION` for a transcription factor is still unproduced; ENCODE would
   populate HeLa, and AF22 has no public TF ChIP-seq at all. The asymmetry is permanent-ish: the
   tool will always know more about HeLa than about the disease-relevant line.
 - ~~Licence audit.~~ **Done 2026-10-07.** Code is Apache-2.0; the bundled JASPAR subset is
-  CC BY 4.0, verified against JASPAR's about page — the repository's CC BY-NC-SA label was wrong
+  CC BY 4.0, verified against JASPAR's about page, the repository's CC BY-NC-SA label was wrong
   and more restrictive than the real terms. `NOTICE` lists every bundled asset and ships in the
   wheel. The unused `api` extra (fastapi/uvicorn) is removed.
   [ADR 0018](docs/adr/0018-apache-2-and-bundled-data-licensing.md).
+
+## Delivery and updating
+
+Versions are real now. `0.1.0.dev0` was frozen across every build handed to a colleague, so no
+saved run could be traced to the code that produced it; releases carry numbers and tags, and
+`tests/unit/test_release_metadata.py` fails if the wheel filename quoted in `README.md` or
+`INSTALL.md` drifts from `pyproject.toml`.
+
+**Measured, not assumed** (uv 0.12.23, 8 October 2026, two builds sharing a version string):
+`uv tool upgrade` tracks the **git commit**, not the version number, so a git-installed tool
+updates even when the version has not changed. For a wheel install it is a no-op that prints
+`Nothing to upgrade`, which a colleague reads as "I am up to date" when they are not; the
+instructions now say so. `docs/development/releasing.md` holds the table and the checklist.
+
+**The outstanding defect is the branch, not the tooling.** `uv tool install ... @ git+https://...`
+clones the **default branch**. `main` is 33 commits behind `publish-for-colleagues`, so
+`uv tool upgrade` faithfully reinstalls stale code. Nothing a colleague runs can reach the new
+work until the branch is merged. That merge and the tag push are the user's to authorise.
 
 ## Next
 

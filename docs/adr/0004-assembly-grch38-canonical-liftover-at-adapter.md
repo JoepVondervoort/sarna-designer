@@ -1,4 +1,4 @@
-# ADR 0004 — GRCh38 is canonical; GRCh37 conversion happens inside the bigWig adapter
+# ADR 0004: GRCh38 is canonical; GRCh37 conversion happens inside the bigWig adapter
 
 - **Status**: Accepted
 - **Date**: 2026-10-06
@@ -17,7 +17,7 @@ The blocking open question from Phase 0 is now closed, and the answer is unfavou
 
 All six bigWigs agree (`chr1` = 249,250,621; `chrX` = 155,270,560), consistent with the 2017
 deposition date. The legacy EpiMarker script pins no assembly and therefore indexed hg19 signal
-with GRCh38 coordinates — defect **B15**, severity S1. GRCh37→GRCh38 shifts are locus-dependent
+with GRCh38 coordinates, defect **B15**, severity S1. GRCh37→GRCh38 shifts are locus-dependent
 and reach megabases, while the pipeline samples 50 bp bins in a ±30 kb window, so the signal
 read was frequently from an unrelated locus.
 
@@ -58,7 +58,7 @@ Consequent rules, all of which are testable:
   *asserts* GRCh38 in the response. A default that changes upstream must break a test, not
   silently alter results.
 - **Unmappable intervals are reported, never guessed.** Where the chain file has no GRCh37
-  equivalent — or maps an interval to a different contig, or splits it — the adapter returns an
+  equivalent (or maps an interval to a different contig, or splits it), the adapter returns an
   explicit "no data for this region" result. It never falls back to unconverted coordinates.
 - **Contig naming is normalised at the adapter only.** `chr`-prefixing is a file format detail
   of these particular tracks and does not leak into the domain model.
@@ -71,7 +71,7 @@ Consequent rules, all of which are testable:
 - Signal lookups gain a conversion step. This is negligible against the bigWig read itself, and
   conversions are cacheable per TSS window.
 - Some loci will legitimately return no epigenomic annotation. This is correct behaviour and
-  must be surfaced in the UI as "not mappable to the AF22 assembly" — *not* as zero signal.
+  must be surfaced in the UI as "not mappable to the AF22 assembly", *not* as zero signal.
   Zero signal and absent signal are scientifically different statements and must never render
   the same way.
 - The annotation layer must state the provenance of what it shows: cell line AF22, GSE108506,

@@ -26,7 +26,7 @@ finding, which is the specific failure this model exists to prevent.
 
 ## Motif scanning, and why it over-reports
 
-Sixteen JASPAR CORE matrices ship, each with a stated reason for being in the set — SP1 because
+Sixteen JASPAR CORE matrices ship, each with a stated reason for being in the set. SP1 because
 Li et al. 2006 name SP1 sites in the p21 promoter beside the founding saRNA target; REST because it
 represses SCN1A in non-neuronal cells and is the best single candidate explanation for a
 HeLa-versus-AF22 difference at that locus; SOX2 and PAX6 because they define the AF22 state; and so
@@ -37,8 +37,8 @@ Two corrections to the conventional method are applied, both because the naive v
 
 ### The relative-score threshold admits matches less likely than background
 
-JASPAR's convention is a **relative score** — the raw log-odds rescaled onto [0, 1] over the
-matrix's achievable range — with a default cutoff of 0.80. That makes thresholds comparable between
+JASPAR's convention is a **relative score** (the raw log-odds rescaled onto [0, 1] over the
+matrix's achievable range) with a default cutoff of 0.80. That makes thresholds comparable between
 matrices, but it depends on how negative each matrix's *minimum* is, and a matrix with one near-zero
 count has a very negative minimum. So 0.80 of the range can still be a **negative log-odds**,
 meaning the match is less likely under the motif than under uniform background.
@@ -87,8 +87,8 @@ enforced in `sarna.regulatory.features`:
   promoter.
 
 One implementation note worth recording: Ensembl reports the kind in each record's `description`
-field. The `feature_type` field is always the literal string `regulatory`, so reading it instead —
-the obvious thing to do — makes every feature "other".
+field. The `feature_type` field is always the literal string `regulatory`, so reading it instead,
+the obvious thing to do, makes every feature "other".
 
 Measured consequence, from `docs/scientific/scn1a-design-coordinates.md`: the Build annotates a
 promoter, an enhancer and a CTCF site at SCN1A's MANE Select TSS, and **nothing** at either of the
@@ -99,11 +99,11 @@ two TSSs the thesis designed against. Suggestive, and not evidence that those ar
 **Cell-type-specific binding.** The `CELL_TYPE_OBSERVATION` kind exists and nothing produces one
 yet. Two routes:
 
-- **ENCODE ChIP-seq for HeLa** is abundant — HeLa-S3 is one of the most-assayed lines in existence,
+- **ENCODE ChIP-seq for HeLa** is abundant. HeLa-S3 is one of the most-assayed lines in existence,
   with hundreds of factors. Wiring in ENCODE's API would populate the HeLa column properly, and
   HeLa is the cell line in which chapter 4's activators actually worked.
 - **AF22 has no public ChIP-seq.** The project already holds AF22 histone bigWigs (GSE108506), which
-  give chromatin state rather than factor occupancy — H3K4me3 and H3K27ac at a promoter is evidence
+  give chromatin state rather than factor occupancy. H3K4me3 and H3K27ac at a promoter is evidence
   it is active in AF22, which is arguably more useful for explaining chapter 4's result than any
   single factor would be. Blocked on the GRCh37/GRCh38 reconciliation (defect B15, ADR 0004).
 
@@ -114,7 +114,7 @@ result.
 
 ## Licensing constraint
 
-JASPAR matrices are distributed under **CC BY-NC-SA 4.0** — non-commercial, share-alike. Bundling
+JASPAR matrices are distributed under **CC BY-NC-SA 4.0**, non-commercial, share-alike. Bundling
 them in `src/sarna/regulatory/data/` therefore constrains this package's own licence, which
 [`LICENSE`](../../LICENSE) records as undecided. For an internal research tool this is no obstacle.
 It would become one if the tool were ever distributed commercially, and the alternative is to fetch

@@ -3,7 +3,7 @@
 **Finding.** All 15 SCN1A designs from chapters 2-4 map to GRCh38 unambiguously. They form two
 clusters around two different transcription start sites, and **none of them targets the MANE Select
 promoter**, which is what this tool selects by default. Five of the fifteen, including two of the
-three activators, lie 5.5-6.0 kb from any annotated TSS — far outside the window Wang's criteria
+three activators, lie 5.5-6.0 kb from any annotated TSS, far outside the window Wang's criteria
 permit.
 
 Measured by `scripts/locate_scn1a_designs.py` against Ensembl GRCh38, 2026-10-06. Reproducible;
@@ -30,14 +30,14 @@ MANE Select is `ENST00000674923`, TSS at chr2:166,128,019.
 |---|---|---|---|---|---|
 | A | 166,149,213 | 5 | −124 to −744 | 5 / 5 | SCN1A-10 |
 | B | 166,073,669 | 10 | −224 to −6,010 | 5 / 10 | SCN1A-12, SCN1A-14 |
-| — | 166,128,019 (MANE Select) | **0** | — | — | — |
+| n/a | 166,128,019 (MANE Select) | **0** | n/a | n/a | n/a |
 
 Cluster A is textbook: five designs from −124 to −744 bp, all inside the −1000 to −100 window,
 targeting the TSS shared by `ENST00000409050` and three other transcripts.
 
 Cluster B splits in two on inspection. SCN1A-1 to SCN1A-5 sit at −224 to −778 bp of TSS
 166,073,669, which is again textbook. SCN1A-11 to SCN1A-15 sit at **−5,523 to −6,010 bp** of the
-same TSS — the nearest of all sixteen — which is not a promoter position by any definition this
+same TSS (the nearest of all sixteen) which is not a promoter position by any definition this
 project uses.
 
 ## The distant cluster contains two of the three activators
@@ -77,8 +77,8 @@ annotates no transcript for.
 
 That is the finding with the most bearing on the tool, and it generalises well past SCN1A: **a
 promoter worth targeting is not always one the annotation knows about.** A tool that can only design
-relative to Ensembl TSSs could not have produced SCN1A-12 or SCN1A-14 — two of this project's three
-SCN1A hits — because `tss-window` excludes anything beyond −1000 bp of an annotated TSS. Supporting
+relative to Ensembl TSSs could not have produced SCN1A-12 or SCN1A-14 (two of this project's three
+SCN1A hits) because `tss-window` excludes anything beyond −1000 bp of an annotated TSS. Supporting
 literature-defined promoter regions as first-class design anchors is a requirement, not a
 convenience.
 
@@ -124,11 +124,11 @@ chemistry in this project's own practice, and it is what an order-ready export s
   reading 2 against readings 3 and 4.
 - Feed these coordinates back into the validation harness. They are the promoter context the
   chapter 4 dataset lacks, and with them the TSS windows, CpG-island overlap and the 3' flank
-  preferences become testable against measured activity for 15 of the 125 sequences — currently
+  preferences become testable against measured activity for 15 of the 125 sequences (currently
   five of seven preferences cannot be evaluated at all
   (`docs/scientific/empirical-validation.md`).
 
-## Designing against the declared anchors reproduces chapter 2 — and finds an edge effect
+## Designing against the declared anchors reproduces chapter 2) and finds an edge effect
 
 With the three promoters declared as anchors (`sarna.genome.anchors`), the engine can be pointed at
 the same regions chapter 2 used. All 15 designs are then generated, and most pass:
@@ -151,7 +151,7 @@ SCN1A-14 sits at −107. Its 19-mer therefore spans **−107 to −89**, and ADR
 
 Measured over the distal anchor's 1,382 candidates: 901 have their start inside −1000…−100 and 883
 have the whole target inside. **Total containment costs 18 candidates, 2.0%**, all of them
-straddling one of the two edges — 36 bp of a 900 bp window, which is about what the arithmetic
+straddling one of the two edges, 36 bp of a 900 bp window, which is about what the arithmetic
 predicts.
 
 Two percent is a small price and ADR 0008's reasoning for it still stands: a target half outside

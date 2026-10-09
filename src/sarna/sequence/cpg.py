@@ -36,7 +36,7 @@ from sarna.sequence.nucleic import NucleicSequence
 DEFAULT_MINIMUM_CPG_COUNT = 7
 """Observed CpGs a window must contain regardless of its ratio.
 
-A GC-rich window whose Cs and Gs are segregated — ``CCCC…GGGG`` — has a very low *expected* CpG
+A GC-rich window whose Cs and Gs are segregated (``CCCC…GGGG``) has a very low *expected* CpG
 count, so the observed-to-expected ratio can clear any threshold on a handful of real CpGs. The
 guard rejects that arithmetic artefact. The legacy detector carries the same guard and states the
 same reason, though it tests ``> 7`` where its own comment says "at least 7".
@@ -153,7 +153,7 @@ def find_cpg_islands(
     A window of ``criteria.minimum_length`` is slid one base at a time; qualifying windows are
     merged where they overlap, and each merged span's statistics are then computed over the span
     as a whole. All counts are maintained incrementally, so this is linear in the sequence length
-    — the legacy detector rescans the window on every step, making it O(n · window) (defect B7).
+    the legacy detector rescans the window on every step, making it O(n · window) (defect B7).
 
     Args:
         sequence: The promoter or region to scan. Must be DNA.

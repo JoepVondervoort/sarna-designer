@@ -2,14 +2,14 @@
 
 The engine already decides everything worth showing; this module's job is to put it into one object
 in **promoter coordinates**, so that a renderer never does biology. Nothing here recomputes a
-verdict, and nothing here does strand arithmetic — genomic features are placed through
+verdict, and nothing here does strand arithmetic, genomic features are placed through
 :meth:`Promoter.span_of`, which is the inverse of the mapping the design pipeline used.
 
 Three things the view insists on, because they are what a promoter diagram usually gets wrong.
 
 **Every TSS, not just the chosen one.** A gene has many; SCN1A has sixteen. A diagram showing only
 the transcript the run selected hides the fact that a different choice would have moved the whole
-window. The others are drawn as what they are — alternatives the run did not use (ADR 0012).
+window. The others are drawn as what they are, alternatives the run did not use (ADR 0012).
 
 **Rejected candidates stay on the drawing.** They carry the rules that excluded them. A promoter
 view showing only survivors is the behaviour this project replaces.
@@ -261,7 +261,7 @@ class PromoterView:
         ``DesignResult.ranked`` holds *copies* that carry a rank, because ranking must not
         retroactively alter candidates a caller already holds. ``DesignResult.generated`` therefore
         has ``rank is None`` throughout, and exporting it directly produces a list a renderer
-        cannot order — which it does silently, by falling back to position. This merges the two.
+        cannot order, which it does silently, by falling back to position. This merges the two.
         """
         ranks = {candidate.id: candidate for candidate in self.result.ranked}
         return tuple(
@@ -302,7 +302,7 @@ class PromoterView:
                 looked for and not found.
             full_rules_for_rejected: When false, rejected candidates carry only their identity,
                 position and the rules that excluded them, rather than every rule's measurements.
-                Every candidate is still present — nothing is dropped — but a 2 500 bp promoter
+                Every candidate is still present (nothing is dropped) but a 2 500 bp promoter
                 goes from about 21 MB to under 2 MB, which is the difference between a document a
                 browser can load and one it cannot. Use ``rejection_breakdown`` for the summary.
         """
@@ -394,8 +394,8 @@ def alternative_tss_spans(
 ) -> tuple[PlacedSpan, ...]:
     """Place every other transcript's TSS on the promoter, as one-base spans.
 
-    The transcripts whose TSS falls outside the promoter window are omitted — not hidden, since
-    the view's caller reports the total — because there is nowhere on the drawing to put them.
+    The transcripts whose TSS falls outside the promoter window are omitted (not hidden, since
+    the view's caller reports the total) because there is nowhere on the drawing to put them.
 
     Args:
         promoter: The promoter being drawn.

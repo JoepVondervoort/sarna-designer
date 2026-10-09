@@ -31,9 +31,9 @@ the legacy comparison tolerance, and the predicted guide strands compared pairwi
 
 The first disagreement found between the RNA parameters and the legacy table is
 `AAAAACGGATCCAAGAAAT`, where the RNA parameters predict the **sense** strand and the legacy table
-the **antisense** strand — opposite answers to the question the gate is there to decide.
+the **antisense** strand (opposite answers to the question the gate is there to decide.
 
-## Interpretation — this corrects an emphasis in the inventory
+## Interpretation) this corrects an emphasis in the inventory
 
 The [legacy inventory](legacy-inventory.md) lists defect B2, the three mis-assigned stacks, as the
 substantive problem with the legacy table. The measurement says the mis-assignment is the
