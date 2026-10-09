@@ -18,6 +18,9 @@ against whatever is in the checkout right now, and it is worth knowing it does *
 checkout live. The installed copy is a build, frozen at install time, so it keeps reporting the
 old version until it is upgraded.
 
+[`../install-via-github.md`](../install-via-github.md) is the walkthrough to send someone
+moving from route A to route B.
+
 Route B is the better setup, and it is the one to move to. It needs no attachment, no second
 copy of anything, and the colleague's update is one command they can remember. Route A exists
 because the repository is private and not everyone has access to it.

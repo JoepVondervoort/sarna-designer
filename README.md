@@ -195,6 +195,11 @@ It prints the version that is now installed, which is how anyone tells one build
 Every saved run records the same string as its `engine_version`, so a result can be traced back
 to the code that produced it.
 
+**Moving a colleague from route A to route B** turns every future update into one command
+they run themselves: [`docs/install-via-github.md`](docs/install-via-github.md) is the
+walkthrough, written to be sent on its own. It needs them added as a collaborator and
+[Git for Windows](https://git-scm.com/download/win) installed, and it needs no WSL.
+
 **Publishing an update** is the maintainer's side of the same question:
 [`docs/development/releasing.md`](docs/development/releasing.md) is the checklist, including why
 the work has to reach the default branch before `uv tool upgrade` can deliver it.
@@ -440,6 +445,7 @@ present.
 .venv/bin/python -m pytest --cov --cov-report=term-missing
 .venv/bin/python -m mypy src tests              # strict
 .venv/bin/python -m ruff check .
+.venv/bin/python -m pytest tests/unit/test_writing_style.py   # the writing rule, below
 ```
 
 Tests that need the AF22 bigWigs skip cleanly when the files are absent; point
@@ -470,6 +476,34 @@ code name the same set of variables, so neither can drift from the other.
 
 The two registries load shipped entries first and refuse duplicate ids, so your files add to them
 and never silently replace a shipped entry.
+
+## Writing in this repository
+
+**No em dashes, and no phrasing that reads as though a language model wrote it.** This applies
+to everything a person sees: this page, every document under `docs/`, the application's own
+text, and source comments, which are visible to anyone browsing the repository.
+
+The rule is a failing test rather than a convention, because a convention lasts about a dozen
+edits:
+
+```bash
+.venv/bin/python -m pytest tests/unit/test_writing_style.py
+```
+
+It bans the character, its JavaScript escape and its HTML entities, plus a short list of
+phrases with no legitimate use here. The list is deliberately short: words that are both an AI
+tell and a real technical term, `harness` for a test harness or `comprehensive` in a caveat
+about what a screening is not, are left alone, because a check that cries wolf gets suppressed
+and then checks nothing.
+
+Replace an em dash with whatever the sentence actually wants: a comma, a colon, a full stop, or
+parentheses for a true aside. **An en dash stays allowed**, because this project writes real
+ranges such as -1000 to -100 and B1 to B18.
+
+Text that has to *name* one of the banned characters marks that line with
+`writing-style: allow`. The marker is per line and conspicuous on purpose, so an exemption
+cannot be granted quietly. `legacy/` is exempt in full, preserved verbatim as the scientific
+ground truth. Generated pages under `out/` are not scanned.
 
 ## Licence
 

@@ -569,115 +569,17 @@ decision about publishing the work rather than a technical one.
 
 ## Switching an existing install to GitHub
 
-For someone who already has saRNA Designer working from a `.whl` file and wants updates to be
-one command. It replaces the installation in place. **Nothing is uninstalled first, and your
-saved runs are not touched.**
+If you already have this working from a `.whl` file and want updates to be one command,
+[`docs/install-via-github.md`](docs/install-via-github.md) is the walkthrough. It is written to
+be sent on its own.
 
-**You do not need WSL.** You do not need to understand Python. Budget about fifteen minutes,
-most of it waiting for two downloads.
+In outline: accept the repository invitation, install
+[Git for Windows](https://git-scm.com/download/win) accepting every default, then run the
+Route B install command above once and sign in when the browser opens. It replaces your
+current installation in place, and your saved runs are not touched. After that, every update
+is `uv tool upgrade sarna-designer`.
 
-### 1. Accept the repository invitation
-
-The person who sent you the tool adds you to the repository as a collaborator. You get an email
-from GitHub with an **Accept invitation** button. Click it.
-
-If you have no GitHub account yet, make a free one at [github.com](https://github.com) first,
-then tell them the username you chose so they can send the invitation to it.
-
-You cannot continue until this is done. The repository is private, and without the invitation
-the next steps fail with `repository not found`.
-
-### 2. Install Git for Windows
-
-Download it from [git-scm.com/download/win](https://git-scm.com/download/win). The download
-starts on its own.
-
-Run the installer and **click Next on every screen, changing nothing**. The default options are
-the ones you want. One of them, Git Credential Manager, is what lets you sign in to GitHub from
-a browser window in step 4 instead of typing a password that would not work anyway.
-
-### 3. Close PowerShell and open it again
-
-Press **Windows key**, type `powershell`, press **Enter**. If a window was already open, close
-it first. A program installed while a terminal is open is invisible to that terminal.
-
-Check that both tools are there by running these two lines, one at a time:
-
-```powershell
-git --version
-```
-
-```powershell
-uv --version
-```
-
-Each should print a version number. `uv` is already on your machine from the last install. If
-`git` is not recognised, step 2 did not finish or you did not reopen PowerShell.
-
-### 4. Install from GitHub
-
-Copy this **entire line** and paste it into PowerShell, then press **Enter**:
-
-```powershell
-uv tool install --python 3.11 "sarna-designer[app] @ git+https://github.com/JoepVondervoort/sarna-designer"
-```
-
-**A browser window will open asking you to sign in to GitHub.** That is expected, and it
-happens once. Sign in and authorise it, then go back to PowerShell.
-
-The command then downloads the tool and ends with:
-
-```
-Installed 2 executables: sarna-designer, sarna-designer-check
-```
-
-It may take several minutes the first time. If you do not see that line, stop and send the
-whole output to the person who sent you the tool.
-
-### 5. Close PowerShell, open it again, and check
-
-```powershell
-sarna-designer-check
-```
-
-The last lines name the version you now have and say `RESULT: PASS`. If the version is the same
-one you had before, the install did not take: rerun step 4.
-
-### 6. Start it as usual
-
-```powershell
-sarna-designer
-```
-
-Then open <http://localhost:8001/> in your browser, and leave the PowerShell window open while
-you work.
-
-### From now on, updating is one line
-
-```powershell
-uv tool upgrade sarna-designer
-```
-
-That is the whole thing. No file to wait for, no filename to match. It fetches whatever is in
-the repository now, so it picks up new work even when the version number has not changed. Run
-`sarna-designer-check` afterwards to see which version you are on.
-
-### If something goes wrong
-
-**`repository not found`, or it asks for a password.** The invitation in step 1 has not been
-accepted, or you signed in to a different GitHub account than the one invited.
-
-**`git` is not recognised.** Step 2 did not finish, or PowerShell was not reopened after it.
-
-**The browser sign-in never appeared and it failed instead.** Git Credential Manager was
-switched off during the Git install. Run the Git for Windows installer again and accept the
-defaults.
-
-**Everything else.** Run this and send the output:
-
-```powershell
-sarna-designer-check
-```
+You do not need WSL for any of it.
 
 ---
 

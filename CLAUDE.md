@@ -71,9 +71,15 @@ Use `.venv/bin/python`; there is a miniconda base environment that must stay unt
 **No em dashes anywhere outside `legacy/`.** The user asked for the GitHub page, the
 documentation and the application's own text to carry no em dashes and no obvious AI phrasing.
 The whole tree was swept on 8 October 2026: prose em dashes became commas, colons or sentence
-breaks, paired ones became parentheses, and the `\u2014` placeholders in tables became `n/a` or
-a word. `legacy/` keeps its own, being immutable. Do not reintroduce them, including as
-`\u2014`, `&mdash;` or in a docstring.
+breaks, paired ones became parentheses, and the escaped placeholders in tables became `n/a` or
+a word. `legacy/` keeps its own, being immutable.
+
+`tests/unit/test_writing_style.py` enforces this, so it is a failing test rather than a
+convention: the character, its JavaScript escape and its HTML entities are all banned, along
+with a short list of phrases that have no legitimate use here. Text that has to *name* one of
+them marks that line with `writing-style: allow`, per line and conspicuously, so an exemption
+cannot be granted quietly. An en dash stays allowed, because this project writes real ranges.
+Generated output under `out/` is not scanned.
 
 `ruff format` is deliberately not part of the workflow, the source is hand-wrapped near 88
 columns while `line-length` is 100, so running it reformats most files. `ruff check` is the gate.
