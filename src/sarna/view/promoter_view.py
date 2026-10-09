@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from sarna.design.candidate import Candidate
+from sarna.design.duplicates import identical_duplex_groups
 from sarna.design.pipeline import DesignResult
 from sarna.genome.ensembl import Gene, Transcript
 from sarna.genome.promoter import Promoter
@@ -289,6 +290,38 @@ class PromoterView:
             for rule_id, count in sorted(counts.items(), key=lambda item: -item[1])
         )
 
+    def rejection_attribution(self) -> tuple[dict[str, Any], ...]:
+        """Return how many candidates each rule excluded *first*, most first.
+
+        This is the companion to :meth:`rejection_breakdown` and answers a different question.
+        The breakdown counts every gate a candidate failed, so one candidate appears in several
+        rows and the shares overrun 100 %. This counts each rejected candidate exactly once,
+        against the first gate in the configuration's evaluation order that excluded it, which
+        is the attribution the promoter map's excluded track colours by. Reporting the
+        breakdown's shares beside that drawing overstated position 19 by a factor of eleven on
+        a 600 bp fixture, so the two now have separate names and separate percentages.
+
+        "First" means first in evaluation order, not most important. A candidate failing four
+        gates is counted once, and its other three failures live in the breakdown.
+        """
+        counts: dict[str, int] = {}
+        for candidate in self.result.rejected:
+            first = candidate.excluded_by[0].rule_id
+            counts[first] = counts.get(first, 0) + 1
+        excluded = len(self.result.rejected)
+        generated = len(self.result.generated)
+        return tuple(
+            {
+                "rule": rule_id,
+                "rejected": count,
+                "percent_of_excluded": round(100.0 * count / excluded, 1) if excluded else 0.0,
+                "percent_of_generated": (
+                    round(100.0 * count / generated, 1) if generated else 0.0
+                ),
+            }
+            for rule_id, count in sorted(counts.items(), key=lambda item: -item[1])
+        )
+
     def to_dict(
         self,
         motif_minimum_enrichment: float = 1.0,
@@ -354,6 +387,16 @@ class PromoterView:
                 for candidate in self.ranked_candidates()
             ],
             "rejection_breakdown": list(self.rejection_breakdown()),
+            "rejection_attribution": list(self.rejection_attribution()),
+            # Computed once here rather than in the browser, so the table's chip and the order
+            # CSV's column cannot come to different answers about the same two molecules.
+            "identical_duplex_groups": {
+                candidate_id: list(twins)
+                for candidate_id, twins in identical_duplex_groups(
+                    (candidate.id, candidate.target.bases)
+                    for candidate in self.result.generated
+                ).items()
+            },
             "tracks": {
                 "cpg_islands": [s.to_dict() for s in self.island_spans()],
                 "alternative_tss": [s.to_dict() for s in self.alternative_tss],

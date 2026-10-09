@@ -19,6 +19,7 @@ from sarna import __version__, settings
 from sarna.app.models import BatchRequest, DesignRequest
 from sarna.app.service import DesignService
 from sarna.app.workbook import Sheet, write_workbook
+from sarna.design.duplicates import identical_duplex_groups
 from sarna.design.order import (
     CSV_COLUMNS,
     DEFAULT_MODEL,
@@ -485,6 +486,13 @@ class AppRouter:
         """
         selected = _selected_for_export(snapshot, query)
         screenings = self._screenings_by_candidate(run_id)
+        # Twins are looked for across the whole run, not the selection, so ticking one of eight
+        # identical rows still says so. Which of them are in *this* file is the separate
+        # question, and the only one that means a product is about to be bought twice.
+        twins = identical_duplex_groups(
+            (c["id"], c["target_site_dna"]) for c in snapshot["candidates"]
+        )
+        exported = {c["id"] for c in selected}
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(CSV_COLUMNS)
@@ -492,9 +500,14 @@ class AppRouter:
             # The model this run actually displayed, taken from the frozen record rather than
             # today's default, so a reopened run reports the strand prediction it was read with.
             model = (candidate.get("rating") or {}).get("guide_model") or DEFAULT_MODEL
+            in_run = twins.get(candidate["id"], ())
             writer.writerow(csv_row(
-                order_from_record(candidate, model, screenings=tuple(
-                    screenings.get(candidate["id"], ()))),
+                order_from_record(
+                    candidate, model,
+                    screenings=tuple(screenings.get(candidate["id"], ())),
+                    identical_in_run=in_run,
+                    identical_in_export=tuple(i for i in in_run if i in exported),
+                ),
                 run_id))
         return 200, "text/csv; charset=utf-8", output.getvalue().encode()
 

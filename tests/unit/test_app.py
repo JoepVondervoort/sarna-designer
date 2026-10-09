@@ -621,3 +621,45 @@ class TestTheSpreadsheetExport:
         rows = self.book(service, saved["app"]["run_id"], f"?ids={wanted}")["saRNA candidates"]
         assert len(rows) == 2
         assert rows[1][rows[0].index("candidate")] == wanted
+
+
+def test_identical_duplexes_are_named_in_the_order_csv(tmp_path: Path):
+    # A promoter with the same window twice produces two candidates and one product. The route
+    # must say so: "Order CSV, all 8" on a repeat-rich promoter otherwise buys one molecule
+    # eight times, and nothing in the file would mention it.
+    service = service_for(tmp_path)
+    # A 62 bp tandem repeat, anchored so several copies fall inside Wang's -1000..-100 window
+    # and therefore pass together. With a shorter anchor the window gate happens to keep only
+    # one copy of each duplex, which is the quiet case this test is not about.
+    repeated = ("GCTACGGTATCATGTCATAAGTTCAATTGACATTGGAATTACCATAGTTAACGTTTAGCATA" * 10)[:600]
+    saved = run_request(service, sequence=repeated, tss_start=-600)
+    router = AppRouter(service)
+    try:
+        run_id = saved["app"]["run_id"]
+        body = router.dispatch("GET", f"/api/runs/{run_id}/export.order.csv")[2]
+        rows = list(csv.DictReader(io.StringIO(body.decode())))
+        exported = {r["candidate"] for r in rows}
+        twinned = [
+            r for r in rows
+            if any(t in exported for t in r["identical_duplex_in_run"].split())
+        ]
+        assert twinned, "the repeated promoter put no two identical duplexes in one export"
+        first = twinned[0]
+        # Every id it names is a real candidate of this run, and never the row itself. The
+        # twins span the whole run, so an excluded position is named too: the same molecule
+        # sitting somewhere the gates rejected is worth knowing before ordering it.
+        named = first["identical_duplex_in_run"].split()
+        assert first["candidate"] not in named
+        every_candidate = {c["id"] for c in saved["candidates"]}
+        assert all(name in every_candidate for name in named)
+        # Both twins are in this file, so it is a concern rather than a note.
+        assert "identical-duplex [concern]" in first["sanity_report"]
+
+        # Exporting one of the pair alone is not buying anything twice.
+        alone = router.dispatch(
+            "GET", f"/api/runs/{run_id}/export.order.csv?ids={first['candidate']}")[2]
+        single = next(iter(csv.DictReader(io.StringIO(alone.decode()))))
+        assert single["identical_duplex_in_run"] == first["identical_duplex_in_run"]
+        assert "identical-duplex [ok]" in single["sanity_report"]
+    finally:
+        router.close()

@@ -155,7 +155,10 @@ class DuplexOrder:
 
     sense: OrderStrand
     antisense: OrderStrand
-    checks: tuple[OrderCheck, ...]
+    identical_in_run: tuple[str, ...] = ()
+    """Other candidates in the same run whose ordered 21-mers are identical to these."""
+
+    checks: tuple[OrderCheck, ...] = ()
 
     @property
     def concerns(self) -> tuple[OrderCheck, ...]:
@@ -170,9 +173,49 @@ class DuplexOrder:
             "target_site_dna": self.target_site.bases,
             "sense": self.sense.to_dict(),
             "antisense": self.antisense.to_dict(),
+            "identical_in_run": list(self.identical_in_run),
             "checks": [c.to_dict() for c in self.checks],
             "concern_count": len(self.concerns),
         }
+
+
+def _duplicate_check(
+    identical_in_run: Sequence[str], identical_in_export: Sequence[str]
+) -> OrderCheck:
+    """Report the candidates that would arrive from the vendor as this same molecule.
+
+    The product follows from the target's bases, so the same 19-mer at two promoter positions is
+    two rows and one duplex. Ordering both is a real cost, which is why twins inside this export
+    are a concern, while a twin left out of it is only context: nothing is being bought twice.
+    """
+    if identical_in_export:
+        also = ", ".join(identical_in_export)
+        return OrderCheck(
+            id="identical-duplex",
+            outcome=OrderOutcome.CONCERN,
+            detail=(
+                f"This export also contains {also}, whose ordered 21-mers are identical to this "
+                f"row's. They are separate promoter positions, and the position-dependent rules "
+                f"may rate them differently, but a vendor would synthesise one product. Order "
+                f"one and record which position you mean."
+            ),
+        )
+    if identical_in_run:
+        also = ", ".join(identical_in_run)
+        return OrderCheck(
+            id="identical-duplex",
+            outcome=OrderOutcome.OK,
+            detail=(
+                f"The same duplex also occurs at {also} in this run, none of which are in this "
+                f"export. Nothing is ordered twice; the other positions are noted because the "
+                f"rules may rate the same molecule differently there."
+            ),
+        )
+    return OrderCheck(
+        id="identical-duplex",
+        outcome=OrderOutcome.OK,
+        detail="No other candidate in this run orders as the same duplex.",
+    )
 
 
 def _core_length_check(core: NucleicSequence) -> OrderCheck:
@@ -386,6 +429,8 @@ def _build(
     summary: str,
     model: str,
     screenings: Sequence[ScreeningFinding] = (),
+    identical_in_run: Sequence[str] = (),
+    identical_in_export: Sequence[str] = (),
 ) -> DuplexOrder:
     """Assemble a duplex order and its checks. The one place either entry point goes through."""
     return DuplexOrder(
@@ -394,11 +439,14 @@ def _build(
         target_site=target_site,
         sense=OrderStrand(role="sense", core=sense_core),
         antisense=OrderStrand(role="antisense", core=antisense_core),
+        identical_in_run=tuple(identical_in_run),
         checks=(
             _core_length_check(sense_core),
             _complementarity_check(sense_core, antisense_core),
             _intent_check(predictions, model),
             _agreement_check(tables_agree, summary),
+            _duplicate_check(identical_in_run, identical_in_export),
+            # Screening stays last: it is the caveat a reader should leave the row with.
             _screening_check(screenings),
         ),
     )
@@ -407,6 +455,8 @@ def _build(
 def order_for(
     candidate: Candidate, model: str = DEFAULT_MODEL,
     screenings: Sequence[ScreeningFinding] = (),
+    identical_in_run: Sequence[str] = (),
+    identical_in_export: Sequence[str] = (),
 ) -> DuplexOrder:
     """Build the order-ready duplex for ``candidate``, with its sanity report.
 
@@ -420,6 +470,10 @@ def order_for(
         screenings: This candidate's findings from any completed off-target screening,
             one per scope. Empty means none was performed, which is not a clean
             result and is reported as its own outcome.
+        identical_in_run: Other candidates in the run ordering as this same duplex, from
+            :func:`~sarna.design.duplicates.identical_duplex_groups`.
+        identical_in_export: Those of them also present in the export being written, which is
+            what turns the note into a concern: that is when the same product is bought twice.
 
     Returns:
         The two 21-mers and every check made on them.
@@ -444,12 +498,16 @@ def order_for(
         summary=comparison.summary,
         model=model,
         screenings=screenings,
+        identical_in_run=identical_in_run,
+        identical_in_export=identical_in_export,
     )
 
 
 def order_from_record(
     record: dict[str, Any], model: str = DEFAULT_MODEL,
     screenings: Sequence[ScreeningFinding] = (),
+    identical_in_run: Sequence[str] = (),
+    identical_in_export: Sequence[str] = (),
 ) -> DuplexOrder:
     """Build the order-ready duplex from an exported candidate record.
 
@@ -461,6 +519,8 @@ def order_from_record(
         record: One entry of a run snapshot's ``candidates``.
         model: As for :func:`order_for`.
         screenings: As for :func:`order_for`.
+        identical_in_run: As for :func:`order_for`.
+        identical_in_export: As for :func:`order_for`.
 
     Returns:
         The two 21-mers and every check made on them.
@@ -488,6 +548,8 @@ def order_from_record(
         summary=prediction["summary"],
         model=model,
         screenings=screenings,
+        identical_in_run=identical_in_run,
+        identical_in_export=identical_in_export,
     )
 
 
@@ -495,9 +557,16 @@ CSV_COLUMNS = (
     "run_id", "candidate", "rank", "target_site_dna_5to3",
     "sense_order_5to3", "antisense_order_5to3",
     "sense_core_rna_5to3", "antisense_core_rna_5to3", "overhang",
-    "ordered_length_nt", "core_length_nt", "concerns", "sanity_report",
+    "ordered_length_nt", "core_length_nt", "identical_duplex_in_run",
+    "concerns", "sanity_report",
 )
-"""Columns of the order CSV. The ordered strands come first, then the parts they are built from."""
+"""Columns of the order CSV. The ordered strands come first, then the parts they are built from.
+
+``identical_duplex_in_run`` is a sortable column rather than only a sentence in the report,
+because spotting that eight ticked rows are one product is the whole use: sorting on it groups
+them. The same fact is in ``sanity_report`` as well, so a single row pasted into a vendor form
+still carries it.
+"""
 
 
 def csv_row(order: DuplexOrder, run_id: str) -> list[str]:
@@ -513,5 +582,6 @@ def csv_row(order: DuplexOrder, run_id: str) -> list[str]:
         order.sense.annotated, order.antisense.annotated,
         order.sense.core.bases, order.antisense.core.bases, OVERHANG_ANNOTATED,
         str(order.sense.length_nt), str(len(order.sense.core)),
+        " ".join(order.identical_in_run),
         str(len(order.concerns)), report,
     ]

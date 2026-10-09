@@ -379,6 +379,79 @@ class TestRejectionBreakdown:
         assert view.rejection_breakdown() == ()
 
 
+class TestRejectionAttribution:
+    """Attribution answers a different question from the breakdown, and must not be confused.
+
+    ``rejection_breakdown`` counts every gate a candidate failed, so one candidate appears in
+    several rows and the percentages overrun 100. ``rejection_attribution`` counts each
+    candidate exactly once, against the first gate that excluded it, which is what the promoter
+    map's excluded track actually colours. Drawing one and captioning it with the other told a
+    reader that position 19 caused 67.5 % of the exclusions when it coloured 6.0 % of the marks.
+    """
+
+    def test_every_rejected_candidate_is_counted_exactly_once(self) -> None:
+        view = view_on(Strand.PLUS)
+        counted = sum(entry["rejected"] for entry in view.rejection_attribution())
+        assert counted == len(view.result.rejected)
+
+    def test_the_shares_of_excluded_sum_to_one_hundred(self) -> None:
+        view = view_on(Strand.PLUS)
+        total = sum(entry["percent_of_excluded"] for entry in view.rejection_attribution())
+        assert total == pytest.approx(100.0, abs=0.3)
+
+    def test_it_matches_a_hand_scan_of_the_promoter(self) -> None:
+        # Independent derivation: scan the fixture with plain string indexing rather than the
+        # engine, decide each window's first failing gate from the configuration's own order,
+        # and require the view to agree candidate for candidate.
+        promoter = Promoter(sequence=NucleicSequence.parse(PROMOTER_BASES))
+        config = DesignConfig.of(["target-length-19", "pos18-at", "pos19-a"])
+        order = [resolved.id for resolved in config.rules]
+        expected: dict[str, int] = {}
+        for offset in range(len(PROMOTER_BASES) - 19 + 1):
+            window = PROMOTER_BASES[offset : offset + 19]
+            failed = [
+                rule_id
+                for rule_id, holds in (
+                    ("pos18-at", window[17] in "AT"),
+                    ("pos19-a", window[18] == "A"),
+                )
+                if not holds
+            ]
+            if failed:
+                first = min(failed, key=order.index)
+                expected[first] = expected.get(first, 0) + 1
+        view = PromoterView(result=design_sarnas(promoter, config))
+        measured = {
+            entry["rule"]: entry["rejected"] for entry in view.rejection_attribution()
+        }
+        assert measured == expected
+
+    def test_it_differs_from_the_overlapping_breakdown_on_this_fixture(self) -> None:
+        # The two measurements are kept apart on purpose, so a regression that quietly makes
+        # one read from the other has to fail a test rather than only look plausible.
+        view = view_on(Strand.PLUS)
+        breakdown = {entry["rule"]: entry["rejected"] for entry in view.rejection_breakdown()}
+        attribution = {
+            entry["rule"]: entry["rejected"] for entry in view.rejection_attribution()
+        }
+        assert breakdown["pos19-a"] > 5 * attribution["pos19-a"]
+
+    def test_it_orders_the_largest_cause_first(self) -> None:
+        counts = [entry["rejected"] for entry in view_on(Strand.PLUS).rejection_attribution()]
+        assert counts == sorted(counts, reverse=True)
+
+    def test_a_run_with_no_rejections_has_no_attribution(self) -> None:
+        promoter = Promoter(sequence=NucleicSequence.parse(PROMOTER_BASES))
+        config = DesignConfig.of(["target-length-19", "start-1-gc"])
+        view = PromoterView(result=design_sarnas(promoter, config))
+        assert view.rejection_attribution() == ()
+
+    def test_the_export_carries_both_measurements(self) -> None:
+        exported = view_on(Strand.PLUS).to_dict()
+        assert exported["rejection_attribution"]
+        assert exported["rejection_breakdown"]
+
+
 class TestExport:
     def test_every_generated_candidate_is_present(self) -> None:
         view = view_on(Strand.PLUS)

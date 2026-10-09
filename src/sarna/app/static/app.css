@@ -81,7 +81,7 @@ body.frozen .setup,body.frozen .intro-note,body.frozen .saved-label,body.frozen 
   color:var(--muted);align-items:center}
 .rejection-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;
   margin-right:4px;vertical-align:-1px}
-.missed-chip{font-size:10px;color:var(--gold);white-space:nowrap}
+.missed-chip{font-size:10px;color:var(--gold);white-space:nowrap}.twin-chip{font-size:10px;color:var(--muted);margin-top:3px;cursor:help;border-bottom:1px dotted #aabdb9;display:inline-block}.twin-note{font-size:11px;line-height:1.7;margin-top:10px;padding:10px 12px;border:1px solid #d7e5dc;border-left:3px solid var(--teal);border-radius:7px;background:#f8fbf9}.twin-note .text-button{padding:0;font-size:11px;font-weight:600}
 
 /* The duplex as it is annealed and ordered. Three independent 5'->3' boxes could not show
    that the two strands are antiparallel, where the overhangs sit, or which tube is the guide. */

@@ -195,6 +195,81 @@ def check_expression(browser: Browser) -> None:
           f"order unchanged")
 
 
+def check_rejection_legend(browser: Browser) -> None:
+    """Check the excluded track's legend measures the marks the track actually draws.
+
+    The legend listed ``rejection_breakdown``, which counts every gate a candidate failed, beside
+    a track coloured by the *first* gate that excluded each one, and captioned the pair with the
+    first-gate rule. On a 600 bp fixture it printed 67.5 % next to a colour covering 6.0 % of the
+    marks, and spent a palette slot on a rule accounting for 7 of 574 while a cause of 27 fell
+    into the grey "other". Both numbers were individually true, which is why a green suite and a
+    reading of the code did not catch it: the defect was that they answered different questions.
+
+    The guard is therefore that every percentage printed in the legend has to be recomputable
+    from the candidates the track draws, and that they add up to the whole.
+    """
+    measured = cast("dict[str, Any]", browser.evaluate("""(()=>{
+      const excluded = state.result.candidates.filter(c => c.rank === null);
+      const counts = new Map();
+      for (const c of excluded) {
+        const first = c.excluded_by[0];
+        counts.set(first, (counts.get(first) || 0) + 1);
+      }
+      const shares = [...counts].sort((a, b) => b[1] - a[1])
+        .map(([rule, n]) => Math.round(1000 * n / excluded.length) / 10);
+      const legend = document.getElementById('rejection-legend');
+      const printed = [...legend.querySelectorAll('span')]
+        .map(s => s.textContent.trim())
+        .map(t => (t.match(/([\\d.]+)%$/) || [])[1])
+        .filter(v => v !== undefined).map(Number);
+      return {shares, printed, excluded: excluded.length,
+              caption: (legend.querySelector('small') || {}).textContent || ""};
+    })()"""))
+    excluded = cast("int", measured["excluded"])
+    printed = cast("list[float]", measured["printed"])
+    shares = cast("list[float]", measured["shares"])
+    if not excluded:
+        assert not printed, "the legend names exclusions on a run that excluded nothing"
+        return
+    assert printed, f"{excluded} targets were excluded and the legend printed no shares"
+    # The named chips must be the largest actual causes, in order, to the tenth of a percent.
+    for index, (shown, actual) in enumerate(zip(printed, shares, strict=False)):
+        assert abs(shown - actual) <= 0.1, (
+            f"legend entry {index} says {shown}% where the drawn marks are {actual}%"
+        )
+    total = sum(printed)
+    assert abs(total - 100.0) <= 0.5, (
+        f"the legend's shares add up to {total}%, so they are not shares of one whole"
+    )
+    assert "counted once" in measured["caption"], "the legend no longer states its attribution"
+
+
+def check_identical_duplexes(browser: Browser) -> None:
+    """Check the table's twin chips agree with the grouping Python computed.
+
+    The grouping travels in the run so the chip, the detail note and the order CSV cannot come
+    to different answers about which rows are one molecule. This asserts the browser is reading
+    that field rather than deciding for itself, and that a chip appears exactly where the field
+    says there is a twin. A promoter without repeats renders no chips, which is correct and is
+    checked as such rather than skipped.
+    """
+    measured = cast("dict[str, Any]", browser.evaluate("""(()=>{
+      const groups = state.result.identical_duplex_groups;
+      const rows = [...document.querySelectorAll('#candidate-rows tr[data-candidate]')];
+      const wrong = rows.filter(row => {
+        const twins = (groups || {})[row.dataset.candidate] || [];
+        const chip = row.querySelector('.twin-chip');
+        if (!twins.length) return chip !== null;
+        return chip === null || !chip.textContent.includes(String(twins.length));
+      }).map(row => row.dataset.candidate);
+      return {present: groups !== undefined, wrong, rows: rows.length};
+    })()"""))
+    assert measured["present"], "the run carries no identical_duplex_groups for the table to read"
+    assert not measured["wrong"], (
+        f"twin chips disagree with the grouping for {measured['wrong']}"
+    )
+
+
 def check_organ_strip(browser: Browser) -> None:
     """Check that an organ symbol claims only what GTEx measured.
 
@@ -372,6 +447,8 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     drawn = browser.evaluate(
         "document.querySelectorAll('#promoter-map rect[data-candidate]').length")
     assert isinstance(drawn, int) and drawn > 0
+    check_rejection_legend(browser)
+    check_identical_duplexes(browser)
     # The ten highest-ranked targets have to be findable among the passing ones. Before this
     # they were drawn in the same colour at the same height as rank 900, so the map could not
     # answer which marks a reader would actually order. Checked on all three channels the

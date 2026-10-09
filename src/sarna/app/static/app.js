@@ -802,7 +802,7 @@ function renderTable() {
   state.page = Math.min(state.page,pages-1);
   const page = values.slice(state.page*50,(state.page+1)*50);
   $("visible-count").textContent = `· ${fmt(values.length)}`;
-  $("candidate-rows").innerHTML = page.length ? page.map(c => `<tr data-candidate="${c.id}" class="${state.selected===c.id?"selected":""}" tabindex="0" aria-label="Inspect ${c.id}"><td><input type="checkbox" data-check="${c.id}" ${state.checked.has(c.id)?"checked":""} aria-label="Select ${c.id} for export"></td><td>${c.rank || "n/a"}</td><td><span class="dna">${escapeHTML(c.target_site_dna)}</span><p class="candidate-id">${c.id}${c.rank===null?` · ${c.excluded_by.length} failed gates`:""}</p></td><td>${escapeHTML(positionText(c))}</td><td>${c.gc_percent}%</td><td><div class="rating-cell"><b>${ratingText(c)}</b><span class="rating-bar"><i style="width:${c.rating.percent ?? 0}%"></i></span></div>${c.rating.unavailable?`<p class="candidate-id">${c.rating.unavailable} unavailable</p>`:""}${c.rating.unchecked_gates.length?`<p class="candidate-id">${c.rating.unchecked_gates.length} unchecked gates</p>`:""}${(c.rating.missed||[]).length?`<p class="missed-chip">missed: ${c.rating.missed.map(id=>escapeHTML(ruleName(id))).join(", ")}</p>`:""}</td><td><span class="guide-badge ${escapeHTML(c.rating.guide || "unknown")}">${escapeHTML(c.rating.guide || "unknown")}</span>${!c.rating.models_agree?'<p class="disagreement">Models disagree</p>':""}</td></tr>`).join("") : '<tr><td colspan="7" style="padding:30px;text-align:center;color:var(--muted)">No candidates match this view. Inspect excluded targets or adjust your criteria and run again.</td></tr>';
+  $("candidate-rows").innerHTML = page.length ? page.map(c => `<tr data-candidate="${c.id}" class="${state.selected===c.id?"selected":""}" tabindex="0" aria-label="Inspect ${c.id}"><td><input type="checkbox" data-check="${c.id}" ${state.checked.has(c.id)?"checked":""} aria-label="Select ${c.id} for export"></td><td>${c.rank || "n/a"}</td><td><span class="dna">${escapeHTML(c.target_site_dna)}</span><p class="candidate-id">${c.id}${c.rank===null?` · ${c.excluded_by.length} failed gates`:""}</p>${twinChip(c)}</td><td>${escapeHTML(positionText(c))}</td><td>${c.gc_percent}%</td><td><div class="rating-cell"><b>${ratingText(c)}</b><span class="rating-bar"><i style="width:${c.rating.percent ?? 0}%"></i></span></div>${c.rating.unavailable?`<p class="candidate-id">${c.rating.unavailable} unavailable</p>`:""}${c.rating.unchecked_gates.length?`<p class="candidate-id">${c.rating.unchecked_gates.length} unchecked gates</p>`:""}${(c.rating.missed||[]).length?`<p class="missed-chip">missed: ${c.rating.missed.map(id=>escapeHTML(ruleName(id))).join(", ")}</p>`:""}</td><td><span class="guide-badge ${escapeHTML(c.rating.guide || "unknown")}">${escapeHTML(c.rating.guide || "unknown")}</span>${!c.rating.models_agree?'<p class="disagreement">Models disagree</p>':""}</td></tr>`).join("") : '<tr><td colspan="7" style="padding:30px;text-align:center;color:var(--muted)">No candidates match this view. Inspect excluded targets or adjust your criteria and run again.</td></tr>';
   $("page-label").textContent = values.length ? `${fmt(state.page*50+1)}–${fmt(Math.min((state.page+1)*50,values.length))} of ${fmt(values.length)} · page ${state.page+1}/${pages}` : "0 candidates";
   $("page-previous").disabled = state.page===0; $("page-next").disabled = state.page>=pages-1;
   $("select-page").checked = page.length>0 && page.every(c=>state.checked.has(c.id));
@@ -827,7 +827,7 @@ async function selectCandidate(id) {
     Object.assign(candidate,full);
     const primary = full.guide_prediction.assessments.find(a=>a.table===full.rating.guide_model);
     const sequenceBox = (name,sequence) => `<div class="sequence-box"><div><span>${name} · 5′ → 3′</span><button type="button" data-copy="${escapeHTML(sequence)}">Copy</button></div><code>${escapeHTML(sequence)}</code></div>`;
-    $("candidate-detail").innerHTML = `<div class="detail-heading"><div><h3>${id} <span class="muted">${full.rank?`Rank ${full.rank}`:"Excluded by gates"}</span></h3><p class="hint">${escapeHTML(positionText(full))} ${full.tss_span?"relative to reference TSS":"in supplied sequence"} · ${full.target_site_dna.length} nt core · ${full.gc_percent}% GC${full.genomic?` · genomic ${escapeHTML(full.genomic.strand)} strand`:""}</p></div><span class="tag">${ratingText(full)} PREFERENCES</span></div>${duplexPanel(run,full)}<div class="detail-body"><div>${sequenceBox("Promoter target DNA",full.target_site_dna)}${sequenceBox("Sense RNA core",full.sense_strand_rna)}${sequenceBox("Antisense RNA core",full.antisense_strand_rna)}<p class="hint">The cores above are the 19 nt RNA the rules are evaluated against, without overhangs. The duplex panel at the top is what you order. No off-target screening has been performed.</p></div><div><div class="guide-summary"><strong>Predicted RNA guide: ${escapeHTML(full.rating.guide || "unknown")}</strong><p>${escapeHTML(tableNames[full.rating.guide_model] || full.rating.guide_model)} · ${escapeHTML(full.guide_prediction.summary)}</p><p class="hint">This predicts duplex loading, not the identity of a promoter-associated target RNA, and not activation.</p></div><table class="model-table"><thead><tr><th>Parameter model</th><th>Guide</th><th>End difference</th></tr></thead><tbody>${full.guide_prediction.assessments.map(a=>`<tr data-tip="${escapeHTML(a.explanation)}" tabindex="0"><td>${escapeHTML(tableNames[a.table] || a.table)}</td><td>${escapeHTML(a.predicted_guide)}</td><td>${a.difference.toFixed(2)} ${escapeHTML(a.unit)}</td></tr>`).join("")}</tbody></table><details class="verdict"><summary>How the selected model reaches this prediction</summary><p>${escapeHTML(primary?.explanation || "The selected model was not assessed.")}</p></details></div></div>${full.excluded_by.length?`<p class="hint">${escapeHTML(full.rejection_summary)}</p>`:""}<div class="rule-verdicts"><h3>Every rule, explained</h3>${full.rules.map(r=>ruleVerdict(r,run.configuration)).join("")}</div>`;
+    $("candidate-detail").innerHTML = `<div class="detail-heading"><div><h3>${id} <span class="muted">${full.rank?`Rank ${full.rank}`:"Excluded by gates"}</span></h3><p class="hint">${escapeHTML(positionText(full))} ${full.tss_span?"relative to reference TSS":"in supplied sequence"} · ${full.target_site_dna.length} nt core · ${full.gc_percent}% GC${full.genomic?` · genomic ${escapeHTML(full.genomic.strand)} strand`:""}</p></div><span class="tag">${ratingText(full)} PREFERENCES</span></div>${duplexPanel(run,full)}<div class="detail-body"><div>${sequenceBox("Promoter target DNA",full.target_site_dna)}${sequenceBox("Sense RNA core",full.sense_strand_rna)}${sequenceBox("Antisense RNA core",full.antisense_strand_rna)}<p class="hint">The cores above are the 19 nt RNA the rules are evaluated against, without overhangs. The duplex panel at the top is what you order. No off-target screening has been performed.</p>${twinNote(full)}</div><div><div class="guide-summary"><strong>Predicted RNA guide: ${escapeHTML(full.rating.guide || "unknown")}</strong><p>${escapeHTML(tableNames[full.rating.guide_model] || full.rating.guide_model)} · ${escapeHTML(full.guide_prediction.summary)}</p><p class="hint">This predicts duplex loading, not the identity of a promoter-associated target RNA, and not activation.</p></div><table class="model-table"><thead><tr><th>Parameter model</th><th>Guide</th><th>End difference</th></tr></thead><tbody>${full.guide_prediction.assessments.map(a=>`<tr data-tip="${escapeHTML(a.explanation)}" tabindex="0"><td>${escapeHTML(tableNames[a.table] || a.table)}</td><td>${escapeHTML(a.predicted_guide)}</td><td>${a.difference.toFixed(2)} ${escapeHTML(a.unit)}</td></tr>`).join("")}</tbody></table><details class="verdict"><summary>How the selected model reaches this prediction</summary><p>${escapeHTML(primary?.explanation || "The selected model was not assessed.")}</p></details></div></div>${full.excluded_by.length?`<p class="hint">${escapeHTML(full.rejection_summary)}</p>`:""}<div class="rule-verdicts"><h3>Every rule, explained</h3>${full.rules.map(r=>ruleVerdict(r,run.configuration)).join("")}</div>`;
   } catch (e) { error(e.message); }
 }
 function ruleVerdict(verdict,config) {
@@ -844,11 +844,76 @@ function ruleVerdict(verdict,config) {
 const REJECTION_COLOURS = ["#b4714a","#7a93c2","#6f9e7a","#b2608f","#8d8248"];
 const OTHER_REJECTION = "#6e7d79";  // 3.9:1 on white; the previous grey was 2.47:1
 
+// The track colours one mark per excluded candidate, by the first gate that excluded it, so
+// the colours are shared out by that same attribution. They were shared out by
+// rejection_breakdown, which counts every gate a candidate failed: on a 600 bp fixture that
+// spent a colour on a rule accounting for 7 of 574 marks while the third largest actual cause,
+// 27 marks, fell into the grey "other". Use rejectionCauses for anything describing the
+// drawing, and rejection_breakdown only where overlapping totals are what is being reported.
+function rejectionCauses(result) {
+  if (result.rejection_attribution) return result.rejection_attribution;
+  // A run saved before the engine recorded this has candidates but no attribution. Deriving it
+  // here from the same field the track colours by keeps an archived run drawing and labelled
+  // identically to a fresh one, rather than silently losing its legend and turning every mark
+  // grey. Fresh runs never reach this branch.
+  const excluded = (result.candidates || []).filter(c => (c.excluded_by || []).length);
+  const counts = new Map();
+  for (const candidate of excluded) {
+    const first = candidate.excluded_by[0];
+    counts.set(first, (counts.get(first) || 0) + 1);
+  }
+  return [...counts].sort((a, b) => b[1] - a[1]).map(([rule, rejected]) => ({
+    rule,
+    rejected,
+    percent_of_excluded: excluded.length
+      ? Math.round(1000 * rejected / excluded.length) / 10 : 0,
+    percent_of_generated: (result.candidates || []).length
+      ? Math.round(1000 * rejected / result.candidates.length) / 10 : 0,
+  }));
+}
+
+// A candidate is a locus; the molecule follows from its target bases alone. The same 19-mer at
+// several positions is therefore several rows and one product, and ticking them all buys it
+// several times. The grouping is computed in Python and carried in the run, so this chip, the
+// detail panel and the order CSV cannot disagree about which rows are the same molecule.
+function duplexTwins(id) {
+  return (state.result?.identical_duplex_groups || {})[id] || [];
+}
+
+// How many twins are named before the rest are counted.
+const TWINS_NAMED = 8;
+function twinNote(c) {
+  const twins = duplexTwins(c.id);
+  if (!twins.length) return "";
+  // Named rather than counted, because the next question is always "which ones", and the
+  // differing ratings are the reason they are listed instead of merged away. Capped, because
+  // a tandem-repeat promoter can put the same 19-mer at dozens of positions and a wall of
+  // identifiers stops being readable long before it stops being true.
+  const shown = twins.slice(0, TWINS_NAMED);
+  const unnamed = twins.length - shown.length;
+  return `<p class="twin-note"><b>Identical duplex elsewhere in this run.</b> `
+    + `${shown.map(id => `<button type="button" class="text-button" data-candidate="${
+        escapeHTML(id)}">${escapeHTML(id)}</button>`).join(", ")}`
+    + `${unnamed ? ` and ${unnamed} further position${unnamed === 1 ? "" : "s"}` : ""}`
+    + ` order as exactly these two `
+    + `21-mers. They are different promoter positions, so the flank and window rules can rate `
+    + `them differently, but a vendor would synthesise one product. The order CSV repeats this `
+    + `per row.</p>`;
+}
+
+function twinChip(c) {
+  const twins = duplexTwins(c.id);
+  if (!twins.length) return "";
+  return `<p class="twin-chip" data-tip="${escapeHTML(
+    `The ordered 21-mers here are identical to ${twins.join(", ")}. Those are other promoter `
+    + `positions, and the flank and window rules can rate them differently, but a vendor would `
+    + `make one product. Order one.`)}" tabindex="0">same duplex as ${twins.length} other`
+    + `${twins.length === 1 ? "" : "s"}</p>`;
+}
+
 function rejectionPalette(result) {
-  // Colour the excluded track by the rule that rejected each candidate, most common first.
-  // A single grey band hid which rule is doing the work; the breakdown already knew.
   const palette = new Map();
-  (result.rejection_breakdown || []).slice(0, REJECTION_COLOURS.length)
+  rejectionCauses(result).slice(0, REJECTION_COLOURS.length)
     .forEach((entry, i) => palette.set(entry.rule, REJECTION_COLOURS[i]));
   return palette;
 }
@@ -863,7 +928,7 @@ function renderLegend(result) {
   // Collapsed it is one line of chips; opened it says what each track means.
   const legend = $("map-legend");
   if (!legend) return;
-  const rejections = (result.rejection_breakdown || []).slice(0, REJECTION_COLOURS.length);
+  const rejections = rejectionCauses(result).slice(0, REJECTION_COLOURS.length);
   const palette = rejectionPalette(result);
   const motifColours = motifPalette(result);
   const motifSwatches = [...motifColours].map(([name, fill]) =>
@@ -903,27 +968,39 @@ function renderLegend(result) {
 
 function renderRejectionLegend(result) {
   // Says which rule is actually constraining this promoter, in the same move as the colours.
-  const breakdown = result.rejection_breakdown || [];
+  // Every number here is a share of the marks on the track, so the legend and the picture
+  // cannot disagree. The overlapping count, where a candidate failing four gates is counted
+  // four times, is a different measurement and is reported under "Rule effects" in the run
+  // evidence, with its own caveat.
+  const causes = rejectionCauses(result);
   const legend = $("rejection-legend");
   if (!legend) return;
-  if (!breakdown.length) { legend.innerHTML = ""; return; }
+  if (!causes.length) { legend.innerHTML = ""; return; }
   const palette = rejectionPalette(result);
-  legend.innerHTML = "<span>Excluded by:</span>"
-    + breakdown.slice(0, REJECTION_COLOURS.length).map(entry =>
+  const rest = causes.slice(REJECTION_COLOURS.length);
+  const restShare = Math.round(rest.reduce((sum, e) => sum + e.percent_of_excluded, 0) * 10) / 10;
+  legend.innerHTML = "<span>First gate to exclude:</span>"
+    + causes.slice(0, REJECTION_COLOURS.length).map(entry =>
         `<span><i style="background:${palette.get(entry.rule)}"></i>`
-        + `${escapeHTML(ruleName(entry.rule))} \u00b7 ${entry.percent_of_generated}%</span>`).join("")
-    + (breakdown.length > REJECTION_COLOURS.length
-        ? `<span><i style="background:${OTHER_REJECTION}"></i>other</span>` : "")
+        + `${escapeHTML(ruleName(entry.rule))} \u00b7 ${entry.percent_of_excluded}%</span>`).join("")
+    + (rest.length
+        ? `<span><i style="background:${OTHER_REJECTION}"></i>`
+          + `${rest.length} further ${rest.length === 1 ? "rule" : "rules"} \u00b7 ${restShare}%`
+          + "</span>"
+        : "")
     // Which mode the track is drawn in is a statement about what the reader is looking at, so
     // it is said rather than left to be inferred from the shape of the bars.
-    + `<small>${state.excludedBinned
-        ? "A candidate is counted against the first rule that excluded it. Excluded targets are "
-          + "binned by position, and each column is split by the share of that bin each rule "
-          + "rejected. Every column is the same height, which carries no meaning. Hover "
-          + "for counts; click a column, or zoom below " + INDIVIDUAL_MARK_SPAN
+    + `<small>Each excluded target is counted once, against the first gate in this run's`
+      + ` evaluation order that excluded it, so these shares are of the`
+      + ` ${fmt(result.counts.rejected)} excluded targets and add up to 100%. Most failed`
+      + ` several gates; the run evidence lists every failure per rule. `
+      + `${state.excludedBinned
+        ? "Excluded targets are binned by position, and each column is split by the share of "
+          + "that bin each rule rejected. Every column is the same height, which carries no "
+          + "meaning. Hover for counts; click a column, or zoom below " + INDIVIDUAL_MARK_SPAN
           + " bp, to see each target."
-        : "A candidate is counted against the first rule that excluded it. Every excluded "
-          + "target in view is drawn individually; click one to inspect it."}</small>`;
+        : "Every excluded target in view is drawn individually; click one to inspect it."}`
+    + "</small>";
 }
 
 // One description of the tracks, used to draw the map, to label its rows, and to build the
@@ -1340,7 +1417,7 @@ function viewport(factor,pan=0) {
 }
 function renderEvidence() {
   const r=state.result, c=r.configuration;
-  $("run-evidence-content").innerHTML = `<p><b>${escapeHTML(c.preset.name)}</b> · ${c.is_custom?"customized":"preset defaults"} · engine ${escapeHTML(r.app.engine_version)}</p><p>Run ${escapeHTML(r.app.run_id)} · ${escapeHTML(r.app.created)}</p><h3>Promoter source</h3><p>${escapeHTML(r.app.anchor?.label || "User-supplied DNA")}</p>${r.app.anchor?`<p>${escapeHTML(r.app.anchor.provenance?.display || r.app.anchor.provenance || "Source unavailable")}</p><pre style="white-space:pre-wrap;font-size:10px">${escapeHTML(JSON.stringify(r.app.anchor,null,2))}</pre>`:""}<h3>Custom departures</h3><ul>${c.customizations.map(v=>`<li>${escapeHTML(JSON.stringify(v))}</li>`).join("") || "<li>None</li>"}${c.warnings.map(v=>`<li>${escapeHTML(v)}</li>`).join("")}${c.preset.divergences.map(v=>`<li>${escapeHTML(v)}</li>`).join("")}</ul><h3>Source availability</h3><ul>${r.app.notices.map(n=>`<li>${escapeHTML(n)}</li>`).join("")}</ul>${r.regulatory_summary?`<p>${escapeHTML(r.regulatory_summary.provenance)}</p><p>${escapeHTML(r.regulatory_summary.summary)}</p>`:""}<h3>Rule effects</h3><p>Failures overlap: a candidate may fail several gates.</p><ul>${r.rejection_breakdown.map(v=>`<li>${escapeHTML(v.rule)}: ${fmt(v.rejected)} (${v.percent_of_generated}%)</li>`).join("")}</ul><h3>Frozen configuration</h3>${c.rules.map(def=>`<details class="verdict"><summary>${escapeHTML(def.name)} · ${roleName[def.kind]}</summary><p class="source">${escapeHTML(def.provenance.display)} · ${escapeHTML(def.evidence_class)}</p><p>${escapeHTML(def.rationale)}</p><p>${escapeHTML(def.consequence)}</p><p>${def.parameters.map(p=>`${escapeHTML(p.name)}: ${escapeHTML(p.value)} (${escapeHTML(p.origin)})`).join("; ")}</p></details>`).join("")}<h3>Disabled or omitted rules</h3><p>${state.catalogue.rules.filter(def=>!c.rules.some(v=>v.id===def.id)).map(def=>escapeHTML(def.name)).join(" · ")}</p>`;
+  $("run-evidence-content").innerHTML = `<p><b>${escapeHTML(c.preset.name)}</b> · ${c.is_custom?"customized":"preset defaults"} · engine ${escapeHTML(r.app.engine_version)}</p><p>Run ${escapeHTML(r.app.run_id)} · ${escapeHTML(r.app.created)}</p><h3>Promoter source</h3><p>${escapeHTML(r.app.anchor?.label || "User-supplied DNA")}</p>${r.app.anchor?`<p>${escapeHTML(r.app.anchor.provenance?.display || r.app.anchor.provenance || "Source unavailable")}</p><pre style="white-space:pre-wrap;font-size:10px">${escapeHTML(JSON.stringify(r.app.anchor,null,2))}</pre>`:""}<h3>Custom departures</h3><ul>${c.customizations.map(v=>`<li>${escapeHTML(JSON.stringify(v))}</li>`).join("") || "<li>None</li>"}${c.warnings.map(v=>`<li>${escapeHTML(v)}</li>`).join("")}${c.preset.divergences.map(v=>`<li>${escapeHTML(v)}</li>`).join("")}</ul><h3>Source availability</h3><ul>${r.app.notices.map(n=>`<li>${escapeHTML(n)}</li>`).join("")}</ul>${r.regulatory_summary?`<p>${escapeHTML(r.regulatory_summary.provenance)}</p><p>${escapeHTML(r.regulatory_summary.summary)}</p>`:""}<h3>Rule effects</h3><p>Every gate each candidate failed, so failures overlap: a candidate failing four gates appears in four rows and these shares do not add up to 100%. Percentages are of all ${fmt(r.counts.generated)} generated targets. The promoter map's legend measures something else, each target counted once against the first gate that excluded it, and is listed below.</p><ul>${r.rejection_breakdown.map(v=>`<li>${escapeHTML(v.rule)}: ${fmt(v.rejected)} (${v.percent_of_generated}%)</li>`).join("")}</ul><h4>First gate to exclude, the map's attribution</h4><p>Each of the ${fmt(r.counts.rejected)} excluded targets counted once, in this run's rule evaluation order.</p><ul>${(r.rejection_attribution||[]).map(v=>`<li>${escapeHTML(v.rule)}: ${fmt(v.rejected)} (${v.percent_of_excluded}% of excluded)</li>`).join("")}</ul><h3>Frozen configuration</h3>${c.rules.map(def=>`<details class="verdict"><summary>${escapeHTML(def.name)} · ${roleName[def.kind]}</summary><p class="source">${escapeHTML(def.provenance.display)} · ${escapeHTML(def.evidence_class)}</p><p>${escapeHTML(def.rationale)}</p><p>${escapeHTML(def.consequence)}</p><p>${def.parameters.map(p=>`${escapeHTML(p.name)}: ${escapeHTML(p.value)} (${escapeHTML(p.origin)})`).join("; ")}</p></details>`).join("")}<h3>Disabled or omitted rules</h3><p>${state.catalogue.rules.filter(def=>!c.rules.some(v=>v.id===def.id)).map(def=>escapeHTML(def.name)).join(" · ")}</p>`;
   $("evidence-dialog").showModal();
 }
 function downloadBlob(blob,name) {
@@ -2063,6 +2140,9 @@ document.querySelectorAll("[data-sort]").forEach(b=>b.addEventListener("click",(
 $("candidate-rows").addEventListener("click",e=>{if (!e.target.closest("input")) {const row=e.target.closest("[data-candidate]");if(row)selectCandidate(row.dataset.candidate);}});
 $("candidate-rows").addEventListener("change",e=>{const id=e.target.dataset.check;if(id){e.target.checked?state.checked.add(id):state.checked.delete(id);renderTable();}});
 $("candidate-rows").addEventListener("keydown",e=>{if ((e.key==="Enter" || e.key===" ") && e.target.matches("tr[data-candidate]")){e.preventDefault();selectCandidate(e.target.dataset.candidate);}});
+// The detail panel names the candidates ordering as this same duplex; they are buttons so
+// the twin can be inspected, which is the point of naming it rather than counting it.
+$("candidate-detail").addEventListener("click",e=>{const v=e.target.closest("[data-candidate]");if(v)selectCandidate(v.dataset.candidate);});
 $("promoter-map").addEventListener("click",e=>{
   if(state.suppressMapClick){state.suppressMapClick=false;return;}
   const v=e.target.closest("[data-candidate]");

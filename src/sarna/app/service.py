@@ -18,6 +18,7 @@ from sarna.app.references import (
 )
 from sarna.app.store import RunStore
 from sarna.design.candidate import Candidate
+from sarna.design.duplicates import identical_duplex_groups
 from sarna.design.order import CSV_COLUMNS, csv_row, order_for
 from sarna.design.pipeline import design_sarnas
 from sarna.expression.gtex import DEFAULT_DATASET, GtexClient, GtexError
@@ -374,14 +375,31 @@ class DesignService:
         # frozen archive can hand over the exact molecules without JavaScript re-deriving the
         # chemistry (accepted constraint 11). Passing candidates only, in rank order: a duplex
         # that failed a gate is not something to order.
+        ordered = sorted(
+            (c for c in view.ranked_candidates() if c.rank is not None),
+            key=lambda c: c.rank or 0,
+        )
+        # The same target sequence at two positions is two candidates and one product. Looked
+        # for across every generated candidate, flagged as a concern only for the ones that are
+        # in this file, which is where the money is actually spent twice.
+        twins = identical_duplex_groups(
+            (c.id, c.target.bases) for c in view.ranked_candidates()
+        )
+        exported = {c.id for c in ordered}
         payload["order"] = {
             "columns": list(CSV_COLUMNS),
             "rows": [
-                csv_row(order_for(c, model), run_id)
-                for c in sorted(
-                    (c for c in view.ranked_candidates() if c.rank is not None),
-                    key=lambda c: c.rank or 0,
+                csv_row(
+                    order_for(
+                        c, model,
+                        identical_in_run=twins.get(c.id, ()),
+                        identical_in_export=tuple(
+                            twin for twin in twins.get(c.id, ()) if twin in exported
+                        ),
+                    ),
+                    run_id,
                 )
+                for c in ordered
             ],
         }
         if payload["promoter"]["tss_offset"] is None and promoter.tss_start is not None:

@@ -16,8 +16,10 @@ The expected strands below are hand-derived, not taken from the implementation:
 
 import pytest
 
+from sarna.design.duplicates import identical_duplex_groups
 from sarna.design.order import (
     CSV_COLUMNS,
+    DEFAULT_MODEL,
     ORDERED_LENGTH_NT,
     OVERHANG_ANNOTATED,
     OVERHANG_LENGTH_NT,
@@ -296,3 +298,79 @@ class TestTheOrderExportCitesTheScreeningWhenThereIsOne:
             strict=True))
         assert "off-target-screening [concern]" in row["sanity_report"]
         assert "not-performed" not in row["sanity_report"]
+
+
+class TestIdenticalDuplexes:
+    """Two candidates at different positions can order as one molecule.
+
+    The core determines the product, so a target sequence occurring twice in a promoter yields
+    two candidates whose 21-mers are byte-identical. They are still separate rows, because the
+    position-dependent rules score them separately: on a tandem-repeat fixture the same duplex
+    held a 6/7 at one locus and a 5/7 at another. What must not happen is a researcher ticking
+    eight rows and paying for the same two oligos eight times without being told.
+    """
+
+    def test_a_repeated_target_produces_candidates_that_share_one_duplex(self) -> None:
+        bases = LEFT + TARGET + RIGHT + TARGET + RIGHT
+        result = design_sarnas(
+            Promoter(sequence=NucleicSequence.parse(bases)), WANG_2015.resolve()
+        )
+        twins = [c for c in result.generated if c.target.bases == TARGET]
+        assert len(twins) == 2
+        orders = [order_for(c) for c in twins]
+        assert orders[0].sense.annotated == orders[1].sense.annotated
+        assert orders[0].antisense.annotated == orders[1].antisense.annotated
+        assert orders[0].candidate_id != orders[1].candidate_id
+
+    def test_grouping_names_every_other_candidate_sharing_the_duplex(self) -> None:
+        groups = identical_duplex_groups(
+            [("a", "ACGT"), ("b", "TTTT"), ("c", "ACGT"), ("d", "ACGT")]
+        )
+        assert groups == {"a": ("c", "d"), "c": ("a", "d"), "d": ("a", "c")}
+
+    def test_a_unique_duplex_is_absent_from_the_grouping(self) -> None:
+        assert identical_duplex_groups([("a", "ACGT"), ("b", "TTTT")]) == {}
+
+    def test_an_unexported_twin_is_reported_without_being_a_concern(self) -> None:
+        # Nothing is being bought twice, so this is context, not a warning before spending.
+        order = order_for(candidate_for(), identical_in_run=("saRNA-900",))
+        reported = check(order, "identical-duplex")
+        assert reported.outcome is OrderOutcome.OK
+        assert "saRNA-900" in reported.detail
+
+    def test_two_twins_in_one_export_are_a_concern_that_names_them(self) -> None:
+        order = order_for(
+            candidate_for(),
+            identical_in_run=("saRNA-900", "saRNA-901"),
+            identical_in_export=("saRNA-900",),
+        )
+        reported = check(order, "identical-duplex")
+        assert reported.outcome is OrderOutcome.CONCERN
+        assert "saRNA-900" in reported.detail
+
+    def test_a_duplex_with_no_twin_says_so_rather_than_staying_silent(self) -> None:
+        reported = check(order_for(candidate_for()), "identical-duplex")
+        assert reported.outcome is OrderOutcome.OK
+        assert reported.detail
+
+    def test_the_csv_carries_the_twins_in_their_own_column(self) -> None:
+        row = dict(zip(CSV_COLUMNS, csv_row(
+            order_for(candidate_for(), identical_in_run=("saRNA-900", "saRNA-901")), "run-1"),
+            strict=True))
+        assert row["identical_duplex_in_run"] == "saRNA-900 saRNA-901"
+
+    def test_a_unique_duplex_leaves_that_column_empty(self) -> None:
+        row = dict(zip(CSV_COLUMNS, csv_row(order_for(candidate_for()), "run-1"), strict=True))
+        assert row["identical_duplex_in_run"] == ""
+
+    def test_the_sanity_report_carries_it_too_so_a_pasted_row_keeps_the_caveat(self) -> None:
+        row = dict(zip(CSV_COLUMNS, csv_row(
+            order_for(candidate_for(), identical_in_run=("saRNA-900",),
+                      identical_in_export=("saRNA-900",)), "run-1"), strict=True))
+        assert "identical-duplex [concern]" in row["sanity_report"]
+
+    def test_a_saved_record_reports_the_twins_the_same_way(self) -> None:
+        candidate = candidate_for()
+        order = order_from_record(
+            candidate.to_dict(), DEFAULT_MODEL, identical_in_run=("saRNA-900",))
+        assert "saRNA-900" in check(order, "identical-duplex").detail
