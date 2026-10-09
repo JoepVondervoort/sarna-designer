@@ -36,12 +36,16 @@ ALLOW = "writing-style: allow"
 it. This file and the working notes both have to name the characters they forbid. The marker
 is per line and deliberately conspicuous, so an exemption cannot be granted quietly."""
 
-EM_DASH = "—"
+# Built rather than written out, so this file does not itself contain any of the things it
+# bans. The test already skips itself, but a plain `git grep` over the repository does not
+# know that, and "search for the character and expect nothing" is the check a person actually
+# runs. Leaving one literal here made that check report a false positive.
+EM_DASH = chr(0x2014)
 
 DISGUISES = (
-    ("\\u2014", "a Python or JavaScript escape for an em dash"),
-    ("&mdash;", "the HTML entity for an em dash"),
-    ("&#8212;", "the numeric HTML entity for an em dash"),
+    ("\\" + "u2014", "a Python or JavaScript escape for an em dash"),
+    ("&m" + "dash;", "the HTML entity for an em dash"),
+    ("&#" + "8212;", "the numeric HTML entity for an em dash"),
 )
 
 PHRASES = {
