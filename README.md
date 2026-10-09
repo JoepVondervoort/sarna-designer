@@ -507,7 +507,7 @@ ground truth. Generated pages under `out/` are not scanned.
 
 ## Licence
 
-**Apache License 2.0**, see [`LICENSE`](LICENSE). Copyright 2026 Joep Vondervoort.
+**Apache License 2.0**, see [`LICENSE`](LICENSE). Copyright 2026 Joep van de Vondervoort.
 
 Bundled data keep their own terms, listed in [`NOTICE`](NOTICE):
 
