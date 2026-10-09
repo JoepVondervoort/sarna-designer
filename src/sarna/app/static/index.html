@@ -10,7 +10,7 @@
 <body>
   <header class="topbar">
     <a class="brand" href="/" aria-label="saRNA Designer home"><span class="brand-mark">s<span>a</span></span> saRNA <b>Designer</b></a>
-    <div class="top-actions"><span class="local-badge"><i></i> Local workbench</span><label class="saved-label" for="saved-runs">Saved runs</label><select id="saved-runs" aria-label="Open a saved run"><option value="">Open a run…</option></select></div>
+    <div class="top-actions"><span class="local-badge"><i></i> Local workbench</span><label class="saved-label" for="saved-runs">Saved runs</label><select id="saved-runs" aria-label="Open a saved run"><option value="">Open a run…</option></select><span id="saved-status" class="hint" role="status" aria-live="polite" hidden></span></div>
   </header>
   <main>
     <div class="intro"><div><p class="eyebrow">PROMOTER → CANDIDATES → EXPLAINED CHOICES</p><h1>Design with evidence.<br><span>Explore with control.</span></h1><p>Choose a human gene, inspect its promoter, and design small activating RNAs<br class="wide-only"> with settings you can question, adjust, and record.</p></div><div class="intro-note"><span class="tag">HUMAN · GRCh38</span><p>Wang et al. 2015 is the starting point.<br>Your experiment determines the next step.</p></div></div>
@@ -26,6 +26,7 @@
           <div id="gene-inputs">
             <label for="gene-symbol">Human gene symbol or Ensembl gene ID</label><div class="input-action"><input id="gene-symbol" placeholder="e.g. SCN1A or ENSG00000144285" autocomplete="off" maxlength="80"><button type="button" id="lookup-gene" class="secondary">Look up</button></div>
             <p class="hint">Ensembl retrieves the gene, transcript references, and promoter DNA. New lookups need internet; cached records can be used offline.</p>
+            <p id="lookup-status" class="hint" role="status" aria-live="polite" hidden></p>
             <div id="gene-info" class="gene-info" hidden></div>
             <label for="reference">Promoter reference <span data-tip="MANE Select is an annotated transcript reference, not a measured cell-specific transcription start site. Choose a different transcript or a declared literature anchor when appropriate." tabindex="0" class="help">?</span></label><select id="reference" disabled><option value="">Look up a gene first</option></select>
             <div class="pair"><div><label for="upstream">Upstream (bp)</label><input id="upstream" type="number" min="0" max="20000" step="1" value="2000" required></div><div><label for="downstream">Downstream (bp)</label><input id="downstream" type="number" min="0" max="20000" step="1" value="500" required></div></div>

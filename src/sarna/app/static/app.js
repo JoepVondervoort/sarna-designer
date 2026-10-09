@@ -13,6 +13,14 @@ const state = {catalogue:null, source:"gene", gene:null, draft:{}, base:{}, resu
 const roleName = {mandatory:"Gate", preference:"Preference", tiebreak:"Tiebreak", off:"Off"};
 const tableNames = {"rna-xia-1998":"RNA · Xia 1998", "dna-santalucia-1998":"DNA · SantaLucia 1998", "legacy-dna-kj":"Legacy DNA · defective"};
 
+// Keep activity local to the work it describes, with text for assistive technology.
+function loading(id, active, message) {
+  const node = $(id);
+  if (message !== undefined) node.textContent = message;
+  node.classList.toggle("is-loading", active);
+  if (id !== "job-status") node.hidden = !active;
+}
+
 async function api(path, options) {
   const response = await fetch(path, options);
   const data = await response.json();
@@ -305,6 +313,10 @@ function renderExpressionSidebar() {
   const box = $("expression"), payload = state.expression;
   if (state.source !== "gene" || !state.gene || !payload) { box.hidden = true; return; }
   box.hidden = false;
+  if (payload.loading) {
+    box.innerHTML = '<p class="hint is-loading" role="status">Loading transcript expression evidence…</p>';
+    return;
+  }
   if (payload.available === false) {
     box.innerHTML = `<p class="eyebrow">TRANSCRIPT EXPRESSION</p>`
       + `<p class="hint">${escapeHTML(payload.note)}</p>`
@@ -442,7 +454,7 @@ function expressionOverviewRow(entry, selected) {
 function renderExpressionOverview() {
   const box = $("expression-overview"), payload = state.expression;
   if (!box) return;
-  if (state.source !== "gene" || !state.gene || !payload || payload.available === false) {
+  if (state.source !== "gene" || !state.gene || !payload || payload.loading || payload.available === false) {
     box.hidden = true; box.innerHTML = ""; return;
   }
   box.hidden = false;
@@ -478,7 +490,7 @@ function renderExpressionOverview() {
 
 async function loadExpression(symbol) {
   const asked = symbol;
-  state.expression = null; renderExpression();
+  state.expression = {loading:true}; renderExpression();
   try {
     const payload = await api(`/api/genes/${encodeURIComponent(symbol)}/expression?offline=${$("offline").checked}`);
     if (state.gene?.symbol !== asked) return;   /* The user moved on while this was in flight. */
@@ -495,6 +507,7 @@ async function lookup() {
   const symbol = $("gene-symbol").value.trim().toUpperCase();
   if (!symbol) throw new Error("Enter a human gene symbol or Ensembl gene ID first.");
   const previousReference = state.gene?.symbol.toLowerCase()===symbol.toLowerCase() ? $("reference").value : "";
+  loading("lookup-status", true, "Finding gene and promoter references…");
   $("lookup-gene").disabled = true; $("lookup-gene").textContent = "Finding…";
   try {
     const gene = await api(`/api/genes/${encodeURIComponent(symbol)}?offline=${$("offline").checked}`);
@@ -504,7 +517,7 @@ async function lookup() {
        must not stop a gene lookup from completing. */
     loadExpression(gene.symbol);
     markDraft(); return gene;
-  } finally { $("lookup-gene").disabled = false; $("lookup-gene").textContent = "Look up"; }
+  } finally { loading("lookup-status", false); $("lookup-gene").disabled = false; $("lookup-gene").textContent = "Look up"; }
 }
 function renderBasket() {
   $("promoter-selection").hidden = state.source !== "gene" || !state.basket.length;
@@ -573,6 +586,7 @@ function requestFromDraft() {
 }
 async function design() {
   if (state.busy) return;
+  loading("job-status", true, "Preparing design run…");
   error(""); state.busy = true; $("design-button").disabled = true; $("setup").inert = true; $("saved-runs").disabled = true;
   try {
     if (state.source === "gene") {
@@ -590,9 +604,10 @@ async function design() {
     }
     await refreshRuns();
   } catch (e) { error(e,"design"); $("job-status").textContent = "Run not completed. Your previous saved results are retained."; }
-  finally { state.busy = false; $("design-button").disabled = false; $("setup").inert = false; $("saved-runs").disabled = false; }
+  finally { loading("job-status", false); state.busy = false; $("design-button").disabled = false; $("setup").inert = false; $("saved-runs").disabled = false; }
 }
 function setBatchBusy(busy) {
+  loading("job-status", busy, busy ? "Preparing promoter comparison…" : undefined);
   state.busy=busy; $("setup").inert=busy; $("saved-runs").disabled=busy;
   $("design-button").disabled=busy; $("design-batch").disabled=busy; $("batch-retry-online").disabled=busy;
 }
@@ -820,6 +835,9 @@ async function selectCandidate(id) {
   const run = state.result, candidate = run.candidates.find(c=>c.id===id);
   if (!candidate) return;
   state.selected = id; renderTable(); renderMap();
+  if (!candidate.rules && !frozen) {
+    $("candidate-detail").innerHTML = '<p class="hint is-loading" role="status">Loading candidate sequences and rule explanations…</p>';
+  }
   try {
     if (frozen && !candidate.rules) throw new Error("This archival record is missing the candidate’s full verdicts.");
     const full = candidate.rules ? candidate : await api(`/api/runs/${run.app.run_id}/candidates/${id}`);
@@ -828,7 +846,11 @@ async function selectCandidate(id) {
     const primary = full.guide_prediction.assessments.find(a=>a.table===full.rating.guide_model);
     const sequenceBox = (name,sequence) => `<div class="sequence-box"><div><span>${name} · 5′ → 3′</span><button type="button" data-copy="${escapeHTML(sequence)}">Copy</button></div><code>${escapeHTML(sequence)}</code></div>`;
     $("candidate-detail").innerHTML = `<div class="detail-heading"><div><h3>${id} <span class="muted">${full.rank?`Rank ${full.rank}`:"Excluded by gates"}</span></h3><p class="hint">${escapeHTML(positionText(full))} ${full.tss_span?"relative to reference TSS":"in supplied sequence"} · ${full.target_site_dna.length} nt core · ${full.gc_percent}% GC${full.genomic?` · genomic ${escapeHTML(full.genomic.strand)} strand`:""}</p></div><span class="tag">${ratingText(full)} PREFERENCES</span></div>${duplexPanel(run,full)}<div class="detail-body"><div>${sequenceBox("Promoter target DNA",full.target_site_dna)}${sequenceBox("Sense RNA core",full.sense_strand_rna)}${sequenceBox("Antisense RNA core",full.antisense_strand_rna)}<p class="hint">The cores above are the 19 nt RNA the rules are evaluated against, without overhangs. The duplex panel at the top is what you order. No off-target screening has been performed.</p>${twinNote(full)}</div><div><div class="guide-summary"><strong>Predicted RNA guide: ${escapeHTML(full.rating.guide || "unknown")}</strong><p>${escapeHTML(tableNames[full.rating.guide_model] || full.rating.guide_model)} · ${escapeHTML(full.guide_prediction.summary)}</p><p class="hint">This predicts duplex loading, not the identity of a promoter-associated target RNA, and not activation.</p></div><table class="model-table"><thead><tr><th>Parameter model</th><th>Guide</th><th>End difference</th></tr></thead><tbody>${full.guide_prediction.assessments.map(a=>`<tr data-tip="${escapeHTML(a.explanation)}" tabindex="0"><td>${escapeHTML(tableNames[a.table] || a.table)}</td><td>${escapeHTML(a.predicted_guide)}</td><td>${a.difference.toFixed(2)} ${escapeHTML(a.unit)}</td></tr>`).join("")}</tbody></table><details class="verdict"><summary>How the selected model reaches this prediction</summary><p>${escapeHTML(primary?.explanation || "The selected model was not assessed.")}</p></details></div></div>${full.excluded_by.length?`<p class="hint">${escapeHTML(full.rejection_summary)}</p>`:""}<div class="rule-verdicts"><h3>Every rule, explained</h3>${full.rules.map(r=>ruleVerdict(r,run.configuration)).join("")}</div>`;
-  } catch (e) { error(e.message); }
+  } catch (e) {
+    if (state.result!==run || state.selected!==id) return;
+    $("candidate-detail").innerHTML = '<p class="hint">Candidate details could not be loaded. Select the candidate to try again.</p>';
+    error(e.message);
+  }
 }
 function ruleVerdict(verdict,config) {
   const def = config.rules.find(r=>r.id===verdict.id);
@@ -1781,7 +1803,7 @@ function renderScreeningStatus() {
     if (!lane) continue;
     const job = jobs[scope];
     lane.textContent = job ? (job.stage || job.status) : "";
-    lane.className = "screen-state " + (job ? job.status : "");
+    lane.className = "screen-state " + (job ? job.status : "") + (job?.status === "running" ? " is-loading" : "");
   }
 }
 
@@ -2028,6 +2050,7 @@ function tooltip(target,event) {
 }
 
 async function initialize() {
+  loading("saved-status", true, "Loading workbench…");
   try {
     state.catalogue=frozen?.catalogue || await api("/api/catalogue");
     $("engine-version").textContent=`v${state.catalogue.engine_version}`;
@@ -2049,6 +2072,7 @@ async function initialize() {
     }
     else await refreshRuns();
   } catch(e) { error(e.message); }
+  finally { loading("saved-status", false); }
 }
 $("design-form").addEventListener("submit",e=>{e.preventDefault();design();});
 $("lookup-gene").addEventListener("click",()=>{error("");lookup().catch(e=>error(e,"lookup"));});
@@ -2127,12 +2151,15 @@ $("rule-editor").addEventListener("change",e=>{
 });
 $("saved-runs").addEventListener("change",async()=>{
   if (!$("saved-runs").value || state.busy) return;
+  loading("saved-status", true, "Opening saved results…");
+  $("saved-runs").disabled=true;
   try {
     const id=$("saved-runs").value;
     if (id.startsWith("batch:")) await openSavedBatch(id.slice(6));
     else { const run=await api(`/api/runs/${id}`); if (run.status!=="complete") throw new Error(run.error || run.stage); state.batch=null;$("batch-comparison").hidden=true;restoreDraft(run.result);showResult(run.result); }
     error("");
   } catch(e) { error(e); }
+  finally { loading("saved-status", false); $("saved-runs").disabled=state.busy; }
 });
 document.querySelectorAll("[data-filter]").forEach(b=>b.addEventListener("click",()=>{state.filter=b.dataset.filter;state.page=0;document.querySelectorAll("[data-filter]").forEach(v=>v.classList.toggle("active",v===b));renderTable();}));
 $("candidate-search").addEventListener("input",()=>{state.page=0;renderTable();});

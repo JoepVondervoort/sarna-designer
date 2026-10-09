@@ -131,12 +131,16 @@ body.frozen .setup,body.frozen .intro-note,body.frozen .saved-label,body.frozen 
 .screen-lane{display:flex;align-items:center;gap:9px;min-width:0}
 .screen-state{font-size:11px;color:var(--muted);line-height:1.5;overflow-wrap:anywhere}
 .screen-state.running{color:var(--teal)}
-.screen-state.running:before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--teal);margin-right:6px;animation:screen-pulse 1.1s ease-in-out infinite}
+/* A quiet activity indicator shared by local work and remote evidence searches. */
+.is-loading{display:flex;align-items:baseline;gap:8px;color:var(--teal)}
+.is-loading::before{content:"";display:inline-block;flex:0 0 12px;width:12px;height:12px;border:1.5px solid var(--line);border-top-color:var(--teal);border-right-color:var(--teal);border-radius:50%;align-self:center;animation:activity-spin 1s linear infinite}
+#job-status.is-loading{padding:10px 12px;background:#edf5f3;border:1px solid var(--line);border-radius:8px}
+#saved-status{margin:0;font-size:11px}
+@keyframes activity-spin{to{transform:rotate(360deg)}}
 .screen-state.error{color:var(--red)}
 .screen-state.complete{color:#2c7556}
 .offtarget-actions>.hint{flex:1 1 100%;margin-top:0}
-@keyframes screen-pulse{0%,100%{opacity:.25}50%{opacity:1}}
-@media(prefers-reduced-motion:reduce){.screen-state.running:before{animation:none;opacity:.8}}
+@media(prefers-reduced-motion:reduce){.is-loading::before{animation:none}}
 
 /* A rule's group. "Position 20 is A or T" on a 19 nt core is only not a contradiction once you
    know it is a flank position, and the engine has carried that word all along. */
