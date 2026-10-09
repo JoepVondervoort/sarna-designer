@@ -1,55 +1,70 @@
-# Switching saRNA Designer to install from GitHub
+# Installing and updating saRNA Designer from GitHub on Windows
 
-**For a colleague who already has saRNA Designer working from a `.whl` file** and would like
-updates to be one command instead of a file sent by email.
+Follow this guide if you have access to the private saRNA Designer GitHub repository.
+It works for a first installation and for replacing an installation from a `.whl` file.
+Read access to the repository is enough.
 
-It replaces the installation in place. Nothing is uninstalled first, and your saved runs are
-not touched. Budget about fifteen minutes, most of it waiting for two downloads.
+The app runs on your computer. You open it in your normal browser after starting it in
+PowerShell. Allow about fifteen minutes for the first installation and keep your internet
+connection on. You do not need to install Python or WSL yourself.
 
-You do **not** need WSL. You do **not** need to understand Python. You already have the one
-tool that matters, `uv`, from the last installation.
+## 1. Check your GitHub access
 
----
+Sign in to GitHub with the account that received the invitation. Open:
 
-## What changes
+[JoepVondervoort/sarna-designer](https://github.com/JoepVondervoort/sarna-designer)
 
-| | Today | After this |
-|---|---|---|
-| Getting a new version | wait for a `.whl`, save it, retype the install command with the new filename | `uv tool upgrade sarna-designer` |
-| One-time setup | none | a GitHub account, an invitation, and Git for Windows |
+You should see the repository files, including `README.md`. If you cannot see them, check
+whether you still need to accept the invitation. Use that same account when signing in
+later during installation.
 
-`uv tool upgrade` does nothing useful for a file installation. It prints `Nothing to upgrade`,
-which reads as "you are up to date" when you are not. That is the problem this fixes.
+## 2. Open PowerShell
 
----
+Press the Windows key, type `powershell`, and press Enter.
 
-## 1. Accept the repository invitation
+Copy the whole command from each code box, paste it into PowerShell, and press Enter.
+Run one command at a time. Wait until the prompt, usually starting with `PS`, returns
+before entering the next command. Do not copy example output or the code-box heading.
 
-The person who sent you the tool adds you to the repository. You get an email from GitHub with
-an **Accept invitation** button. Click it.
+If PowerShell displays `>>`, press Ctrl+C and paste the complete command again.
 
-If you have no GitHub account yet, make a free one at [github.com](https://github.com) first,
-then tell them the username you chose so the invitation goes to the right place.
+## 3. Install uv
 
-**Nothing below works until this is done.** The repository is private, and without the
-invitation step 4 fails with `repository not found`.
+`uv` installs the app and downloads the Python version it needs. If you already have uv,
+skip the installation command and check its version below.
 
-## 2. Install Git for Windows
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
 
-Download it from [git-scm.com/download/win](https://git-scm.com/download/win). The download
-starts on its own.
+If your organisation blocks this command, try:
 
-Run the installer and **click Next on every screen, changing nothing**. The defaults are the
-ones you want. One of them, Git Credential Manager, is what lets you sign in to GitHub through
-a browser window in step 4, instead of typing a password that GitHub no longer accepts for
-this.
+```powershell
+winget install --id=astral-sh.uv -e
+```
 
-## 3. Close PowerShell and open it again
+Close PowerShell completely and open it again. Then check:
 
-Press the **Windows key**, type `powershell`, press **Enter**. If a window was already open,
-close it first: a program installed while a terminal is open is invisible to that terminal.
+```powershell
+uv --version
+```
 
-Check both tools are there, one line at a time:
+It should print a version number. If it says the command is not recognised, the installation
+has not succeeded or you need to open a fresh PowerShell window.
+
+## 4. Install Git for Windows
+
+If Git is already installed, check it in step 5 and skip this installation.
+
+Download the installer from [Git for Windows](https://git-scm.com/download/win).
+Run it and accept the default options. Keep Git Credential Manager enabled: it handles
+signing in to the private GitHub repository.
+
+You do not need to clone the repository manually. The next command downloads it for you.
+
+## 5. Open a fresh PowerShell window and check both tools
+
+Close PowerShell and open it again. Run these separately:
 
 ```powershell
 git --version
@@ -59,83 +74,121 @@ git --version
 uv --version
 ```
 
-Each should print a version number. If `git` is not recognised, step 2 did not finish or you
-did not reopen PowerShell.
+Both should print version numbers. If either command is not recognised, resolve that
+installation before continuing.
 
-## 4. Install from GitHub
+## 6. Install saRNA Designer from GitHub
 
-Copy this **entire line**, paste it into PowerShell, press **Enter**:
+Copy this whole line into PowerShell:
 
 ```powershell
 uv tool install --python 3.11 "sarna-designer[app] @ git+https://github.com/JoepVondervoort/sarna-designer"
 ```
 
-**A browser window will open asking you to sign in to GitHub.** That is expected, and it
-happens once. Sign in, authorise it, then go back to PowerShell.
+If a browser sign-in window opens, sign in with the GitHub account that can see the
+repository, then return to PowerShell. If you are already signed in through Git Credential
+Manager, it may continue without asking again.
 
-The command downloads the tool and the right Python, and ends with:
+The first installation may take several minutes. Wait for the PowerShell prompt to return.
+A successful installation lists these two commands:
 
+```text
+sarna-designer
+sarna-designer-check
 ```
-Installed 2 executables: sarna-designer, sarna-designer-check
-```
 
-It can take several minutes the first time. **If you do not see that line, stop** and send the
-whole output to the person who sent you the tool.
+If you previously installed from a `.whl`, this command switches the installation to
+GitHub so future updates can use the upgrade command. Your saved runs are kept.
 
-## 5. Close PowerShell, open it again, and check
+If installation reports an error, save the complete command and output to share with the
+person helping you. Do not continue until installation succeeds.
+
+## 7. Check the installation
+
+Close PowerShell and open it again. Run:
 
 ```powershell
 sarna-designer-check
 ```
 
-The last lines name the version you now have and should end with `RESULT: PASS`. If the version
-is the same one you had before, the install did not take: run step 4 again.
+The output should end with `RESULT: PASS`. It also prints the installed version.
+The version number can stay the same when code changes, so an unchanged version alone
+is not evidence that installation failed.
 
-## 6. Start it as usual
+## 8. Start the app and open its page
+
+In PowerShell, run:
 
 ```powershell
 sarna-designer
 ```
 
-Then open <http://localhost:8001/> in your browser. Leave the PowerShell window open while you
-work; closing it stops the tool.
+Leave this window open. Open your normal browser and enter:
 
----
+[http://localhost:8001/](http://localhost:8001/)
 
-## From now on, updating is one line
+This address opens the app running on your own computer. It works while the PowerShell
+process is running. You can bookmark it.
+
+Enter a gene name or paste a promoter DNA sequence, choose your promoter reference and
+settings, and start a design. Retrieving a new gene needs internet access; cache-only mode
+works only when the required data has already been downloaded. If the app reports a cache
+miss, use its online retrieval option and retry.
+
+To stop the app, return to PowerShell and press Ctrl+C.
+
+## Opening the app next time
+
+You do not repeat the installation. Open PowerShell and run:
 
 ```powershell
-uv tool upgrade sarna-designer
+sarna-designer
 ```
 
-That is the whole thing. No file to wait for, no filename to match. It follows the code rather
-than the version number, so it picks up new work even when the version has not changed.
+Then open [http://localhost:8001/](http://localhost:8001/) in your browser.
+Keep PowerShell open while you work.
 
-Run `sarna-designer-check` afterwards to see which version you are on. Quote that number if you
-report a problem: every run you save records it, so a result from today can be told apart from
-one produced by an older build.
+## Getting an update after new changes are pushed
 
-Your saved runs live in a `.sarna-designer` folder, separate from the program. Updating,
-reinstalling and uninstalling all leave them alone.
+Updates are manual. This installation follows the repository's default branch, `main`.
+Changes must have been pushed to that branch before this command can retrieve them.
 
----
+1. If the app is running, wait for your design or screening jobs to finish. Stop the app
+   with Ctrl+C in its PowerShell window.
+2. Run:
+
+   ```powershell
+   uv tool upgrade sarna-designer
+   ```
+
+3. Wait for it to finish, then check:
+
+   ```powershell
+   sarna-designer-check
+   ```
+
+4. If the check ends with `RESULT: PASS`, start the app again:
+
+   ```powershell
+   sarna-designer
+   ```
+
+5. Open the browser page or refresh the existing tab. If it still displays the old
+   interface, press Ctrl+F5 to reload it.
+
+The update follows Git commits even when the package version number has not changed.
+Your saved runs remain in `%USERPROFILE%\.sarna-designer`, separate from the installed
+program. Old runs retain their original results; start a new run to use the updated engine.
 
 ## If something goes wrong
 
-**`repository not found`, or it asks for a password.** The invitation in step 1 has not been
-accepted, or you signed in with a different GitHub account than the one invited.
-
-**`git` is not recognised.** Step 2 did not finish, or PowerShell was not reopened after it.
-
-**The browser sign-in never appeared and it failed instead.** Git Credential Manager was
-switched off during the Git installation. Run the Git for Windows installer again and accept
-the defaults.
-
-**`sarna-designer` is not recognised.** Close PowerShell and open a new window. If that does
-not help, step 4 did not finish.
-
-**Anything else.** Run this and send the output:
-
-```powershell
-sarna-designer-check
-```
+| Message or problem | What to do |
+|---|---|
+| `repository not found` or access denied | Check step 1 and sign in with the invited GitHub account. |
+| `git` or `uv` is not recognised | Reopen PowerShell. If it still fails, complete the corresponding installation. |
+| Git asks for a password or authentication fails | Check that Git Credential Manager is enabled and use its GitHub sign-in flow. |
+| `sarna-designer` is not recognised | Reopen PowerShell and check that step 6 succeeded. |
+| The browser cannot connect to localhost | Start `sarna-designer` and keep its PowerShell window open. Read any startup error. |
+| Port 8001 is already in use | An app may already be running. Alternatively run `sarna-designer --port 8002` and open `http://localhost:8002/`. |
+| Upgrade says `Nothing to upgrade` after a new update | Check that the changes reached `main`. If your installation still came from a wheel, repeat step 6 to switch to GitHub. |
+| Anything else | Share the complete error output and the output of `sarna-designer-check`. |
