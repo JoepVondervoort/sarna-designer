@@ -14,6 +14,7 @@ import socket
 import struct
 import subprocess
 import time
+from itertools import pairwise
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Thread
@@ -121,15 +122,30 @@ def check_expression(browser: Browser) -> None:
     # The panel is filled by a request the lookup deliberately does not wait for.
     browser.wait("!document.getElementById('expression').hidden")
     panel = browser.evaluate(r"""(()=>{
-      const box=document.getElementById('expression');
-      const options=[...document.getElementById('reference').options];
+      const sidebar=document.getElementById('expression');
+      const overview=document.getElementById('expression-overview');
+      const control=document.getElementById('reference');
+      const options=[...control.options];
       const payload=state.expression;
+      // A select reserves roughly 28px for its arrow and padding. Measured rather than
+      // eyeballed, because the overflow is silent: the browser simply clips the end of the
+      // label, which is where the expression value is.
+      const probe=document.createElement('span');
+      probe.style.cssText='position:absolute;visibility:hidden;white-space:pre;font:'
+        + getComputedStyle(control).font;
+      document.body.appendChild(probe);
+      const room=control.clientWidth-28;
+      const tooWide=options.filter(o=>{probe.textContent=o.textContent;
+        return probe.offsetWidth>room+2;}).map(o=>o.textContent);
+      probe.remove();
       return {
         available: payload?.available !== false,
-        text: box.textContent,
+        text: sidebar.textContent + ' ' + overview.textContent,
+        sidebarLength: sidebar.textContent.length,
         order: options.map(o=>o.value).join('|'),
-        selected: document.getElementById('reference').value,
-        annotated: options.filter(o=>o.textContent.includes(' TPM')).length,
+        annotated: options.filter(o=>/brain [0-9<]/.test(o.textContent)).length,
+        titled: options.filter(o=>o.title).length,
+        tooWide: tooWide,
         transcripts: payload?.transcripts ? Object.keys(payload.transcripts).length : 0,
         keyed: payload?.transcripts && !Array.isArray(payload.transcripts),
       };
@@ -148,11 +164,23 @@ def check_expression(browser: Browser) -> None:
     assert panel["keyed"] is True, "the payload is a list, which invites sorting by expression"
     assert panel["transcripts"] > 0, panel
     assert panel["annotated"] > 0, "no option carries its expression summary"
+    assert panel["titled"] > 0, "no option carries the untruncated label in its title"
+    # The sidebar answers for one transcript and must stay short; the comparison of all of
+    # them lives in the gene overview card, which has the width for it.
+    assert panel["sidebarLength"] < 420, (
+        f"the sidebar panel is {panel['sidebarLength']} characters, which is the crowding it "
+        f"was split in two to avoid"
+    )
+    assert len(panel["tooWide"]) <= 1, (
+        f"{len(panel['tooWide'])} promoter reference options are wider than the control, so "
+        f"the browser silently clips the end of each: {panel['tooWide'][:4]}"
+    )
     text = str(panel["text"])
-    # The claim, not its wording: the panel must say GTEx holds no cell lines and must name
-    # AF22, because "is my transcript expressed in AF22" is the question that prompted it.
+    # The claim, not its wording: the panel must name AF22, because "is my transcript
+    # expressed in AF22" is the question that prompted it, and must say what GTEx can and
+    # cannot conclude about it.
     assert "AF22" in text, text
-    assert "no cell lines" in text, text
+    assert "iPSC-derived neurons" in text, text
     assert "supports or contradicts" in text, text
     # The finding this panel exists for: a transcript measured at zero says measured, not
     # missing. Rendering the two alike turns ignorance into a finding and back again.
@@ -161,8 +189,60 @@ def check_expression(browser: Browser) -> None:
     if zero:
         assert "measured at 0.00" in str(zero), zero
         assert "no data" not in str(zero).lower(), zero
+    check_organ_strip(browser)
     print(f"    expression: {panel['transcripts']} transcripts, "
-          f"{panel['annotated']} options annotated, order unchanged")
+          f"{panel['annotated']} options annotated, {len(panel['tooWide'])} too wide, "
+          f"order unchanged")
+
+
+def check_organ_strip(browser: Browser) -> None:
+    """Check that an organ symbol claims only what GTEx measured.
+
+    The strip is decoration with a factual job: a symbol says "measured above zero in at least
+    one of this organ's sample groups". The ways it could lie are a symbol beside a transcript
+    measured at zero, a symbol with no value behind it, and a cultured cell group dressed as a
+    body site.
+    """
+    organs = browser.evaluate(r"""(()=>{
+      const payload = state.expression;
+      const entries = Object.values(payload.transcripts || {});
+      const chips = [...document.querySelectorAll('#expression-overview .organ')];
+      const silent = entries.filter(e => e.status === 'measured'
+        && (e.all || []).every(m => m.median === 0));
+      const everyOrganHasAValue = entries.every(e =>
+        (e.organs || []).every(o => o.median > 0 && o.name && o.tissue_name));
+      return {
+        chips: chips.length,
+        untitled: chips.filter(c => !c.title).length,
+        withOrgans: entries.filter(e => (e.organs || []).length).length,
+        silent: silent.length,
+        silentWithOrgans: silent.filter(e => (e.organs || []).length).length,
+        notInRelease: entries.filter(e => e.status !== 'measured'
+          && (e.organs || []).length).length,
+        everyOrganHasAValue,
+        culturedFlagged: entries.every(e => (e.organs || []).every(
+          o => o.organ_id !== 'cultured' || o.is_body_site === false)),
+        emojiDetected: emojiAvailable(),
+      };})()""")
+    assert isinstance(organs, dict), organs
+    assert organs["withOrgans"] > 0, "no transcript shows any organ, so the strip is dead"
+    assert organs["chips"] > 0, "the organ strip rendered nothing into the table"
+    assert organs["untitled"] == 0, (
+        f"{organs['untitled']} organ marks carry no hover text, so a reader cannot find out "
+        f"what they stand for or what the value behind them is")
+    assert organs["silentWithOrgans"] == 0, (
+        f"{organs['silentWithOrgans']} transcripts measured at zero everywhere still show an "
+        f"organ, which claims expression that was not measured")
+    assert organs["notInRelease"] == 0, (
+        "a transcript absent from the annotation release shows an organ, which invents a "
+        "measurement for something nobody quantified")
+    assert organs["everyOrganHasAValue"] is True, (
+        "an organ is shown without the median and sample group behind it")
+    assert organs["culturedFlagged"] is True, (
+        "GTEx's cultured cell groups are presented as a body site")
+    print(f"    organ strip: {organs['chips']} marks over {organs['withOrgans']} transcripts, "
+          f"{organs['silent']} silent transcripts show none, "
+          f"emoji font {'present' if organs['emojiDetected'] else 'absent, names shown'}")
 
 
 def check_cell_evidence(browser: Browser) -> None:
@@ -301,21 +381,35 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     browser.evaluate("document.getElementById('zoom-reset').click()")
     top = browser.evaluate(r"""(()=>{
       const fill = r => (r.getAttribute('fill')||'').toLowerCase();
+      const y = r => +r.getAttribute('y');
       const marks = [...document.querySelectorAll('#promoter-map rect[data-candidate]')];
       const byId = new Map(state.result.candidates.map(c => [c.id, c]));
       const rankOf = r => byId.get(r.getAttribute('data-candidate'))?.rank ?? null;
-      // Only marks in the passing lane: the selection outline and the excluded row also
-      // carry data-candidate, and neither is a passing-target mark.
-      const lane = marks.filter(r => fill(r) === TRACK_COLOURS.candidate.fill.toLowerCase()
-                                  || fill(r) === TRACK_COLOURS.topCandidate.fill.toLowerCase());
-      const marked = lane.filter(r => fill(r) === TRACK_COLOURS.topCandidate.fill.toLowerCase());
+      // The passing lane by position, not by colour: every rank now has its own fill, and
+      // the selection outline and the excluded row also carry data-candidate.
+      const lane = marks.filter(r => fill(r) !== 'none' && y(r) >= 225 && y(r) <= 255);
+      const marked = lane.filter(r => +r.getAttribute('height') > 15);
       const labels = [...document.querySelectorAll('#promoter-map text.rank-label')]
         .map(t => +t.textContent);
+      // Relative luminance, so "gets paler as rank gets worse" is measured rather than assumed.
+      const luminance = hex => {
+        const v = i => {
+          const c = parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16) / 255;
+          return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+        };
+        return 0.2126 * v(0) + 0.7152 * v(1) + 0.0722 * v(2);
+      };
+      const ordered = [...marked].sort((a, b) => rankOf(a) - rankOf(b));
       return {
         expected: state.result.candidates.filter(c => c.rank !== null && c.rank <= TOP_MARKED)
           .length,
         marked: marked.length,
         ranks: marked.map(rankOf),
+        distinctFills: new Set(marked.map(fill)).size,
+        // Each mark must carry the colour its own rank maps to, not merely some colour.
+        mismatched: marked.filter(r => fill(r) !== rankColour(rankOf(r)).fill.toLowerCase())
+          .map(rankOf),
+        luminances: ordered.map(r => luminance(fill(r))),
         heights: [...new Set(marked.map(r => +r.getAttribute('height')))],
         plainHeights: [...new Set(lane.filter(r => !marked.includes(r))
           .map(r => +r.getAttribute('height')))],
@@ -327,7 +421,19 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
             f"{top['expected']} targets rank in the top ten but {top['marked']} are drawn as "
             f"such; the rest are indistinguishable from rank 900")
         assert all(isinstance(rank, int) and 1 <= rank <= 10 for rank in top["ranks"]), (
-            f"a mark drawn in the top-ten colour does not hold a top-ten rank: {top['ranks']}")
+            f"a mark drawn in the top-ten lane does not hold a top-ten rank: {top['ranks']}")
+        assert not top["mismatched"], (
+            f"these ranks are drawn in another rank's colour: {top['mismatched']}")
+        assert top["distinctFills"] == top["marked"], (
+            f"{top['marked']} marks share {top['distinctFills']} colours, so the ramp does "
+            f"not separate every rank")
+        # Rank order must read off the shading. Strictly paler each step, and deliberately
+        # one hue: a green-to-red scale would claim rank 1 is good, which the 125 assayed
+        # sequences refute (ADR 0006, ADR 0021).
+        luminances = top["luminances"]
+        assert all(a < b for a, b in pairwise(luminances)), (
+            f"the rank shading is not monotone, so a darker mark does not mean a better "
+            f"rank: {luminances}")
         # Height carries the same claim as colour, for a reader who cannot use colour.
         assert top["heights"] and max(top["heights"]) > max(top["plainHeights"] or [0]), (
             f"top-ten marks are {top['heights']} high against {top['plainHeights']} for the "
@@ -336,6 +442,8 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
         assert top["labelled"] == len(top["labels"]), (
             f"a rank is printed more than once on the map: {top['labels']}")
         assert all(1 <= rank <= 10 for rank in top["labels"]), top["labels"]
+        print(f"    rank ramp: {top['marked']} marks, {top['distinctFills']} distinct shades, "
+              f"monotone, {len(top['labels'])} numbered")
     # At full-region zoom a target is generated at every offset, so drawing each excluded one
     # produced about three overlapping marks per pixel: a band that claimed to show every
     # rejection and resolved none of them. They are binned instead. The promise that a
@@ -395,7 +503,13 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
       // The authoritative table, plus the rejection colours, which are generated per run
       // rather than declared. A track with no features in this run still belongs in the
       // legend, so what is checked is the shared source and not what happens to be drawn.
-      const declared = new Set(Object.values(TRACK_COLOURS).map(c => c.fill.toLowerCase()));
+      // The rank ramp is computed from TOP_MARKED rather than listed, so its ten shades come
+      // from the same function the map draws with. Listing them here by hand is how a legend
+      // and a map drift apart, which is what this whole check exists to prevent.
+      const ramp = Array.from({length: TOP_MARKED},
+        (_, i) => rankColour(i + 1).fill.toLowerCase());
+      const declared = new Set([...Object.values(TRACK_COLOURS).map(c => c.fill.toLowerCase()),
+                                ...ramp]);
       const generated = new Set([...REJECTION_COLOURS, OTHER_REJECTION]
         .map(c => c.toLowerCase()));
       const drawn = new Set([...document.querySelectorAll('#promoter-map rect[fill]')]

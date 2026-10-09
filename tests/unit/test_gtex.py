@@ -340,13 +340,24 @@ class TestTranscriptsTheReleaseNeverSaw:
 
 
 class TestTheCaveatsItAlwaysCarries:
-    def test_it_says_gtex_has_no_cell_lines(self) -> None:
+    def test_it_names_the_lines_gtex_does_not_hold(self) -> None:
         # The researcher's question was about AF22. The answer travels with the profile rather
         # than living only in the page, so a methods export carries it too.
         client, _ = client_for()
         caveats = client.expression_for("ENSG00000144285").caveats
         assert "AF22" in caveats[0]
-        assert "no cell lines" in caveats[0]
+        assert "HeLa" in caveats[0]
+        assert "says nothing at all about them" in caveats[0]
+
+    def test_it_does_not_claim_gtex_holds_no_cultured_cells(self) -> None:
+        # It said "GTEx contains no cell lines", which is wrong: gtex_v10 has two cultured
+        # sample groups, donor-derived fibroblasts and EBV-transformed lymphocytes. The claim
+        # that matters for this project is about AF22 and HeLa, and it survives being exact.
+        client, _ = client_for()
+        fact = client.expression_for("ENSG00000144285").caveats[0]
+        assert "no cell lines" not in fact
+        assert "fibroblasts" in fact
+        assert "EBV-transformed lymphocytes" in fact
 
     def test_it_says_bulk_tissue_averages_over_cell_types(self) -> None:
         # Distinct from the line above, and the more easily missed of the two: a transcript

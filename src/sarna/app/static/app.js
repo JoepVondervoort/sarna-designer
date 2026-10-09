@@ -119,7 +119,7 @@ function populateGene(gene, selected = "") {
     const t = transcripts.find(t=>t.id===id);
     return `<option value="transcript:${escapeHTML(id)}">${escapeHTML(id)}${mark(t)} · ${escapeHTML(t?.biotype)}</option>`;
   }).join("")}</optgroup>`).join("") : `<optgroup label="Annotated transcripts">${transcripts.map(t=>`<option value="transcript:${escapeHTML(t.id)}">${escapeHTML(t.id)}${mark(t)} · ${escapeHTML(t.biotype)}</option>`).join("")}</optgroup>`;
-  const anchorChoices = anchors.map(a=>`<option value="anchor:${escapeHTML(a.id)}">${escapeHTML(a.label)} · ${escapeHTML(a.reference_kind)}</option>`).join("");
+  const anchorChoices = anchors.map(a=>`<option value="anchor:${escapeHTML(a.id)}" title="${escapeHTML(a.label)} · ${escapeHTML(a.reference_kind)}">${escapeHTML(a.id)} · ${escapeHTML(a.reference_kind)}</option>`).join("");
   const customChoices = Object.values(state.customReferences).map(a=>`<option value="custom:${escapeHTML(a.id)}">${escapeHTML(a.name)} · researcher supplied</option>`).join("");
   $("reference").innerHTML = `<option value="">Choose a promoter reference…</option>${choices}${anchorChoices?`<optgroup label="Declared literature anchors">${anchorChoices}</optgroup>`:""}${customChoices?`<optgroup label="Researcher references">${customChoices}</optgroup>`:""}`;
   $("reference").disabled = false;
@@ -237,70 +237,245 @@ function expressionFor(id) {
   return state.expression?.transcripts?.[id] || null;
 }
 function annotateReferenceOptions() {
+  // The option text has to fit a 310px control. Three facts compete for it: the identifier,
+  // which cannot be shortened; why this one is offered first; and what GTEx measured. The
+  // biotype is abbreviated and the expression reduced to one decimal so all three survive,
+  // and the untruncated version goes in the option's title for anyone who wants it.
   const payload = state.expression;
   for (const option of $("reference").options) {
     if (option.dataset.baseLabel === undefined) option.dataset.baseLabel = option.textContent;
     const id = option.value.startsWith("transcript:") ? option.value.slice(11) : "";
-    const entry = id && payload?.transcripts ? payload.transcripts[id] : null;
-    option.textContent = option.dataset.baseLabel + (entry ? ` · ${entry.short_label}` : "");
+    if (!id) { option.textContent = option.dataset.baseLabel; continue; }
+    const transcript = state.gene?.transcripts?.find(t => t.id === id);
+    const entry = payload?.transcripts ? payload.transcripts[id] : null;
+    const mark = transcript?.mane ? " · MANE" : transcript?.canonical ? " · canonical" : "";
+    const brief = compactExpression(entry);
+    // protein_coding is what a reader assumes, and spelling it out is what pushes this label
+    // past the width of the control. Anything else is worth the characters: the highest brain
+    // value for SCN1A sits on a nonsense_mediated_decay transcript.
+    const biotype = transcript?.biotype === "protein_coding"
+      ? "" : ` · ${shortBiotype(transcript?.biotype)}`;
+    option.textContent = id + mark + biotype + (brief ? ` · ${brief}` : "");
+    option.title = option.dataset.baseLabel + (entry ? ` · ${entry.label}` : "");
   }
 }
-function expressionRows(entry) {
-  /* An all-zero transcript has no "highest" groups worth listing: the first five would be an
-     alphabetical slice of zeros, which reads as though those tissues were distinguished. The
-     headline above already says it was measured at zero everywhere, so nothing replaces it. */
-  if (!entry.top?.length) return "";
-  const rows = entry.top.map(m => `<tr><th scope="row">${escapeHTML(m.tissue_name)}</th>`
-    + `<td>${m.median.toFixed(2)} ${escapeHTML(m.unit)}</td>`
-    + `<td class="muted">${m.sample_count ? `${fmt(m.sample_count)} donors` : "donor count not reported"}</td></tr>`).join("");
-  return `<table class="expression-table"><caption>Highest ${entry.top.length} of ${fmt(entry.measured_groups)} sample groups</caption><tbody>${rows}</tbody></table>`;
+function compactExpression(entry) {
+  // One decimal would print a measured 0.01 as "0.0", which in a dropdown is indistinguishable
+  // from a measured zero. They are different findings, so a value too small to show at this
+  // precision says so instead of rounding into the other one.
+  if (!entry) return "";
+  if (entry.status !== "measured") return "not in GTEx";
+  const brain = entry.brain;
+  if (!brain) return "no brain group";
+  if (brain.median === 0) return "brain 0";
+  return brain.median < 0.1 ? "brain <0.1" : `brain ${brain.median.toFixed(1)}`;
 }
+// Biotypes are printed in a 310px picker option alongside an identifier and a number, where
+// `protein_coding_CDS_not_defined` alone overflows the control. Shortened for the option only;
+// the full term stays in the comparison table and in the option's hover text.
+const BIOTYPE_SHORT = {
+  protein_coding: "coding",
+  nonsense_mediated_decay: "NMD",
+  non_stop_decay: "non-stop",
+  retained_intron: "intron",
+  processed_transcript: "processed",
+  protein_coding_CDS_not_defined: "no CDS",
+  processed_pseudogene: "pseudogene",
+  unprocessed_pseudogene: "pseudogene",
+  transcribed_unprocessed_pseudogene: "pseudogene",
+};
+const shortBiotype = (biotype) => BIOTYPE_SHORT[biotype] || (biotype || "").replace(/_/g, " ");
+
 function renderExpression() {
-  const box = $("expression"), payload = state.expression;
+  // Two surfaces, because one 310px column cannot hold both an answer and a comparison. The
+  // sidebar answers "what about the transcript I have selected" in three lines beside the
+  // control. The comparison of every transcript goes in the gene overview card, which is the
+  // full width of the workspace and is where a reader is already looking at the locus.
+  renderExpressionSidebar();
+  renderExpressionOverview();
   annotateReferenceOptions();
+}
+
+function selectedTranscriptId() {
+  const value = $("reference").value;
+  return value.startsWith("transcript:") ? value.slice(11) : "";
+}
+
+function renderExpressionSidebar() {
+  const box = $("expression"), payload = state.expression;
   if (state.source !== "gene" || !state.gene || !payload) { box.hidden = true; return; }
   box.hidden = false;
   if (payload.available === false) {
-    box.innerHTML = `<p class="eyebrow">TRANSCRIPT EXPRESSION</p><p class="hint">${escapeHTML(payload.note)}</p>`
+    box.innerHTML = `<p class="eyebrow">TRANSCRIPT EXPRESSION</p>`
+      + `<p class="hint">${escapeHTML(payload.note)}</p>`
       + `<p class="hint muted">${escapeHTML(payload.detail)}</p>`
       + `<button type="button" class="text-button" id="retry-expression">Try again</button>`;
     $("retry-expression").addEventListener("click", () => loadExpression(state.gene.symbol));
     return;
   }
-  const selected = $("reference").value.startsWith("transcript:") ? $("reference").value.slice(11) : "";
+  const selected = selectedTranscriptId();
   const entry = selected ? expressionFor(selected) : null;
+  const heading = `<p class="eyebrow">TRANSCRIPT EXPRESSION · GTEx `
+    + `${escapeHTML(payload.dataset_id.replace("gtex_", ""))}</p>`;
+  if (!entry) {
+    box.innerHTML = heading
+      + `<p class="hint">Select an annotated transcript to see what GTEx measured for it.</p>`;
+    return;
+  }
   const transcript = state.gene.transcripts?.find(t => t.id === selected);
-  const heading = `<p class="eyebrow">TRANSCRIPT EXPRESSION · ${escapeHTML(payload.dataset_id)} · GENCODE ${escapeHTML(payload.annotation_release)}</p>`;
-  const chosen = entry
-    ? `<p class="expression-headline"><strong>${escapeHTML(selected)}</strong>${transcript?.mane ? " (MANE Select)" : ""}: ${escapeHTML(entry.label)}</p>`
-      + `<p class="hint">${escapeHTML(payload.brain_label)}: ${escapeHTML(entry.brain_label)}</p>`
-      + `<p class="hint muted">${escapeHTML(entry.status_note)}</p>`
-      + expressionRows(entry)
-    : `<p class="hint">Select an annotated transcript to see what GTEx measured for it.</p>`;
-  const others = Object.values(payload.transcripts)
-    .filter(t => t.status === "measured" && t.brain && t.brain.median > 0)
-    .sort((a, b) => b.brain.median - a.brain.median).slice(0, 5);
-  const ranking = others.length
-    ? `<details class="expression-detail"><summary>Most expressed in GTEx's nervous-system groups (${others.length} shown)</summary>`
-      + `<p class="hint">${escapeHTML(payload.brain_note)}</p><ol class="expression-list">`
-      + others.map(t => {
-        /* Biotype belongs here. The highest brain value for SCN1A sits on a transcript
-           annotated nonsense_mediated_decay, and a reader choosing a promoter from this list
-           without seeing that would be designing against a decay target's start site. */
-        /* GTEx quantifies at least one SCN1A transcript Ensembl has since retired, so there
-           is no biotype to join on. Saying so is more use than an empty slot. */
-        const biotype = state.gene.transcripts?.find(x => x.id === t.transcript_id)?.biotype
-          || "not in Ensembl's current annotation";
-        return `<li><button type="button" class="text-button" data-choose-transcript="${escapeHTML(t.transcript_id)}">${escapeHTML(t.transcript_id)}</button> <span class="muted">${escapeHTML(t.brain_label)} · ${escapeHTML(biotype)}</span></li>`;
-      }).join("")
-      + `</ol><p class="hint">This list is evidence, not a recommendation. It does not change the order of the picker above.</p></details>`
-    : `<p class="hint">No transcript of this gene has a median above zero in any nervous-system group.</p>`;
-  const counts = `<p class="hint muted">${fmt(payload.measured_transcripts)} transcripts quantified, of which ${fmt(payload.silent_transcripts)} are measured at zero in every group.</p>`;
-  const caveats = `<details class="expression-detail"><summary>What these numbers do and do not show</summary><ul class="caveat-list">`
-    + (payload.caveat_list || payload.caveats).map(c => `<li>${escapeHTML(c)}</li>`).join("")
-    + `</ul><p class="hint">${escapeHTML(payload.provenance)}</p></details>`;
-  box.innerHTML = heading + chosen + ranking + counts + caveats;
+  const mark = transcript?.mane ? " · MANE Select"
+    : transcript?.canonical ? " · Ensembl canonical" : "";
+  box.innerHTML = heading
+    + `<p class="hint expression-subject">${escapeHTML(selected + mark)}</p>`
+    + `<p class="expression-headline">${expressionHeadline(entry)}</p>`
+    + `<p class="hint">${escapeHTML(expressionSubline(entry))}</p>`
+    + (organStrip(entry, 6) ? `<p class="organ-line">${organStrip(entry, 6)}</p>` : "")
+    + `<p class="hint"><a href="#gene-overview" class="text-link">`
+    + `Compare all ${fmt(payload.measured_transcripts)} transcripts below</a></p>`;
 }
+
+let emojiRenders = null;
+function emojiAvailable() {
+  // WSL and bare Linux containers often ship no colour emoji font, and the browser then draws
+  // an empty box. A box beside a measurement is worse than no symbol, so detect it once and
+  // fall back to names. Measured against a noncharacter, which can never have a glyph: if the
+  // two come out the same width, neither is being rendered.
+  if (emojiRenders !== null) return emojiRenders;
+  try {
+    const context = document.createElement("canvas").getContext("2d");
+    if (!context) { emojiRenders = true; return emojiRenders; }
+    context.font = "16px sans-serif";
+    emojiRenders = context.measureText("\u{1F9E0}").width
+      !== context.measureText("\u{FFFF}").width;
+  } catch { emojiRenders = true; }
+  return emojiRenders;
+}
+
+function organStrip(entry, limit) {
+  // Subtle by construction: symbols only, the number on hover, and nothing at all when the
+  // transcript was measured at zero everywhere. An organ here means a median above zero in
+  // one of its sample groups, which is why the title always carries the group and the value.
+  const organs = (entry.organs || []).slice(0, limit);
+  if (!organs.length) return "";
+  const chips = organs.map(o => {
+    const value = `${o.median.toFixed(2)} ${o.unit} in ${o.tissue_name}`;
+    const donors = o.sample_count ? `, ${fmt(o.sample_count)} donors` : "";
+    const caveat = o.is_body_site ? "" : ". Cultured cells, not a body site";
+    const title = escapeHTML(`${o.name}: ${value}${donors}${caveat}`);
+    // An organ with no honest emoji is named instead. A lookalike object would be both
+    // ambiguous and undignified in a tool that reports measurements.
+    return o.symbol && emojiAvailable()
+      ? `<span class="organ" title="${title}" aria-label="${title}">${o.symbol}</span>`
+      : `<span class="organ organ-named" title="${title}">`
+        + `${escapeHTML(o.chip || o.name)}</span>`;
+  }).join("");
+  const hidden = (entry.other_organs || 0)
+    + Math.max(0, (entry.organs || []).length - organs.length);
+  const names = (entry.organs || []).slice(organs.length).map(o => o.name).join(", ");
+  const more = hidden
+    ? `<span class="organ-more" title="${escapeHTML(hidden + ' more organ(s) with a median '
+        + 'above zero' + (names ? ', including ' + names : ''))}">+${hidden}</span>` : "";
+  return `<span class="organ-strip">${chips}${more}</span>`;
+}
+
+function expressionHeadline(entry) {
+  // One line, and it has to answer the question the researcher came with: is this transcript
+  // made in brain. A measured zero is stated as measured, never as missing.
+  if (entry.status !== "measured") return `<strong>Not in GTEx ${escapeHTML("v10")}</strong>`;
+  const brain = entry.brain;
+  if (!brain) return `<strong>No nervous-system group reported</strong>`;
+  return brain.median > 0
+    ? `<strong>${brain.median.toFixed(2)} ${escapeHTML(brain.unit)}</strong> in brain`
+    : `<strong>0.00 ${escapeHTML(brain.unit)}</strong> in every brain group`;
+}
+
+function expressionSubline(entry) {
+  if (entry.status !== "measured") {
+    return "This transcript is absent from the annotation GTEx was built on, so it was never "
+      + "quantified. That is a gap, not a measurement of zero.";
+  }
+  const brain = entry.brain, highest = entry.highest;
+  if (brain && brain.median > 0) {
+    const donors = brain.sample_count ? `, ${fmt(brain.sample_count)} donors` : "";
+    const elsewhere = highest && highest.tissue_id !== brain.tissue_id
+      ? ` Highest anywhere: ${highest.median.toFixed(2)} in ${highest.tissue_name}.` : "";
+    return `Highest of the 13 nervous-system groups: ${brain.tissue_name}${donors}.${elsewhere}`;
+  }
+  if (highest && highest.median > 0) {
+    return `Measured at zero in all 13 nervous-system groups. Highest anywhere: `
+      + `${highest.median.toFixed(2)} ${highest.unit} in ${highest.tissue_name}.`;
+  }
+  return `Measured in all ${fmt(entry.measured_groups)} sample groups and zero in every one. `
+    + "A median of zero is a measurement, not a gap.";
+}
+
+function expressionOverviewRow(entry, selected) {
+  const transcript = state.gene?.transcripts?.find(t => t.id === entry.transcript_id);
+  const biotype = transcript?.biotype || "not in Ensembl's current annotation";
+  const mark = transcript?.mane ? '<span class="tag-inline">MANE Select</span>'
+    : transcript?.canonical ? '<span class="tag-inline muted">canonical</span>' : "";
+  // A zero cell must not name a tissue. The "highest" group of an all-zero transcript is
+  // whichever one sorted first, and printing "Brain - Amygdala" beside 0.00 reads as though
+  // the amygdala were where it was looked for.
+  const cell = (median, where, everywhere) => median > 0
+    ? `<td class="num"><strong>${median.toFixed(2)}</strong>`
+      + `<span class="muted"> ${escapeHTML(where)}</span></td>`
+    : `<td class="num"><span class="zero">0.00</span>`
+      + `<span class="muted"> in ${escapeHTML(everywhere)}</span></td>`;
+  const outside = (entry.all || []).filter(m => !m.tissue_id.startsWith("Brain_"));
+  const bestOutside = outside.length
+    ? outside.reduce((a, b) => (b.median > a.median ? b : a)) : null;
+  const cells = entry.status !== "measured"
+    ? `<td colspan="2" class="not-measured">not in this GENCODE release, never quantified</td>`
+    : cell(entry.brain ? entry.brain.median : 0,
+           entry.brain ? entry.brain.tissue_name : "", "all 13 groups")
+      + cell(bestOutside ? bestOutside.median : 0,
+             bestOutside ? bestOutside.tissue_name : "", "all 41 groups");
+  return `<tr class="${entry.transcript_id === selected ? "selected" : ""}">`
+    + `<th scope="row"><button type="button" class="text-button" `
+    + `data-choose-transcript="${escapeHTML(entry.transcript_id)}">`
+    + `${escapeHTML(entry.transcript_id)}</button> ${mark}</th>`
+    + `<td class="muted">${escapeHTML(biotype)}</td>${cells}`
+    + `<td class="organ-cell">${organStrip(entry, 3)}</td></tr>`;
+}
+
+function renderExpressionOverview() {
+  const box = $("expression-overview"), payload = state.expression;
+  if (!box) return;
+  if (state.source !== "gene" || !state.gene || !payload || payload.available === false) {
+    box.hidden = true; box.innerHTML = ""; return;
+  }
+  box.hidden = false;
+  const selected = selectedTranscriptId();
+  // Picker order, not expression order. Sorting this table by expression would be the
+  // recommendation ADR 0021 says the tool must not make, just moved to another surface.
+  const ordered = (state.gene.transcripts || [])
+    .map(t => payload.transcripts[t.id]).filter(Boolean);
+  const retired = Object.values(payload.transcripts).filter(
+    e => !(state.gene.transcripts || []).some(t => t.id === e.transcript_id));
+  const rows = [...ordered, ...retired].map(e => expressionOverviewRow(e, selected)).join("");
+  box.innerHTML = `<details class="expression-overview-detail" open>`
+    + `<summary>Transcript expression · GTEx ${escapeHTML(payload.dataset_id.replace("gtex_", ""))}`
+    + ` · GENCODE ${escapeHTML(payload.annotation_release)}</summary>`
+    + `<p class="hint">Same order as the promoter reference list above, which is the`
+    + ` annotation's order. Click an identifier to design against it.`
+    + ` ${fmt(payload.measured_transcripts)} quantified,`
+    + ` ${fmt(payload.silent_transcripts)} measured at zero everywhere. The two value columns`
+    + ` are split so a transcript used mainly in brain can be told from one used everywhere;`
+    + ` neither is a sum, and both are medians over donors.</p>`
+    + `<div class="table-scroll"><table class="expression-overview-table"><thead><tr>`
+    + `<th>Transcript</th><th>Biotype</th>`
+    + `<th>Brain, highest of 13 groups</th><th>Highest of the other 41</th>`
+    + `<th>Organs measured above zero</th>`
+    + `</tr></thead><tbody>${rows}</tbody></table></div>`
+    + `<p class="hint">${escapeHTML(payload.brain_note)}</p>`
+    + `<p class="hint">${escapeHTML(payload.organ_note)}</p>`
+    + `<details class="expression-detail"><summary>What these numbers do and do not show`
+    + `</summary><ul class="caveat-list">`
+    + (payload.caveat_list || payload.caveats).map(c => `<li>${escapeHTML(c)}</li>`).join("")
+    + `</ul><p class="hint">${escapeHTML(payload.provenance)}</p></details></details>`;
+}
+
 async function loadExpression(symbol) {
   const asked = symbol;
   state.expression = null; renderExpression();
@@ -781,6 +956,24 @@ const TRACK_COLOURS = {
   topCandidate: {fill:"#0b4f57", edge:"#063136"},
 };
 
+// Rank 1 to TOP_MARKED as one hue getting paler, so the ten read as *ordered* at a glance.
+// Deliberately not green-to-red: ranking is preferences met, counted equally (ADR 0006), and
+// it does not beat chance on the 125 assayed sequences (AUC 0.41-0.53), so a scale that says
+// "green is good, red is bad" would make a claim the data refutes. A single hue says "these
+// are in order" and stops there. It is also the only option that survives colour blindness
+// and does not collide with the amber regulatory track or the reddish promoter track.
+const RANK_DARKEST = [11, 79, 87];      // #0b4f57, rank 1
+const RANK_PALEST = [158, 196, 198];    // #9ec4c6, rank TOP_MARKED, still visible on white
+
+function rankColour(rank) {
+  // Pale fills need a darker edge or the last marks lose their outline against the page.
+  const t = TOP_MARKED > 1 ? Math.min(1, Math.max(0, (rank - 1) / (TOP_MARKED - 1))) : 0;
+  const mix = (a, b, amount) => Math.round(a + (b - a) * amount);
+  const channel = (amount) => RANK_DARKEST.map((v, i) => mix(v, RANK_PALEST[i], amount));
+  const hex = (rgb) => "#" + rgb.map(v => v.toString(16).padStart(2, "0")).join("");
+  return {fill: hex(channel(t)), edge: hex(channel(t).map(v => Math.round(v * 0.55)))};
+}
+
 // How many of the highest-ranked targets the map marks out. The candidate table already
 // treats the same set as a unit with its "Select top 10" button, so the two agree.
 const TOP_MARKED = 10;
@@ -806,8 +999,10 @@ const TRACKS = [
    swatches:[{colour:TRACK_COLOURS.motif, name:"a match"},
              {colour:TRACK_COLOURS.motifDim, name:"dimmed, while one factor is selected"}]},
   {key:"passing", y:245, name:"Passing targets",
-   help:"Targets that pass every evaluable mandatory rule. The ten highest-ranked are drawn full height and numbered with their rank. Rank is preferences met, counted equally, and on 125 assayed sequences this ranking did not beat chance, so a numbered mark is a shortlist to inspect and not a prediction of activity. Unavailable gates must still be examined in candidate details.",
-   swatches:[{colour:TRACK_COLOURS.topCandidate, name:"rank 1–10, numbered"},
+   help:"Targets that pass every evaluable mandatory rule. The ten highest-ranked are drawn full height, numbered, and shaded from dark at rank 1 to pale at rank 10. The shading is order only. It is deliberately not a green-to-red scale, because rank is preferences met counted equally, and on 125 assayed sequences this ranking did not beat chance, so colouring rank 1 'good' would claim something the data refutes. A numbered mark is a shortlist to inspect, not a prediction of activity. Unavailable gates must still be examined in candidate details.",
+   swatches:[{colour:rankColour(1), name:"rank 1"},
+             {colour:rankColour(Math.round(TOP_MARKED / 2)), name:"rank 5"},
+             {colour:rankColour(TOP_MARKED), name:"rank 10, palest"},
              {colour:TRACK_COLOURS.candidate, name:"passes every evaluable gate"}]},
   {key:"excluded", y:273, name:"Excluded targets",
    help:"Targets with at least one failed mandatory rule, coloured by the first rule that excluded each. Hover or select to see which checks failed.",
@@ -907,7 +1102,10 @@ function drawExcluded(parts, r, rejectionColours, scale, tip, rect) {
 }
 
 const PASSING_TOP = 232, PASSING_STEP = 5, PASSING_HEIGHT = 7;
-const MARKED_TOP = 230, MARKED_HEIGHT = 19, MARKED_LABEL_GAP = 13;
+// 11px rather than 13: with rank also carried by the fill, a numeral that is dropped for
+// crowding costs less, but five of the ten were being dropped at full extent, which is more
+// than it needs to be.
+const MARKED_TOP = 230, MARKED_HEIGHT = 19, MARKED_LABEL_GAP = 9;
 
 function passingTip(c) {
   return `${c.id} · rank ${c.rank} · ${ratingText(c)} evaluated preferences · `
@@ -937,7 +1135,7 @@ function drawPassing(parts, r, scale, tip, rect) {
   // Worst rank first, so rank 1 is drawn last and is the one on top where they overlap.
   for (const c of [...marked].sort((a, b) => b.rank - a.rank)) {
     rect(c.offset, c.offset + c.target_site_dna.length, MARKED_TOP, MARKED_HEIGHT,
-      TRACK_COLOURS.topCandidate, passingTip(c), `data-candidate="${c.id}"`);
+      rankColour(c.rank), passingTip(c), `data-candidate="${c.id}"`);
   }
   // Numerals in rank order, skipping any that would collide with one already placed: a
   // better rank keeps its label, and the rank of an unlabelled mark is still in its tooltip.
@@ -1809,6 +2007,7 @@ function chooseOverviewReference(key) {
 }
 $("tss-group-list").addEventListener("click",e=>{const button=e.target.closest("[data-choose-transcript]");if(button)chooseOverviewReference(`transcript:${button.dataset.chooseTranscript}`);});
 $("expression").addEventListener("click",e=>{const button=e.target.closest("[data-choose-transcript]");if(button)chooseOverviewReference(`transcript:${button.dataset.chooseTranscript}`);});
+$("expression-overview").addEventListener("click",e=>{const button=e.target.closest("[data-choose-transcript]");if(button)chooseOverviewReference(`transcript:${button.dataset.chooseTranscript}`);});
 function selectOverviewItem(target) {
   const node=target.closest("[data-reference],[data-tss-group]"); if (!node) return;
   if (node.dataset.reference) chooseOverviewReference(node.dataset.reference);

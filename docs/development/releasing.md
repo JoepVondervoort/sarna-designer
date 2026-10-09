@@ -6,10 +6,17 @@ put the work where it looks.
 
 ## The short version
 
-| | Maintainer ships it by | Colleague gets it with |
+| | Maintainer ships it by | The installed tool updates with |
 |---|---|---|
 | **Route B, from GitHub** | merging to the **default branch** (`main`) and pushing | `uv tool upgrade sarna-designer` |
 | **Route A, a `.whl` file** | building a wheel and sending it | rerunning the install command on the new file |
+| **Route C, a local checkout** | pulling, or just editing the working tree | `uv tool upgrade sarna-designer` |
+
+Route C is the maintainer's own: `uv tool install /path/to/sarna-designer[app]` installs from a
+directory rather than from a wheel or a repository. It is how to run the packaged command
+against whatever is in the checkout right now, and it is worth knowing it does **not** track the
+checkout live. The installed copy is a build, frozen at install time, so it keeps reporting the
+old version until it is upgraded.
 
 Route B is the better setup, and it is the one to move to. It needs no attachment, no second
 copy of anything, and the colleague's update is one command they can remember. Route A exists
@@ -27,10 +34,30 @@ trying to reach the other. Guessing at them is how the wrong advice gets written
 | Installed from git, new commit pushed | `uv tool install "...@ git+https://..."` | Updates |
 | Installed from a wheel, new wheel built | `uv tool install <new path>` | **Updates.** uv replaced the old file URL with the new one |
 | Installed from a wheel | `uv tool upgrade sarna-designer` | **Does nothing**, and says `Nothing to upgrade` |
+| Installed from a directory, files changed | `uv tool upgrade sarna-designer` | **Updates.** uv rebuilt from the directory, 0.1.0.dev0 to 0.2.0 |
 
 The finding that matters: **`uv tool upgrade` tracks the git commit, not the version number.**
 An unchanged version does not stop a git-installed tool from updating. The version number is
 needed for a different reason, below.
+
+So a wheel is the only one of the three that `uv tool upgrade` cannot refresh. Both of the
+others resolve their source again and rebuild.
+
+### Which route is this machine on?
+
+The receipt says, and it is the only place that does. `uv tool list` prints the version but not
+where it came from:
+
+```bash
+cat "$(uv tool dir)/sarna-designer/uv-receipt.toml"
+```
+
+```powershell
+type "$(uv tool dir)\sarna-designer\uv-receipt.toml"
+```
+
+The first line names it: `git = "https://github.com/..."` is route B, `path = "....whl"` is
+route A, and `directory = "/home/..."` is route C.
 
 The second finding: a wheel install has no upstream, so `uv tool upgrade` is a no-op for it. The
 message is correct rather than a failure, and the instructions now say so, because a colleague

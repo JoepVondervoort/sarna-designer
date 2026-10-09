@@ -2,8 +2,8 @@
 
 GTEx quantifies bulk RNA-seq from post-mortem donor tissue. For this project it answers one
 question the annotation cannot (*which* transcript of a gene a tissue actually makes) and
-pointedly fails to answer another: it contains no cell lines, so AF22 and HeLa are absent and
-always will be.
+pointedly fails to answer another: apart from two cultured sample groups it is donor tissue,
+and AF22 and HeLa are absent from it either way.
 
 **Two identifiers, not one.** GTEx keys everything on a *versioned* GENCODE identifier, and
 which version depends on the dataset: ``gtex_v8`` was built on GENCODE v26 and ``gtex_v10`` on
@@ -74,8 +74,9 @@ MAX_PAGES = 40
 1,350 a gene like SCN1A produces."""
 
 CELL_LINE_CAVEAT = (
-    "GTEx contains no cell lines. AF22, HeLa and iPSC-derived neurons are not in this dataset, "
-    "so it holds no value for them at all."
+    "GTEx is post-mortem donor tissue apart from two cultured sample groups, donor-derived "
+    "fibroblasts and EBV-transformed lymphocytes. It holds nothing for AF22, HeLa or "
+    "iPSC-derived neurons, so it says nothing at all about them."
 )
 """Carried by the profile itself, not only by the page that renders it, so a methods export or
 a script reporting these numbers states it too."""

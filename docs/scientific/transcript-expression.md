@@ -88,14 +88,55 @@ v26 predates them.
 
 ## What GTEx cannot answer
 
-**There are no cell lines in GTEx.** AF22, HeLa and iPSC-derived neurons are absent and always
-will be, because GTEx is post-mortem donor tissue by construction. "No GTEx value for AF22" is a
-statement about GTEx.
+**GTEx holds nothing for the cells this project uses.** 52 of its 54 `gtex_v10` sample groups
+are post-mortem donor tissue; the other two are cultured, donor-derived fibroblasts and
+EBV-transformed lymphocytes. Neither is AF22, HeLa or an iPSC-derived neuron, and none of those
+will appear, so "no GTEx value for AF22" is a statement about GTEx.
+
+An earlier version of this page, and of the caveat the application shows, said GTEx "contains no
+cell lines". That was wrong, and the two cultured groups are the reason. The claim that matters
+for this project survives being exact, and a test now pins the corrected wording.
 
 This is the same asymmetry recorded in [`af22-chromatin.md`](af22-chromatin.md) and in the
 working notes: the tool knows more about tissues and about HeLa than about the disease-relevant
 line, and adding sources tends to widen that gap rather than close it. Making the gap visible is
 the point.
+
+## Organs, and which ones get a symbol
+
+GTEx samples at a finer grain than anyone thinks in: 13 of its groups are nervous system, 3 are
+artery, 2 are heart. `sarna.expression.organs` maps all 54 onto **21 organs**, written out
+rather than inferred from the names, because `Nerve_Tibial` belongs with the nervous system
+without starting with `Brain`, and a prefix rule would file `Cells_Cultured_fibroblasts` under
+whatever it happened to match.
+
+Eight organs carry a symbol:
+
+| Organ | Symbol | Why this one |
+|---|---|---|
+| Brain and nerve | 🧠 | anatomical |
+| Heart | 🫀 | anatomical |
+| Lung | 🫁 | anatomical |
+| Blood | 🩸 | anatomical |
+| Skeletal muscle | 💪 | the closest honest depiction |
+| Thyroid | 🦋 | the butterfly is a shape convention in wide medical use |
+| Kidney | 🫘 | the bean is a shape convention in wide medical use |
+| Cultured cells | 🧫 | **not** an organ, and the dish says so |
+
+The other 13 are named in words. Most organs have no Unicode emoji, and picking a lookalike
+object for a liver or a pancreas would be both ambiguous and undignified in a tool that reports
+measurements. An empty label is better than a wrong one.
+
+**A symbol means: GTEx measured a median above zero in at least one of that organ's sample
+groups.** It is always shown with the group and the value that produced it, so "brain" can be
+seen to have come from frontal cortex rather than from an average over 13 regions that nobody
+pooled. Its absence means the median was zero there, which is a measurement and not a gap. A
+transcript measured at zero in every group shows no symbols at all, rather than greyed-out
+ones, because a greyed symbol reads as "looked at, unclear".
+
+For SCN1A the strip makes the gene's tissue specificity visible at a glance: every expressed
+transcript is dominated by brain, with small contributions from lung and reproductive tract and
+nothing elsewhere.
 
 ## Donor counts
 

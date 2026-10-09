@@ -75,7 +75,7 @@ body.frozen .setup,body.frozen .intro-note,body.frozen .saved-label,body.frozen 
 .track-empty{font-size:10px;fill:#8aa0a4;font-style:italic}
 /* The rank printed above a top-ten mark. Bold and dark because it sits over the ticks and
    the motif row, where a lighter numeral stops being findable at a glance. */
-.rank-label{font-size:10px;font-weight:700;fill:#0b4f57}
+.rank-label{font-size:9px;font-weight:700;fill:#0b4f57}
 .unevaluated-note{font-size:11px;color:var(--gold);margin-top:8px;font-weight:600}
 .rejection-legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;font-size:11px;
   color:var(--muted);align-items:center}
@@ -227,3 +227,42 @@ body.frozen .setup,body.frozen .intro-note,body.frozen .saved-label,body.frozen 
 .axis-brief summary{font-size:10px;color:var(--teal);cursor:pointer;margin-top:3px}
 .axis-brief .hint{font-size:10px;margin-top:4px}
 .cell-detail summary{cursor:pointer;font-size:12px}
+
+/* The wide half of the expression evidence. The sidebar answers for the selected transcript;
+   this compares every one of them, which needs the width of the workspace rather than 310px. */
+.expression-overview{padding:0 20px 8px}
+.expression-overview:empty{display:none}
+.expression-overview-detail>summary{font-size:12px;cursor:pointer;color:var(--teal);font-weight:600;padding:8px 0}
+.expression-overview-table{white-space:normal;font-size:11px;margin:6px 0}
+.expression-overview-table th{font-size:9px;padding:7px 10px}
+.expression-overview-table td,.expression-overview-table tbody th{padding:7px 10px;vertical-align:top;border-bottom:1px solid #edf1ee}
+.expression-overview-table tbody th{font-weight:400;text-align:left;white-space:nowrap}
+.expression-overview-table tbody th .text-button{padding:0;font-size:11px}
+.expression-overview-table td.num{white-space:nowrap}
+.expression-overview-table td.num strong{font-size:12px}
+.expression-overview-table .zero{color:var(--muted)}
+.expression-overview-table .not-measured{color:var(--muted);font-style:italic}
+.expression-overview-table tbody tr{cursor:default}
+.expression-overview-table tbody tr.selected{background:#edf7f2}
+.tag-inline{font-size:9px;background:#e7f2ed;color:#2c6a4a;border-radius:4px;padding:2px 5px;white-space:nowrap}
+.tag-inline.muted{background:#eef1f3;color:#66737e}
+.text-link{color:var(--teal)}
+
+.expression-subject{margin-bottom:2px;font-size:11px}
+.expression-headline{font-size:14px;margin:0 0 4px}
+
+/* The promoter reference control carries four facts: the identifier, which cannot be
+   shortened, why it is offered first, the biotype when it is not the expected one, and what
+   GTEx measured. At the inherited size that overflows a 310px column and the browser truncates
+   the end, which is exactly the part a reader came for. */
+#reference{font-size:11px}
+
+/* Organ symbols. Subtle on purpose: they label where a transcript was measured above zero and
+   must not compete with the numbers, which are the actual finding. */
+.organ-strip{display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap}
+.organ{font-size:14px;line-height:1;opacity:.85;cursor:help;font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif}
+.organ:hover{opacity:1}
+.organ-named{font-size:9px;line-height:1.5;color:var(--muted);background:#f1f4f5;border-radius:4px;padding:2px 5px;opacity:1;white-space:nowrap;font-family:inherit}
+.organ-more{font-size:9px;color:var(--muted);cursor:help}
+.organ-line{margin:4px 0 2px}
+.organ-cell{white-space:normal;min-width:110px}

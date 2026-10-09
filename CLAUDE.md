@@ -164,6 +164,7 @@ Read the ADR before reopening its question; each records the alternatives and wh
 | Off-target screening: opt-in, remote, dual-scope, reported never filtered | 0019 |
 | Localhost rather than a hosted service, and what would change that | 0020 |
 | Transcript expression is evidence beside the reference, never a reordering | 0021 |
+| Rank is shaded in one hue, never green to red | 0022 |
 
 `docs/scientific/`:
 
@@ -278,8 +279,15 @@ Headline results:
 - **Transcript expression is wired in, GTEx only.** `sarna.expression` and
   `sarna.sources.json_http`; `GET /api/genes/{symbol}/expression`, a separate request from
   lookup so a GTEx outage cannot take gene lookup down. It never reorders the picker, and the
-  browser check asserts the order is identical before and after the evidence loads. GTEx has no
-  cell lines, so AF22 is still unanswered and the panel says that in those words.
+  browser check asserts the order is identical before and after the evidence loads. The
+  evidence is split across two surfaces: a four-line answer beside the picker and a
+  comparison of every transcript in the gene overview card, because a 310px column cannot
+  hold both. `sarna.expression.organs` groups the 54 sample groups into 21 organs and the
+  page shows the strongest few as symbols; only 8 organs get one, the rest are named, and a
+  symbol means a median above zero with the group and value always beside it.
+  **Corrected 9 October:** the caveat said GTEx "contains no cell lines", which is wrong.
+  `gtex_v10` holds two cultured groups, donor-derived fibroblasts and EBV-transformed
+  lymphocytes. AF22 and HeLa are still absent, and tests pin the corrected wording.
 - **No factor occupancy anywhere.** AF22 chromatin *accessibility* is measured, which is not the
   same thing. `CELL_TYPE_OBSERVATION` for a transcription factor is still unproduced; ENCODE would
   populate HeLa, and AF22 has no public TF ChIP-seq at all. The asymmetry is permanent-ish: the

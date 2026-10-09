@@ -76,10 +76,19 @@ scores a candidate and never filters one.**
   default reference is not detectably transcribed in any GTEx tissue. They may still choose it.
   Annotation and expression are different kinds of evidence and the tool presents both rather
   than resolving the conflict.
-- **AF22 is still not answered, and the panel says so in those words.** GTEx has no cell lines.
-  Adding this source makes the gap more visible rather than less, which is the intended effect:
-  the tool will keep knowing more about bulk tissue than about the disease-relevant line until a
-  source that covers it exists.
+- **AF22 is still not answered, and the panel says so in those words.** GTEx v10 holds two
+  cultured sample groups, donor-derived fibroblasts and EBV-transformed lymphocytes, and
+  neither is AF22 or HeLa. The first wording of this caveat said GTEx "contains no cell lines",
+  which is wrong, and the correction is kept by a test. Adding this source makes the gap more
+  visible rather than less, which is the intended effect: the tool will keep knowing more about
+  bulk tissue than about the disease-relevant line until a source that covers it exists.
+- **Organs are a grouping this project makes, not one GTEx ships.** GTEx samples at a finer
+  grain than a reader thinks in, so `sarna.expression.organs` maps all 54 groups onto 21 organs
+  and the page shows the strongest few beside each transcript. A symbol there means a median
+  above zero in at least one of that organ's groups and is always shown with the group and the
+  value that produced it. Symbols are used only where one honestly depicts the organ; the other
+  13 are named in words rather than given a lookalike object. A live test fails if GTEx adds or
+  drops a sample group, because an unmapped group is silently absent from every summary.
 - The annotations disagree in both directions. Six SCN1A transcripts Ensembl serves today are
   absent from GENCODE v39, and one that v39 quantifies, `ENST00000375405`, has since been retired
   from Ensembl. Both are reported rather than dropped.

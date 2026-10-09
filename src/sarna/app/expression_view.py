@@ -20,6 +20,7 @@ from sarna.expression.models import (
     TissueMedian,
     TranscriptExpression,
 )
+from sarna.expression.organs import BY_ID, organ_for
 
 BRAIN_PREFIX = "Brain_"
 """GTEx's own prefix for its nervous-system groups."""
@@ -30,6 +31,13 @@ BRAIN_NOTE = (
     "GTEx files 13 sample groups under Brain, one of which is cervical spinal cord rather "
     "than brain. The figure shown is the highest single group, not an average over them: "
     "averaging regions nobody pooled would invent a measurement."
+)
+
+ORGAN_NOTE = (
+    "An organ symbol means GTEx measured a median above zero in at least one of that organ's "
+    "sample groups, and it is shown with the group that carried the value. Its absence means "
+    "the median was zero there, not that the organ was not looked at. Organs without an "
+    "honest symbol are named in words rather than given a lookalike one."
 )
 
 CELL_LINE_NOTE = (
@@ -43,6 +51,45 @@ rendered."""
 
 TOP_TISSUES = 5
 """How many sample groups each transcript lists before the full table is opened."""
+
+TOP_ORGANS = 4
+"""How many organs a transcript's summary shows before it says how many more there are."""
+
+
+def organ_summary(entry: TranscriptExpression) -> list[dict[str, Any]]:
+    """Return the organs this transcript was measured in, strongest first.
+
+    An organ is included only where at least one of its sample groups has a median **above
+    zero**. A symbol beside an organ therefore means "measured here", and its absence means
+    "not measured above zero here", which is a statement about the median and not about the
+    organ. Organs appear with the group that carried the value, so a reader can see that
+    "brain" came from frontal cortex rather than from an average nobody computed.
+    """
+    if not entry.status.is_measured:
+        return []
+    best: dict[str, TissueMedian] = {}
+    for median in entry.medians:
+        organ = organ_for(median.tissue_id)
+        if organ is None or median.median <= 0:
+            continue
+        current = best.get(organ.id)
+        if current is None or median.median > current.median:
+            best[organ.id] = median
+    ordered = sorted(best.items(), key=lambda pair: -pair[1].median)
+    return [
+        {
+            "organ_id": organ_id,
+            "name": BY_ID[organ_id].name,
+            "chip": BY_ID[organ_id].chip,
+            "symbol": BY_ID[organ_id].symbol,
+            "is_body_site": BY_ID[organ_id].is_body_site,
+            "median": median.median,
+            "unit": median.unit,
+            "tissue_name": median.tissue_name,
+            "sample_count": median.sample_count,
+        }
+        for organ_id, median in ordered
+    ]
 
 
 def _summarise(entry: TranscriptExpression) -> dict[str, Any]:
@@ -64,9 +111,12 @@ def _summarise(entry: TranscriptExpression) -> dict[str, Any]:
             "brain": None,
             "brain_label": "not in this release, so nothing was quantified",
             "top": [],
+            "organs": [],
+            "other_organs": 0,
         }
 
     ranked = sorted(entry.medians, key=lambda median: -median.median)
+    organs = organ_summary(entry)
     brain = [median for median in entry.medians if median.tissue_id.startswith(BRAIN_PREFIX)]
     best_brain = max(brain, key=lambda median: median.median) if brain else None
     highest = ranked[0] if ranked else None
@@ -98,6 +148,8 @@ def _summarise(entry: TranscriptExpression) -> dict[str, Any]:
         # slice of zeros, and printing them reads as though those tissues were notable.
         "top": [] if silent else [median.to_dict() for median in ranked[:TOP_TISSUES]],
         "all": [median.to_dict() for median in ranked],
+        "organs": organs[:TOP_ORGANS],
+        "other_organs": max(0, len(organs) - TOP_ORGANS),
     }
 
 
@@ -119,7 +171,7 @@ def _caveat_list(caveats: tuple[str, ...]) -> list[str]:
     """Return the caveats in reading order, with the interpretation after what it interprets.
 
     Rendered as two separate fields, the panel printed "not assayed here means exactly that"
-    above the line that says GTEx holds no cell lines, which is backwards. Matched on the
+    above the line naming the cells GTEx does not hold, which is backwards. Matched on the
     caveat itself rather than on its position, so a source that does not carry it still gets
     the note, at the end.
     """
@@ -159,6 +211,7 @@ def expression_overview(profile: GeneExpression) -> dict[str, Any]:
         "cell_line_note": CELL_LINE_NOTE,
         "brain_label": BRAIN_LABEL,
         "brain_note": BRAIN_NOTE,
+        "organ_note": ORGAN_NOTE,
         "measured_transcripts": len(measured),
         "silent_transcripts": len(measured) - len(expressed),
         "transcripts": summaries,

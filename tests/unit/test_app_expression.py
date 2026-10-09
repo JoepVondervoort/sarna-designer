@@ -203,17 +203,18 @@ class TestWhatThePickerIsGiven:
         # fact, the note states what may and may not be concluded from it.
         payload = self.payload(tmp_path)
         fact = payload["caveats"][0]
-        assert "no cell lines" in fact
-        assert "no cell lines" not in payload["cell_line_note"]
+        assert "AF22" in fact
+        assert "says nothing at all about them" in fact
         assert "supports or contradicts" in payload["cell_line_note"]
+        assert "fibroblasts" not in payload["cell_line_note"], "the note restates the fact"
 
     def test_the_interpretation_is_listed_after_the_fact_it_interprets(
         self, tmp_path: Path
     ) -> None:
         # Rendered from two separate fields, the panel put "not assayed here means exactly
-        # that" above the line saying GTEx holds no cell lines.
+        # that" above the line naming the cells GTEx does not hold.
         listed = self.payload(tmp_path)["caveat_list"]
-        fact = next(i for i, c in enumerate(listed) if "no cell lines" in c)
+        fact = next(i for i, c in enumerate(listed) if "iPSC-derived neurons" in c)
         note = next(i for i, c in enumerate(listed) if "supports or contradicts" in c)
         assert note == fact + 1
 

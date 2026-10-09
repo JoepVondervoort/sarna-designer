@@ -12,8 +12,10 @@ This subpackage adds that evidence beside the choice without making the choice. 
 reorders transcripts, never scores a candidate and never filters: ordering stays annotation's
 job, and expression is shown as what it is, a median over post-mortem bulk tissue.
 
-**It is bulk tissue, not cell lines.** GTEx has no AF22, no HeLa and no iPSC-derived neuron.
-"No GTEx value for AF22" is a statement about GTEx, not about AF22, and
-:mod:`sarna.expression.models` keeps the three ways a number can be missing apart so an
-interface cannot render ignorance as a measurement.
+**It is almost all tissue, and none of it is the cells this project uses.** GTEx v10 has two
+cultured sample groups, donor-derived fibroblasts and EBV-transformed lymphocytes, and 52
+post-mortem tissue groups. It has no AF22, no HeLa and no iPSC-derived neuron. "No GTEx value
+for AF22" is a statement about GTEx, not about AF22, and :mod:`sarna.expression.models` keeps
+the three ways a number can be missing apart so an interface cannot render ignorance as a
+measurement.
 """

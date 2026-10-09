@@ -118,6 +118,31 @@ class TestTheLiveProfile:
         assert SCN1A_MANE not in expressed
 
 
+class TestTheOrganMapStillCoversTheDataset:
+    def test_every_sample_group_the_portal_serves_is_mapped_to_an_organ(
+        self, client: GtexClient
+    ) -> None:
+        # The only check that can catch GTEx adding a tissue. An unmapped group is not an
+        # error anywhere else: it simply never appears in an organ summary, so a transcript
+        # made only there would show no organs at all.
+        from sarna.expression.organs import TISSUE_ORGAN
+
+        unmapped = sorted(set(client.tissues()) - set(TISSUE_ORGAN))
+        assert not unmapped, (
+            f"{len(unmapped)} GTEx sample group(s) have no organ: {unmapped}. Add them to "
+            f"sarna.expression.organs.TISSUE_ORGAN, or they are silently absent from every "
+            f"organ summary."
+        )
+
+    def test_the_map_names_no_group_the_portal_has_dropped(
+        self, client: GtexClient
+    ) -> None:
+        from sarna.expression.organs import TISSUE_ORGAN
+
+        stale = sorted(set(TISSUE_ORGAN) - set(client.tissues()))
+        assert not stale, f"these groups are no longer in the dataset: {stale}"
+
+
 class TestLiveFailureModes:
     def test_a_gene_gtex_has_never_heard_of_raises_rather_than_reporting_zeros(self) -> None:
         # Live because the behaviour under test is GTEx's: it answers HTTP 200 with an empty
