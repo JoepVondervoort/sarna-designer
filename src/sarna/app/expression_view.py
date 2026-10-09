@@ -112,6 +112,7 @@ def _summarise(entry: TranscriptExpression) -> dict[str, Any]:
             "brain_label": "not in this release, so nothing was quantified",
             "top": [],
             "organs": [],
+            "all_organs": [],
             "other_organs": 0,
         }
 
@@ -149,6 +150,7 @@ def _summarise(entry: TranscriptExpression) -> dict[str, Any]:
         "top": [] if silent else [median.to_dict() for median in ranked[:TOP_TISSUES]],
         "all": [median.to_dict() for median in ranked],
         "organs": organs[:TOP_ORGANS],
+        "all_organs": organs,
         "other_organs": max(0, len(organs) - TOP_ORGANS),
     }
 

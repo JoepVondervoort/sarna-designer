@@ -270,3 +270,20 @@ body.frozen .setup,body.frozen .intro-note,body.frozen .saved-label,body.frozen 
 .organ-more{font-size:9px;color:var(--muted);cursor:help}
 .organ-line{margin:4px 0 2px}
 .organ-cell{white-space:normal;min-width:110px}
+
+/* Expression details stay readable and reachable from hover, keyboard or touch. */
+.organ-more,.organ-chart-button{border:0;background:none;color:var(--teal);font-size:10px;padding:3px 5px;white-space:nowrap}
+.organ-chart-button{text-decoration:underline;text-underline-offset:3px}
+#organ-popover{position:fixed;z-index:20;width:min(580px,calc(100vw - 16px));max-height:calc(100dvh - 16px);overflow:auto;padding:20px;background:white;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 40px #182f3526;font-size:12px;line-height:1.5}
+.expression-chart-heading{display:flex;justify-content:space-between;gap:12px;align-items:start}
+.expression-chart-heading h3{font-size:17px}.expression-chart-heading .hint{margin-top:3px}
+.expression-chart-heading button{padding:2px 8px;font-size:20px}
+.expression-chart-scale{font-size:11px;color:var(--muted);margin:16px 0 10px}
+.expression-bars{max-height:320px;overflow:auto;padding-right:5px}
+.expression-bar-row{display:grid;grid-template-columns:minmax(130px,1.25fr) minmax(70px,1fr) 55px;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid #edf1ef}
+.expression-bar-label strong{font-size:11px;font-weight:600}.expression-bar-label small{display:block;font-size:10px;color:var(--muted)}
+.expression-bar-track{height:9px;border-radius:3px;background:#edf4f2;overflow:hidden}.expression-bar-track span{display:block;height:100%;background:var(--teal);border-radius:3px;min-width:1px}
+.expression-bar-value{text-align:right;font-variant-numeric:tabular-nums;font-size:11px}
+.expression-chart-source{border-top:1px solid var(--line);margin-top:14px;padding-top:12px;font-size:10px;color:var(--muted)}.expression-chart-source a{font-weight:600}.expression-chart-source p{margin-top:5px;overflow-wrap:anywhere}
+@media(max-width:480px){#organ-popover{padding:14px}.expression-bar-row{gap:8px;grid-template-columns:minmax(110px,1.2fr) minmax(45px,1fr) 48px}}
+@media print{#organ-popover{display:none!important}}

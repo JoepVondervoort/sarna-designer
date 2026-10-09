@@ -295,6 +295,7 @@ const BIOTYPE_SHORT = {
 const shortBiotype = (biotype) => BIOTYPE_SHORT[biotype] || (biotype || "").replace(/_/g, " ");
 
 function renderExpression() {
+  closeOrganChart();
   // Two surfaces, because one 310px column cannot hold both an answer and a comparison. The
   // sidebar answers "what about the transcript I have selected" in three lines beside the
   // control. The comparison of every transcript goes in the gene overview card, which is the
@@ -383,12 +384,74 @@ function organStrip(entry, limit) {
   }).join("");
   const hidden = (entry.other_organs || 0)
     + Math.max(0, (entry.organs || []).length - organs.length);
-  const names = (entry.organs || []).slice(organs.length).map(o => o.name).join(", ");
+  const trigger = `data-expression-chart="${escapeHTML(entry.transcript_id)}" aria-haspopup="dialog" aria-controls="organ-popover"`;
   const more = hidden
-    ? `<span class="organ-more" title="${escapeHTML(hidden + ' more organ(s) with a median '
-        + 'above zero' + (names ? ', including ' + names : ''))}">+${hidden}</span>` : "";
-  return `<span class="organ-strip">${chips}${more}</span>`;
+    ? `<button type="button" class="organ-more" ${trigger} aria-label="Show all expression values for ${escapeHTML(entry.transcript_id)}">+${hidden} more</button>` : "";
+  return `<span class="organ-strip">${chips}${more}<button type="button" class="organ-chart-button" ${trigger} aria-label="Show expression chart for ${escapeHTML(entry.transcript_id)}">View chart</button></span>`;
 }
+
+let organTrigger = null, organCloseTimer = null;
+function closeOrganChart() {
+  clearTimeout(organCloseTimer);
+  $("organ-popover").hidden = true;
+  organTrigger?.setAttribute("aria-expanded", "false");
+  organTrigger = null;
+}
+function expressionChart(entry, payload) {
+  // Old frozen records still carry the full tissue table, even without the organ summary.
+  const grouped = Array.isArray(entry.all_organs);
+  const rows = grouped ? entry.all_organs : (entry.all || []).filter(row=>row.median>0);
+  const maximum = Math.max(...rows.map(row=>row.median), 0);
+  const unit = rows[0]?.unit || entry.highest?.unit || "TPM";
+  const valueText = value => value>0 && value<0.01 ? value.toPrecision(2) : value.toFixed(2);
+  const bars = rows.map(row=>{
+    const name = grouped ? row.name : row.tissue_name;
+    const context = grouped ? row.tissue_name : "";
+    return `<div class="expression-bar-row"><div class="expression-bar-label"><strong>${escapeHTML(name)}</strong><small>${escapeHTML(context)}${row.is_body_site===false?" · cultured cells":""}${row.sample_count?` · n = ${fmt(row.sample_count)} donors`:""}</small></div><div class="expression-bar-track"><span style="width:${maximum?100*row.median/maximum:0}%"></span></div><span class="expression-bar-value">${valueText(row.median)}</span></div>`;
+  }).join("");
+  return `<div class="expression-chart-heading"><div><p class="eyebrow">TRANSCRIPT EXPRESSION</p><h3>Expression by ${grouped?"organ":"sample group"}</h3><p class="hint">${escapeHTML(entry.transcript_id)}</p></div><button type="button" data-close-organ-chart aria-label="Close expression chart">×</button></div><p class="expression-chart-scale">Median expression · ${escapeHTML(unit)} · linear scale, 0 to ${valueText(maximum)}</p><div class="expression-bars">${bars || '<p class="hint">No sample group was measured above zero.</p>'}</div><p class="hint">${grouped?"Each bar shows the highest sample-group median within that organ, not an average across tissues.":"Each bar shows one measured sample-group median."} Only values above zero are shown. TPM means transcripts per million.</p><div class="expression-chart-source"><a href="https://gtexportal.org/home/datasets" target="_blank" rel="noopener noreferrer">Source: ${escapeHTML(payload.source || "GTEx Portal")}</a><p>${escapeHTML(payload.dataset_id)} · GENCODE ${escapeHTML(payload.annotation_release)} · transcript ${escapeHTML(entry.release_id || entry.transcript_id)}</p><p>${escapeHTML(payload.provenance)}</p><p>GTEx tissue and donor-derived cultured-cell measurements do not establish expression in AF22, HeLa, or your experimental cell line.</p></div>`;
+}
+function openOrganChart(trigger) {
+  clearTimeout(organCloseTimer);
+  const payload = state.expression;
+  const entry = payload?.transcripts?.[trigger.dataset.expressionChart];
+  if (!entry) return;
+  const box = $("organ-popover");
+  if (organTrigger!==trigger || box.hidden) {
+    closeOrganChart(); organTrigger=trigger;
+    box.innerHTML=expressionChart(entry,payload);
+  }
+  trigger.setAttribute("aria-expanded","true");
+  box.hidden=false;
+  const rect=trigger.getBoundingClientRect();
+  box.style.left=`${Math.max(8,Math.min(rect.right-box.offsetWidth,innerWidth-box.offsetWidth-8))}px`;
+  box.style.top=`${Math.max(8,Math.min(rect.bottom+8,innerHeight-box.offsetHeight-8))}px`;
+}
+function scheduleOrganClose() {
+  clearTimeout(organCloseTimer);
+  organCloseTimer=setTimeout(closeOrganChart,220);
+}
+document.addEventListener("pointerover",event=>{
+  const trigger=event.target.closest("[data-expression-chart]");
+  if (trigger) openOrganChart(trigger);
+  else if (event.target.closest("#organ-popover")) clearTimeout(organCloseTimer);
+});
+document.addEventListener("pointerout",event=>{
+  if (event.target.closest("[data-expression-chart], #organ-popover")) scheduleOrganClose();
+});
+document.addEventListener("focusin",event=>{
+  const trigger=event.target.closest("[data-expression-chart]");
+  if (trigger) openOrganChart(trigger);
+  else if (!event.target.closest("#organ-popover")) closeOrganChart();
+});
+document.addEventListener("click",event=>{
+  const trigger=event.target.closest("[data-expression-chart]");
+  if (trigger) openOrganChart(trigger);
+  else if (event.target.closest("[data-close-organ-chart]") || !event.target.closest("#organ-popover")) closeOrganChart();
+});
+document.addEventListener("keydown",event=>{if(event.key==="Escape")closeOrganChart();});
+window.addEventListener("resize",closeOrganChart);
+document.addEventListener("scroll",event=>{if(!event.target.closest?.("#organ-popover"))closeOrganChart();},true);
 
 function expressionHeadline(entry) {
   // One line, and it has to answer the question the researcher came with: is this transcript

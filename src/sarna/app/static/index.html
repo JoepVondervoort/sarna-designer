@@ -72,6 +72,7 @@
   </main>
   <dialog id="settings-dialog"><div class="dialog-header"><div><p class="eyebrow">RESEARCHER CONTROLS</p><h2>Rules, defaults &amp; alternatives</h2></div><button type="button" class="close-dialog" aria-label="Close settings">×</button></div><p class="dialog-intro">A <b>gate</b> excludes candidates that fail it. A <b>preference</b> adds one point when met. <b>Off</b> removes the check. Edits stay a draft until you run Python again. Continuous asymmetry is a tiebreak, and core length defines candidate generation.</p><div id="rule-editor"></div><div class="dialog-footer"><button type="button" id="reset-settings" class="secondary">Reset to selected preset</button><button type="button" class="primary close-dialog">Keep draft changes</button></div></dialog>
   <dialog id="evidence-dialog"><div class="dialog-header"><h2>Saved run evidence</h2><button type="button" class="close-dialog" aria-label="Close run evidence">×</button></div><div id="run-evidence-content"></div></dialog>
+  <section id="organ-popover" role="dialog" aria-label="Transcript expression by organ" hidden></section>
   <div id="tooltip" role="tooltip" hidden></div>
   <script src="/app.js" defer></script>
 </body>

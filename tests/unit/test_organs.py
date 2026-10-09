@@ -161,6 +161,10 @@ class TestWhatThePageIsGiven:
         summary = _summarise(entry)
         assert len(summary["organs"]) == TOP_ORGANS
         assert summary["other_organs"] == len(groups) - TOP_ORGANS
+        assert len(summary["all_organs"]) == len(groups)
+        assert [organ["median"] for organ in summary["all_organs"]] == [
+            10.0 - i for i in range(len(groups))
+        ]
 
     def test_nothing_is_left_out_when_there_are_few_organs(self) -> None:
         from sarna.app.expression_view import _summarise
