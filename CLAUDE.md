@@ -6,7 +6,7 @@ traceability outranks clean code: every rule carries a citation, every verdict c
 **State:** gene symbol → promoter → ranked candidates → interactive page all work.
 `design_sarnas(promoter, config)` is the engine; `EnsemblClient` resolves a gene to a promoter;
 `sarna.regulatory` annotates it; `sarna.view.html.render` writes a self-contained browser.
-1,632 tests passed in 33 s, eleven live-network tests excluded; mypy strict and Ruff clean.
+1,915 tests passed in 46 s, live-network tests excluded; mypy strict and Ruff clean.
 **The unit suite reaches no external service.** It used to: the screening route built a real
 `BlastClient`, so every full run queued a live BLAST job at NCBI and then blocked closing the
 router until it came back. `DesignService.blast_factory` and `poll_sleep` are the seams that
@@ -61,7 +61,7 @@ the earlier proposal to change the default window to a preference.
 Use `.venv/bin/python`; there is a miniconda base environment that must stay untouched.
 
 ```bash
-.venv/bin/python -m pytest -q                      # 1327 tests; excludes live network
+.venv/bin/python -m pytest -q                      # 1,915 tests; excludes live network
 .venv/bin/python -m pytest -m network              # 8 live-Ensembl tests, excluded by default
 .venv/bin/python -m pytest -m tracks               # needs the AF22 bigWigs; skips if absent
 .venv/bin/python -m mypy src tests scripts         # strict
@@ -171,6 +171,7 @@ Read the ADR before reopening its question; each records the alternatives and wh
 | Localhost rather than a hosted service, and what would change that | 0020 |
 | Transcript expression is evidence beside the reference, never a reordering | 0021 |
 | Rank is shaded in one hue, never green to red | 0022 |
+| Wang's own 80% threshold, screening in batches, and the on-target hit | 0023 |
 
 `docs/scientific/`:
 
@@ -275,6 +276,38 @@ Headline results:
   [ADR 0019](docs/adr/0019-off-target-screening.md). `export.order.csv` reads the newest
   complete screening per scope and reports its findings with the database and date; no
   screening still reads `not-performed`, and a failed one contributes nothing.
+- **The screening panel was rebuilt on 11 October; read
+  [ADR 0023](docs/adr/0023-off-target-reporting-thresholds-and-batches.md) before changing it.**
+  The defect that prompted it: `parse_hits` held **one** budget of 500 alignments for a whole
+  multi-query report, so the first query consumed it and every later candidate came back with
+  zero. A real 22 candidate run showed 1 candidate with 500 and 21 with none, printed like
+  genuine clean results. The budget is per candidate now, and a candidate that reaches it is
+  recorded as capped: no alignments, some alignments and more than were kept are three
+  different statements.
+  Going back to Wang 2015 for the seed question settled three things. The paper **names no
+  seed region** (one use of the word, in quotation marks), so none is drawn. It states exactly
+  one homology threshold, **80% for rejecting a control duplex**, so `wang_homology_hits`
+  (16 of 19) is reported beside the exact count and leads the interface; the locally invented
+  `NEAR_PERFECT_IDENTITIES = 17` stays for the exports that already carry it. Its own
+  candidate search prescribes **megablast**, which returns nothing at 19 nt, so `MEGABLAST=off`
+  is a declared divergence rather than a code comment. **Wang step 9, a BLAT check rejecting
+  any target containing a SNP, is not implemented anywhere**, which is a real Table 1 adjacent
+  gap.
+  Genomic screening used to count **each candidate's own promoter** as a perfect off-target
+  match, making that column meaningless. The own-locus hit is identified by exact coordinate
+  overlap, moved to `on_target_hits` rather than deleted, and counted; a run from pasted
+  sequence has no coordinates and says so instead of guessing.
+  Screening now runs in batches (1/5/10/15/25/all, default 15, plus the next batch, the rest
+  and the ticked selection), all resolving to one explicit id list the route validates. Several
+  dated records per scope are expected and the panel merges them.
+  The panel itself shows **where** a duplex binds: the gene, the matched bases, and a
+  base-resolution footprint whose mismatch positions come from BLAST's `Hsp_midline`, plus a
+  signed distance-to-TSS plot for genomic hits with the run's own window as the only band.
+  `ScreeningRecord.window` exists because the in-window flag is meaningless without it.
+  The panel lives in `src/sarna/app/static/offtarget.js`, a second classic script sharing
+  app.js's globals. **It must be inlined in `frozen_page` and listed in the static route**, and
+  `showResult` calls into it through a `typeof` guard because a frozen archive runs app.js to
+  completion before this file is parsed.
 - **The experimental cell line control is nearly inert, and now says so.** Measured: **1 of the
   registry's 24 (cell line x evidence axis) pairs is available**, AF22 chromatin, and that one
   needs the chromatin option switched on and the bigWigs installed. The field never touches a
