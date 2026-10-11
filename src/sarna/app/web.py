@@ -7,6 +7,7 @@ import logging
 import re
 from base64 import b64encode
 from collections.abc import Mapping, Sequence
+from collections.abc import Set as AbstractSet
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
@@ -34,6 +35,7 @@ from sarna.genome.ensembl import (
     GeneNotFoundError,
 )
 from sarna.offtarget.models import GENOMIC_SCOPE, TRANSCRIPT_SCOPE
+from sarna.offtarget.screening import DEFAULT_CANDIDATES, MAX_CANDIDATES
 from sarna.regulatory.evidence import CELL_TYPES
 from sarna.rules.catalog import CATALOGUE
 from sarna.rules.resolved import ResolvedRule
@@ -47,6 +49,7 @@ def frozen_page(data: dict[str, Any], snapshot: dict[str, Any] | None) -> bytes:
     page = STATIC.joinpath("index.html").read_text(encoding="utf-8")
     css = STATIC.joinpath("app.css").read_text(encoding="utf-8")
     js = STATIC.joinpath("app.js").read_text(encoding="utf-8")
+    offtarget = STATIC.joinpath("offtarget.js").read_text(encoding="utf-8")
     data["catalogue"] = {
         "engine_version": snapshot["app"]["engine_version"] if snapshot else __version__,
         "rules": (snapshot["app"].get("available_rules") or list({
@@ -61,6 +64,10 @@ def frozen_page(data: dict[str, Any], snapshot: dict[str, Any] | None) -> bytes:
     page = page.replace('<link rel="stylesheet" href="/app.css">', f"<style>{css}</style>")
     page = page.replace('<script src="/app.js" defer></script>',
                         f"<script>window.SARNA_FROZEN={encoded};</script><script>{js}</script>")
+    # Order matters: the off-target panel is a second classic script sharing app.js's globals,
+    # and a frozen page that dropped it would lose the whole screening card without saying so.
+    page = page.replace('<script src="/offtarget.js" defer></script>',
+                        f"<script>{offtarget}</script>")
     icon = b64encode(STATIC.joinpath("favicon.svg").read_bytes()).decode()
     page = page.replace('href="/favicon.svg"', f'href="data:image/svg+xml;base64,{icon}"')
     page = page.replace('<a class="brand" href="/"', '<a class="brand" href="#"')
@@ -165,7 +172,9 @@ class AppRouter:
         parsed = urlsplit(target)
         path = unquote(parsed.path)
         query = parse_qs(parsed.query)
-        if method == "GET" and path in ("/", "/app.js", "/app.css", "/favicon.svg", "/favicon.ico"):
+        if method == "GET" and path in (
+            "/", "/app.js", "/offtarget.js", "/app.css", "/favicon.svg", "/favicon.ico",
+        ):
             name = {"/": "index.html", "/favicon.ico": "favicon.svg"}.get(path, path[1:])
             media = {"html": "text/html", "js": "text/javascript", "css": "text/css",
                      "svg": "image/svg+xml"}[name.rsplit(".", 1)[1]]
@@ -281,7 +290,13 @@ class AppRouter:
             if len(parts) == 4 and parts[3] == "export.json":
                 return self._json(200, snapshot)
             if len(parts) == 4 and parts[3] == "export.html":
-                return 200, "text/html; charset=utf-8", frozen_page({"result": snapshot}, snapshot)
+                # The screenings travel with the archive. They are separate dated records and
+                # stay separate, but an offline copy of a screened run that showed no screening
+                # would be a record quietly missing its own evidence.
+                return 200, "text/html; charset=utf-8", frozen_page(
+                    {"result": snapshot, "screenings": self._complete_screenings(run_id)},
+                    snapshot,
+                )
             if len(parts) == 4 and parts[3] == "export.csv":
                 selected = _selected_for_export(snapshot, query)
                 output = io.StringIO()
@@ -324,13 +339,76 @@ class AppRouter:
                 f"off-targets or {GENOMIC_SCOPE!r} for genomic ones."
             )
         snapshot = self.service.store.snapshot(run_id)
-        if not any(c["rank"] is not None for c in snapshot["candidates"]):
+        passing = {c["id"] for c in snapshot["candidates"] if c["rank"] is not None}
+        if not passing:
             raise ValueError(
                 "No candidate in this run passed the gates, so there is nothing to screen."
             )
+        only = self._requested_candidates(requested, passing)
+        limit = self._requested_limit(requested)
         screening_id = self.service.store.start_screening(run_id, scope)
-        self.screeners.submit(self.service.screen, screening_id, run_id, scope)
-        return self._json(202, {"id": screening_id, "scope": scope})
+        self.screeners.submit(
+            self.service.screen, screening_id, run_id, scope, only, limit
+        )
+        return self._json(202, {
+            "id": screening_id,
+            "scope": scope,
+            "candidates": len(only) if only is not None else min(limit, len(passing)),
+        })
+
+    @staticmethod
+    def _requested_candidates(
+        requested: Mapping[str, Any], passing: AbstractSet[str]
+    ) -> list[str] | None:
+        """Return the explicit candidate selection, validated, or ``None`` for "the best N".
+
+        Every batch the interface offers resolves to a list of identifiers (ADR 0023), so this
+        is the one place the selection is checked. An unknown or excluded identifier is named
+        rather than dropped: silently screening fewer candidates than were asked for would be
+        indistinguishable from screening them and finding nothing.
+        """
+        chosen = requested.get("candidates")
+        if chosen is None:
+            return None
+        if not isinstance(chosen, list) or not all(isinstance(c, str) for c in chosen):
+            raise ValueError("'candidates' must be a list of candidate identifiers.")
+        if not chosen:
+            raise ValueError("No candidates were chosen, so there is nothing to screen.")
+        if len(chosen) > MAX_CANDIDATES:
+            raise ValueError(
+                f"{len(chosen)} candidates were chosen; one search covers at most "
+                f"{MAX_CANDIDATES}. Screening runs in batches, so start the next one when this "
+                f"finishes."
+            )
+        unknown = [c for c in chosen if c not in passing]
+        if unknown:
+            raise ValueError(
+                f"These are not candidates of this run that passed its gates: "
+                f"{', '.join(sorted(unknown)[:5])}."
+            )
+        return list(dict.fromkeys(chosen))
+
+    @staticmethod
+    def _requested_limit(requested: Mapping[str, Any]) -> int:
+        """Return how many to screen when no explicit selection was made."""
+        count = requested.get("count", DEFAULT_CANDIDATES)
+        if isinstance(count, bool) or not isinstance(count, int) or count < 1:
+            raise ValueError("'count' must be a whole number of candidates, at least 1.")
+        return min(count, MAX_CANDIDATES)
+
+    def _complete_screenings(self, run_id: str) -> list[dict[str, Any]]:
+        """Return every finished screening of one run, oldest first, with its full result.
+
+        Oldest first so a reader merging them sees later searches win, which is the order the
+        interface applies. A running or failed screening is left out: a search that did not
+        finish is not a search that found nothing.
+        """
+        listed = self.service.store.screenings_for(run_id)
+        return [
+            self.service.store.screening(entry["id"])
+            for entry in reversed(listed)
+            if entry["status"] == "complete"
+        ]
 
     def _screenings_by_candidate(
         self, run_id: str
@@ -368,8 +446,8 @@ class AppRouter:
         "sense_order_5to3", "antisense_order_5to3", "gc_percent", "core_length_nt",
         "predicted_guide", "guide_model", "models_agree", "preferences_met",
         "preferences_evaluated", "preferences_missed", "unchecked_gates", "excluded_by",
-        "off_target_perfect", "off_target_near_perfect", "off_target_alignments",
-        "off_target_scopes",
+        "off_target_perfect", "off_target_wang80", "off_target_near_perfect",
+        "off_target_alignments", "off_target_list_capped", "off_target_scopes",
     )
     """Everything the interface knows about a candidate, in one row.
 
@@ -397,7 +475,11 @@ class AppRouter:
             candidate, rating.get("guide_model") or DEFAULT_MODEL, screenings=tuple(findings)
         ) if candidate.get("rank") is not None else None
         total = {key: sum(int(f.row.get(key) or 0) for f in findings)
-                 for key in ("perfect_hits", "near_perfect_hits", "hit_count")}
+                 for key in ("perfect_hits", "wang_homology_hits", "near_perfect_hits",
+                             "hit_count")}
+        # A capped list makes every count above it a floor, which has to travel with the row
+        # rather than stay in the workbench (ADR 0023).
+        capped = any(f.row.get("alignments_capped") for f in findings)
         return (
             candidate.get("rank"), candidate["id"], span[0], span[1],
             genomic.get("contig"), genomic.get("start"), genomic.get("end"),
@@ -412,8 +494,10 @@ class AppRouter:
             named(rating.get("unchecked_gates") or []),
             named(candidate.get("excluded_by") or []),
             total["perfect_hits"] if findings else "",
+            total["wang_homology_hits"] if findings else "",
             total["near_perfect_hits"] if findings else "",
             total["hit_count"] if findings else "",
+            ("yes" if capped else "no") if findings else "",
             "; ".join(f.scope for f in findings) or "not screened",
         )
 

@@ -192,6 +192,7 @@ def run_screening(
         notes=tuple(notes),
         on_target_hits=own,
         capped_candidates=tuple(sorted(report.capped)),
+        window=window if scope == GENOMIC_SCOPE else None,
     )
 
 

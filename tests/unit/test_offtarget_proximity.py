@@ -52,7 +52,20 @@ class TestAccessionMapping:
         assert placed.nearest_gene is None
         assert placed.distance_to_tss is None
         assert placed.inside_run_window is False
-        assert "could not be established" in describe(placed)
+        assert placed.on_chromosome is False
+        assert "not an assembled chromosome" in describe(placed)
+
+    def test_an_unplaceable_hit_reads_differently_from_one_with_nothing_nearby(self) -> None:
+        # Both carry no distance, and they are not the same statement: one is a limit of the
+        # lookup, the other is a finding about the locus. Wording them alike turns "we could
+        # not look" into "there is nothing there", which is the error this project keeps
+        # hunting down.
+        unplaceable = place_hit(hit(accession="NT_187361.1"), lookup_returning(), window=None)
+        nothing_near = place_hit(hit(accession="NC_000002.12"), lookup_returning(), window=None)
+        assert nothing_near.on_chromosome is True
+        assert nothing_near.distance_to_tss is None
+        assert describe(unplaceable) != describe(nothing_near)
+        assert "no annotated transcript nearby" in describe(nothing_near)
 
 
 class TestTheStartSiteOfATranscript:

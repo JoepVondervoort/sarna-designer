@@ -14,6 +14,7 @@ import socket
 import struct
 import subprocess
 import time
+from collections.abc import Callable
 from itertools import pairwise
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -25,6 +26,15 @@ from urllib.request import urlopen
 from sarna import settings
 from sarna.app.service import DesignService
 from sarna.app.web import AppRouter, make_server
+from sarna.genome.coordinates import GenomicInterval
+from sarna.offtarget.models import GENOMIC_SCOPE
+from sarna.offtarget.ncbi import (
+    BlastClient,
+    SubmittedSearch,
+    parameters_for,
+    parse_report,
+)
+from sarna.offtarget.proximity import BlockedTranscripts
 
 DNA = "GCTCTACTCTCAGTTCCAAACTATGACCTACTATGATACCATAC"
 
@@ -372,8 +382,252 @@ def check_cell_evidence(browser: Browser) -> None:
           f"across {totals['lines']} lines, and the panel names which")
 
 
+class StubBlast:
+    """A BLAST service that answers from a script, so the panel can be checked without NCBI.
+
+    Shaped to produce the cases the panel has to tell apart: one candidate with a full-length
+    exact match somewhere else, one that occurs in many places, one with only weak partial
+    alignments, and the rest with nothing at all. The genomic script also returns each
+    candidate's own locus, which is what the panel must remove rather than count.
+
+    The XML goes through the real parser, so the per-candidate budget and the capped flag are
+    exercised here too rather than mocked away.
+    """
+
+    def __init__(self) -> None:
+        """Start with no submission and no coordinates to place hits against."""
+        self.loci: dict[str, tuple[str, int, int]] = {}
+        self.submitted: dict[str, str] = {}
+        self.scope = ""
+
+    def submit(self, sequences: dict[str, str], scope: str) -> Any:  # noqa: ANN401
+        """Record the job exactly as the real client would send it."""
+        self.submitted = dict(sequences)
+        self.scope = scope
+        return SubmittedSearch(request_id="STUB-RID-1", estimated_seconds=0,
+                               parameters=parameters_for(scope))
+
+    def fetch(self, request_id: str, parameters: Any) -> Any:  # noqa: ANN401
+        """Return a scripted report for whatever was submitted."""
+        return parse_report(self._xml(),
+                            per_candidate=parameters.max_alignments_per_candidate)
+
+    def close(self) -> None:
+        """Nothing to close; the factory hands out one shared stub."""
+
+    def _hit(self, accession: str, title: str, identities: int,
+             start: int, frame: int = 1) -> str:
+        # Real reports carry the aligned strings, and the panel reads the mismatched positions
+        # out of them. Scattering the mismatches rather than parking them at the 3' end keeps
+        # the footprint honest: every alignment drawn identically is the failure mode here.
+        query = "ACGTACGTACGTACGTACG"
+        spread = [3, 11, 7, 16, 1, 14][: 19 - identities]
+        midline = "".join(
+            " " if index + 1 in spread else "|" for index in range(19))
+        subject = "".join(
+            "T" if index + 1 in spread else base for index, base in enumerate(query))
+        return (f"<Hit><Hit_accession>{accession}</Hit_accession><Hit_def>{title}</Hit_def>"
+                f"<Hit_hsps><Hsp><Hsp_identity>{identities}</Hsp_identity>"
+                f"<Hsp_align-len>19</Hsp_align-len><Hsp_gaps>0</Hsp_gaps>"
+                f"<Hsp_query-from>1</Hsp_query-from><Hsp_query-to>19</Hsp_query-to>"
+                f"<Hsp_hit-from>{start}</Hsp_hit-from><Hsp_hit-to>{start + 18}</Hsp_hit-to>"
+                f"<Hsp_hit-frame>{frame}</Hsp_hit-frame>"
+                f"<Hsp_qseq>{query}</Hsp_qseq><Hsp_hseq>{subject}</Hsp_hseq>"
+                f"<Hsp_midline>{midline}</Hsp_midline>"
+                f"<Hsp_evalue>{0.004 if identities > 16 else 7.0}</Hsp_evalue>"
+                f"<Hsp_bit-score>{identities * 2}</Hsp_bit-score></Hsp></Hit_hsps></Hit>")
+
+    def _xml(self) -> bytes:
+        genomic = self.scope == GENOMIC_SCOPE
+        iterations = []
+        for index, name in enumerate(self.submitted):
+            hits = []
+            if genomic and name in self.loci:
+                contig, start, _end = self.loci[name]
+                number = {"X": 23, "Y": 24}.get(
+                    contig, int(contig) if contig.isdigit() else 1)
+                hits.append(self._hit(f"NC_{int(number):06d}.12",
+                                      "Homo sapiens chromosome, own target locus",
+                                      19, start + 1))
+            # Genomic reports come back on chromosome accessions. Reusing mRNA ones would
+            # leave every hit unplaceable, and the distance plot untested.
+            def named(slot: int, symbol: str) -> tuple[str, str]:
+                return ((f"NC_0000{(slot % 22) + 1:02d}.11",
+                         f"Homo sapiens chromosome {(slot % 22) + 1}")
+                        if genomic else
+                        (f"NM_{100000 + slot}.1",
+                         f"Homo sapiens {symbol.lower()} ({symbol}), mRNA"))
+
+            if index == 0:
+                accession, title = named(6, "GAPDH")
+                hits.append(self._hit(accession, title, 19, 12_455))
+                hits += [self._hit(*named(10 + n, f"WEAK{n}"), 13, 40_000 + 100 * n)
+                         for n in range(3)]
+            elif index == 1:
+                hits += [self._hit(*named(n, f"PP{n}"),
+                                   17 if n % 2 else 16, 90_000 + 4000 * n) for n in range(7)]
+            elif index == 2:
+                hits += [self._hit(*named(14, "POX"), 14, 300_900)]
+            if not hits:
+                continue
+            iterations.append(
+                f"<Iteration><Iteration_query-def>{name}</Iteration_query-def>"
+                f"<Iteration_hits>{''.join(hits)}</Iteration_hits></Iteration>")
+        return ("<?xml version=\"1.0\"?><BlastOutput><BlastOutput_iterations>"
+                + "".join(iterations)
+                + "</BlastOutput_iterations></BlastOutput>").encode()
+
+
+def check_offtarget(browser: Browser, blast: StubBlast, screenshots: Path | None) -> None:
+    """Check the off-target panel: batches, the summary, where a hit lands, and the limits.
+
+    The table this replaces printed six counts per candidate and nothing else, so a run of 22
+    showed 21 rows of zeros and no indication of where the one real hit was. What matters here
+    is that the alignments reach the screen, that a candidate screened clean is distinguishable
+    from one never screened, and that the own-locus removal is stated rather than silent.
+    """
+    candidates = cast(list[dict[str, Any]], browser.evaluate("state.result.candidates") or [])
+    blast.loci = {
+        c["id"]: (c["genomic"]["contig"], c["genomic"]["start"], c["genomic"]["end"])
+        for c in candidates
+        if c.get("genomic")
+    }
+    pool = browser.evaluate(
+        "state.result.candidates.filter(c=>c.rank!==null).length")
+    assert isinstance(pool, int) and pool > 0
+
+    # A batch of 5, not the whole run. The default used to be a fixed 50, which is what made a
+    # genomic search time out after half an hour and come back with nothing.
+    browser.evaluate("document.querySelector('[data-batch=\"5\"]').click();"
+                     "document.getElementById('screen-transcript').click()")
+    browser.wait("document.querySelector('#offtarget-results .ot-table')!==null")
+    screened = browser.evaluate("Object.keys(state.screenings.transcript.byCandidate).length")
+    assert screened == min(5, pool), f"asked for 5, screened {screened}"
+
+    summary = str(browser.evaluate("document.querySelector('.ot-summary').innerText"))
+    assert "Wang 2015's 80%" in summary, summary
+    assert "not measured binding" in summary, summary
+    if pool >= 2:
+        assert "occurring in many places" in summary, summary
+    if screened < pool:
+        note = str(browser.evaluate("document.getElementById('offtarget-results').innerText"))
+        assert "not the same as having been searched clean" in note, (
+            "the unscreened candidates are not distinguished from the clean ones"
+        )
+
+    # Where it binds, which never reached the screen before: open the first row and read the
+    # gene, the matched bases and the footprint out of the DOM rather than out of the record.
+    browser.evaluate("document.querySelector('[data-screenrow]').click()")
+    browser.wait("document.querySelector('.ot-detail')!==null")
+    detail = browser.evaluate(r"""(()=>{
+      const row=document.querySelector('.ot-detail');
+      return {text:row.innerText,
+              footprints:row.querySelectorAll('svg.footprint').length,
+              shaded:[...row.querySelectorAll('svg.footprint rect')]
+                .filter(r=>r.getAttribute('fill')!=='#e8eeeb').length,
+              mismatched:[...row.querySelectorAll('svg.footprint rect')]
+                .filter(r=>r.getAttribute('fill')==='#c08a2e').length,
+              shapes:new Set([...row.querySelectorAll('svg.footprint')]
+                .map(s=>[...s.querySelectorAll('rect')]
+                  .map(r=>r.getAttribute('fill')).join(''))).size,
+              seed:row.innerText.toLowerCase().includes('seed region')};
+    })()""")
+    assert isinstance(detail, dict), detail
+    assert detail["footprints"] > 0, "no alignment footprint was drawn"
+    assert detail["shaded"] > 0, "a footprint with nothing shaded shows no alignment at all"
+    # A partial match has to look different from a full one. The first version drew only the
+    # aligned span, so 16 of 19 and 19 of 19 were the same picture and the footprint said
+    # nothing a reader could not already read in the identity column.
+    assert detail["mismatched"] > 0, (
+        "no footprint marks a mismatched base, so a partial match is drawn as a perfect one"
+    )
+    assert detail["shapes"] > 1, (
+        f"every footprint in this detail is identical ({detail['shapes']} distinct), so the "
+        f"drawing carries no information the identity column did not"
+    )
+    assert not detail["seed"], (
+        "a seed region is marked; Wang 2015 names none and ADR 0023 refuses to import one"
+    )
+    # Named by gene rather than by accession: an accession alone makes a reader look it up,
+    # which is exactly the work the panel exists to save.
+    assert re.search(r"\b(PP\d|GAPDH|POX)\b", str(detail["text"])), (
+        f"no hit is named by its gene symbol: {str(detail['text'])[:200]}"
+    )
+    assert "GAPDH" in str(browser.evaluate(
+        "document.querySelector('#offtarget-results .ot-table tbody').innerText")), (
+        "the strongest match column does not name the gene of the full-length exact match"
+    )
+    # The promiscuous candidate's list is collapsed rather than drawn in full, and says so.
+    collapsed = str(browser.evaluate("document.querySelector('.ot-detail').innerText"))
+    if "many places" in collapsed:
+        assert "strongest of" in collapsed, (
+            "a candidate occurring in many places drew its whole list, which is the wall of "
+            "rows this change exists to remove"
+        )
+
+    strip = browser.evaluate(
+        "document.querySelectorAll('#offtarget-results .strip i').length")
+    assert isinstance(strip, int) and strip > 0, "no identity strip was drawn"
+
+    # The next batch is a second dated record merged into the same table, not a replacement.
+    if pool > 5:
+        browser.evaluate("document.querySelector('[data-batch-mode=\"rest\"]')?.click()")
+        browser.wait("Object.keys(state.screenings.transcript.byCandidate).length>5")
+        merged = browser.evaluate("state.screenings.transcript.searches.length")
+        assert isinstance(merged, int) and merged >= 2, (
+            "the second batch replaced the first instead of merging with it"
+        )
+
+    # The genomic scope removes the candidate's own locus, or says it could not.
+    browser.evaluate("document.getElementById('screen-genomic').click()")
+    browser.wait("state.screenings.genomic!==undefined")
+    browser.evaluate("document.querySelector('[data-scope-tab=\"genomic\"]')?.click()")
+    genomic = str(browser.evaluate("document.getElementById('offtarget-results').innerText"))
+    if blast.loci:
+        assert "own target loci" in genomic, (
+            "the on-target hit was not removed, so every candidate reads as a perfect match"
+        )
+        perfect = browser.evaluate(
+            "Object.values(state.screenings.genomic.byCandidate)"
+            ".every(e=>e.row.perfect_hits===0||e.row.on_target_hits===0)")
+        assert perfect is True, "an own-locus hit is still being counted as a perfect match"
+    else:
+        assert "no genomic coordinates" in genomic, (
+            "a run without coordinates must say the removal could not be made"
+        )
+    # Three other places state what has been screened, and all three used to hardcode the
+    # absence. A page that has just run a screening and still says none was performed is
+    # worse than one that says nothing: it is the duplex summary a reader acts on.
+    browser.evaluate("document.querySelector('[data-scope-tab=\"transcript\"]')?.click()")
+    for element, where in (("top-result", "the duplex summary"),
+                           ("candidate-detail", "the candidate panel")):
+        text = str(browser.evaluate(
+            f"document.getElementById({json.dumps(element)}).innerText"))
+        assert "No off-target screening has been performed" not in text, (
+            f"{where} still reports that no screening was performed after one ran"
+        )
+    if screenshots:
+        browser.evaluate("document.querySelector('[data-scope-tab=\"genomic\"]')?.click();"
+                         "document.getElementById('offtarget-card')"
+                         ".scrollIntoView({block:'start'})")
+        time.sleep(0.4)
+        browser.screenshot(screenshots / "offtarget-genomic.png")
+        browser.evaluate("document.querySelector('.ot-plot')"
+                         "?.scrollIntoView({block:'center'})")
+        time.sleep(0.4)
+        browser.screenshot(screenshots / "offtarget-tss-plot.png")
+        browser.evaluate("document.querySelector('[data-scope-tab=\"transcript\"]')?.click();"
+                         "document.getElementById('offtarget-card')"
+                         ".scrollIntoView({block:'start'})")
+        time.sleep(0.4)
+        browser.screenshot(screenshots / "offtarget-panel.png")
+    print(f"    off-target: {screened} of {pool} screened in the first batch, alignments named "
+          f"and placed, own-locus handling stated")
+
+
 def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
-             screenshots: Path | None, online: bool = False) -> None:
+             screenshots: Path | None, online: bool = False,
+             blast: StubBlast | None = None) -> None:
     """Check draft preservation, rerun, explanations, persistence and an offline archive."""
     browser.call("Runtime.enable")
     browser.call("Emulation.setDeviceMetricsOverride", width=1440, height=1100,
@@ -449,6 +703,8 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     assert isinstance(drawn, int) and drawn > 0
     check_rejection_legend(browser)
     check_identical_duplexes(browser)
+    if blast is not None:
+        check_offtarget(browser, blast, screenshots)
     # The ten highest-ranked targets have to be findable among the passing ones. Before this
     # they were drawn in the same colour at the same height as rank 900, so the map could not
     # answer which marks a reader would actually order. Checked on all three channels the
@@ -809,7 +1065,13 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     assert "Anneal 1:1" in sheet
     assert sheet.count("[dT][dT]") >= 2, "both strands belong on the sheet"
     assert "Gates passed" in sheet and "Preferences met" in sheet
-    assert "No off-target screening has been performed" in sheet
+    # The sheet goes to the bench, so it has to carry the screening that was run rather than
+    # the absence it used to hardcode, and it has to carry the date and database with it.
+    assert "No off-target screening has been performed" not in sheet, (
+        "the bench sheet still reports that no screening was performed after one ran"
+    )
+    assert "refseq" in sheet, f"the bench sheet omits the database screened against: {sheet[:300]}"
+    assert "Wang 2015's 80%" in sheet, "the bench sheet omits the sourced homology count"
     assert "does not beat chance" in sheet, "the sheet must carry the measurement too"
     stated = re.search(r"meeting (\d+) of (\d+) evaluated preferences", sheet)
     listed = re.search(r"Preferences met \((\d+)\)", sheet)
@@ -825,10 +1087,19 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     assert "sense_order_5to3" in rows[0], rows[0]
     assert len(rows) > 1, "the live order export returned no duplexes"
     assert all("[dT][dT]" in row for row in rows[1:]), rows[1]
-    # No screening has been run against this live route, so the honest answer is still the
-    # absence. The join is covered where a screening can be stubbed; here what matters is that
-    # closing the gap did not turn "nobody looked" into "nothing found".
-    assert "off-target-screening [not-performed]" in rows[1]
+    # A screening has now been run against this route, so the order rows must carry its
+    # findings with the database and the date rather than still reading "not-performed". The
+    # row is what gets pasted into a vendor form, so the caveats have to travel in it.
+    screening_cell = rows[1]
+    assert "off-target-screening [not-performed]" not in screening_cell, (
+        "a screening was run, yet the order row still reports that none was performed"
+    )
+    assert "refseq" in screening_cell, (
+        f"the order row does not name the database it was screened against: {screening_cell}"
+    )
+    assert "Wang" in screening_cell or "80%" in screening_cell, (
+        f"the order row omits the sourced homology count: {screening_cell}"
+    )
     # The Excel export, fetched the way the button does and checked as a real package. An
     # .xlsx exists because Excel reads a CSV's separator from the machine's locale, so a
     # colleague on a Dutch Windows opens a comma-separated file with everything in column A.
@@ -959,7 +1230,43 @@ def main() -> None:
         directory = Path(temporary)
         if args.online:
             os.environ[settings.CACHE_DIR_VARIABLE] = str(directory / "empty-cache")
-        router = AppRouter(DesignService(directory / "runs"))
+        blast = StubBlast()
+        # Screening is checked against a scripted service, never NCBI: a verification run
+        # must not queue a public job, and the panel's job is to render what it is given.
+        service = DesignService(
+            directory / "runs",
+            blast_factory=cast("Callable[[], BlastClient]", lambda: blast),
+        )
+        service.poll_sleep = lambda _seconds: None
+        # Placement is the one part of a genomic screening that would otherwise reach Ensembl.
+        # Replaced with two annotated transcripts at known coordinates so the distance plot is
+        # drawn from real arithmetic rather than skipped for want of a network.
+        def nearby(interval: GenomicInterval) -> list[dict[str, Any]]:
+            """Annotated transcripts on a regular grid across whatever is asked for.
+
+            A grid rather than two fixed transcripts because the service snaps lookups to
+            megabase blocks and filters the answer back to the hit's own interval: anything
+            pinned to the block's start is filtered out again, and every hit comes back
+            unplaced. A grid puts a start site within reach of any position, which is what the
+            distance plot needs to be exercised at all.
+            """
+            step, found = 25_000, []
+            first = (max(0, interval.start) // step) * step
+            for index, start in enumerate(range(first, interval.end + step, step)):
+                if start < 1:
+                    continue
+                found.append({
+                    "id": f"ENST{index:011d}", "external_name": f"NEARBY{index % 7}",
+                    "start": start, "end": start + 8_000,
+                    "strand": -1 if index % 2 else 1,
+                })
+            return found
+
+        # Wrapped the way the service wraps the real one, so the block cache is exercised too.
+        service._transcript_lookup = (  # type: ignore[method-assign]
+            lambda: BlockedTranscripts(nearby)
+        )
+        router = AppRouter(service)
         server = make_server(router, 0)
         thread = Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -981,7 +1288,7 @@ def main() -> None:
                 pages = json.load(response)
             browser = Browser(pages[0]["webSocketDebuggerUrl"])
             exercise(browser, f"http://127.0.0.1:{server.server_port}/", directory,
-                     args.gene, args.screenshots, args.online)
+                     args.gene, args.screenshots, args.online, blast)
         finally:
             if browser:
                 browser.socket.close()

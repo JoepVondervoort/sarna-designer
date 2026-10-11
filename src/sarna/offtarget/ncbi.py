@@ -357,6 +357,10 @@ def parse_report(
                     break
                 kept[candidate] = kept.get(candidate, 0) + 1
                 frame = _int(hsp, "Hsp_hit-frame", 1)
+                query_from = _int(hsp, "Hsp_query-from", 0)
+                aligned = _text(hsp, "Hsp_qseq")
+                midline = _text(hsp, "Hsp_midline")
+                detailed = bool(aligned and midline)
                 hits.append(
                     OffTargetHit(
                         candidate_id=candidate,
@@ -365,16 +369,46 @@ def parse_report(
                         identities=_int(hsp, "Hsp_identity", 0),
                         alignment_length=_int(hsp, "Hsp_align-len", 0),
                         gaps=_int(hsp, "Hsp_gaps", 0),
-                        query_start=_int(hsp, "Hsp_query-from", 0),
+                        query_start=query_from,
                         query_end=_int(hsp, "Hsp_query-to", 0),
                         subject_start=_int(hsp, "Hsp_hit-from", 0),
                         subject_end=_int(hsp, "Hsp_hit-to", 0),
                         subject_strand="minus" if frame < 0 else "plus",
                         evalue=_float(hsp, "Hsp_evalue", float("inf")),
                         bit_score=_float(hsp, "Hsp_bit-score", 0.0),
+                        mismatch_positions=(
+                            mismatch_positions(aligned or "", midline or "", query_from)
+                            if detailed else ()
+                        ),
+                        has_alignment_detail=detailed,
                     )
                 )
     return ParsedReport(hits=tuple(hits), capped=frozenset(capped))
+
+
+def mismatch_positions(query: str, midline: str, query_start: int) -> tuple[int, ...]:
+    """Return the 1-based query positions that did not match, from BLAST's alignment strings.
+
+    ``Hsp_midline`` carries a bar under every matching column and a space under every other
+    one, and ``Hsp_qseq`` carries the query with gap characters inserted. Walking them together
+    converts column positions into query positions, which is what a reader needs: an identity
+    count says seventeen of nineteen matched and never says *which* two did not.
+
+    A column where the query itself is gapped belongs to no query position and is attributed to
+    the position before it, so an insertion in the subject is still marked somewhere rather
+    than dropped.
+    """
+    found: list[int] = []
+    position = query_start - 1
+    for index, base in enumerate(query):
+        if base != "-":
+            position += 1
+        matched = index < len(midline) and midline[index] == "|"
+        if not matched and position >= query_start and (
+            not found or found[-1] != position
+        ):
+            found.append(position)
+    return tuple(found)
 
 
 def _text(element: ElementTree.Element, tag: str) -> str | None:

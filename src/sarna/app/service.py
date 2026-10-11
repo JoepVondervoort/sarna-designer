@@ -2,7 +2,7 @@
 
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -37,7 +37,11 @@ from sarna.genome.tss import TssPosition
 from sarna.offtarget.models import GENOMIC_SCOPE
 from sarna.offtarget.ncbi import BlastClient
 from sarna.offtarget.proximity import BlockedTranscripts
-from sarna.offtarget.screening import run_screening, specificity_table
+from sarna.offtarget.screening import (
+    DEFAULT_CANDIDATES,
+    run_screening,
+    specificity_table,
+)
 from sarna.regulatory.chromatin import open_af22_reader
 from sarna.regulatory.evidence import CELL_TYPES
 from sarna.regulatory.features import fetch_regulatory_features
@@ -133,6 +137,8 @@ class DesignService:
         screening_id: str,
         run_id: str,
         scope: str,
+        only: Sequence[str] | None = None,
+        limit: int = DEFAULT_CANDIDATES,
         blast_client: BlastClient | None = None,
         sleep: Callable[[float], None] | None = None,
     ) -> None:
@@ -145,6 +151,9 @@ class DesignService:
             screening_id: The record to write progress and results into.
             run_id: The finished design run being screened.
             scope: ``transcript`` or ``genomic``.
+            only: Screen exactly these candidates. Every batch the interface offers resolves to
+                one of these lists (ADR 0023).
+            limit: Most candidates in this job when ``only`` is not given.
             blast_client: An open client to use. Otherwise one comes from ``blast_factory``,
                 which the route path relies on: a caller that does not pass a client must still
                 be able to avoid reaching NCBI.
@@ -167,6 +176,8 @@ class DesignService:
                 transcripts=self._transcript_lookup() if scope == GENOMIC_SCOPE else None,
                 window=self._run_window(snapshot),
                 sleep=sleep if sleep is not None else self.poll_sleep,
+                only=only,
+                limit=limit,
             )
             self.store.finish_screening(screening_id, {
                 **record.to_dict(),

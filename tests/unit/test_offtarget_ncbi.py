@@ -23,6 +23,7 @@ from sarna.offtarget.ncbi import (
     BlastStillRunning,
     as_fasta,
     candidate_sequences,
+    mismatch_positions,
     parameters_for,
     parse_hits,
     parse_report,
@@ -368,3 +369,60 @@ class TestOneQueryCannotStarveTheRest:
         assert only.identities == 15
         assert only.alignment_length == 0
         assert only.evalue == float("inf")
+
+
+class TestWhichBasesDidNotMatch:
+    """"17 of 19" never says which two, and which two is the question a reader is asking.
+
+    BLAST already sends the aligned strings; these read the mismatched query positions out of
+    them so the panel can draw where a partial match falls rather than only how large it is.
+    Every expectation below is counted off the strings by hand.
+    """
+
+    def test_a_perfect_alignment_has_no_mismatches(self) -> None:
+        assert mismatch_positions("ACGTACG", "|||||||", 1) == ()
+
+    def test_the_mismatched_query_positions_are_returned(self) -> None:
+        #  position: 1234567
+        #     query: ACGTACG
+        #   midline: ||| |||   -> column 4 is query position 4
+        assert mismatch_positions("ACGTACG", "||| |||", 1) == (4,)
+
+    def test_two_mismatches_in_a_nineteen_base_core(self) -> None:
+        query = "ACGTACGTACGTACGTACG"
+        midline = "|||||||||||||||||  "
+        # Columns 18 and 19 carry no bar, and with no gaps those are query positions 18 and 19.
+        assert mismatch_positions(query, midline, 1) == (18, 19)
+
+    def test_positions_are_offset_by_where_the_alignment_starts(self) -> None:
+        # An alignment starting at query base 3 must not report its first column as position 1.
+        assert mismatch_positions("ACGTA", "|| ||", 3) == (5,)
+
+    def test_a_gap_in_the_query_is_attributed_rather_than_dropped(self) -> None:
+        #     query: AC-GT   columns:      1 2 3 4 5
+        #   midline: || ||   column 3 is a gap in the query, so it belongs to no position of
+        #                    its own and is attributed to position 2, the base before it.
+        assert mismatch_positions("AC-GT", "|| ||", 1) == (2,)
+
+    def test_a_report_without_alignment_strings_says_so_rather_than_claiming_a_match(
+        self,
+    ) -> None:
+        # An empty mismatch list drawn as "every base matched" would turn a missing field into
+        # a finding, which is the error this whole area keeps making.
+        bare = parse_hits(REPORT)[0]
+        assert bare.has_alignment_detail is False
+        assert bare.mismatch_positions == ()
+
+    def test_a_real_report_carries_the_positions(self) -> None:
+        detailed = REPORT.replace(
+            b"<Hsp_identity>19</Hsp_identity>",
+            b"<Hsp_qseq>ACGTACGTACGTACGTACG</Hsp_qseq>"
+            b"<Hsp_hseq>ACGTACGTACGTACGTAAA</Hsp_hseq>"
+            b"<Hsp_midline>|||||||||||||||||  </Hsp_midline>"
+            b"<Hsp_identity>17</Hsp_identity>",
+            1,
+        )
+        hit = parse_hits(detailed)[0]
+        assert hit.has_alignment_detail is True
+        assert hit.mismatch_positions == (18, 19)
+        assert hit.to_dict()["mismatch_positions"] == [18, 19]

@@ -287,3 +287,43 @@ body.frozen .setup,body.frozen .intro-note,body.frozen .saved-label,body.frozen 
 .expression-chart-source{border-top:1px solid var(--line);margin-top:14px;padding-top:12px;font-size:10px;color:var(--muted)}.expression-chart-source a{font-weight:600}.expression-chart-source p{margin-top:5px;overflow-wrap:anywhere}
 @media(max-width:480px){#organ-popover{padding:14px}.expression-bar-row{gap:8px;grid-template-columns:minmax(110px,1.2fr) minmax(45px,1fr) 48px}}
 @media print{#organ-popover{display:none!important}}
+
+/* Off-target panel (ADR 0023). The old table was 22 rows of six numbers, almost all zeros,
+   and the alignments themselves never reached the screen at all. What a researcher reads
+   first is now the summary, then one row per candidate naming where its strongest match
+   landed, with the alignments a click away. */
+.offtarget-batch{padding:0 20px 14px}
+.batch-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.batch-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.offtarget-batch .hint{margin-top:7px;font-size:11px}
+.offtarget-batch button.secondary{font-size:11px;padding:5px 10px}
+.ot-summary{padding:2px 20px 10px;line-height:1.65;font-size:12px}
+.ot-summary p{margin-bottom:6px}
+.ot-summary .hint{font-size:11px;margin-top:8px}
+.offtarget-card .warn{color:#8a6a1f;background:#fdf8ee;border:1px solid #efe2c8;border-radius:8px;margin:0 20px 8px;padding:9px 12px;font-size:11px;line-height:1.6}
+.scope-tabs{margin:0 20px 12px}
+.ot-table td{vertical-align:top}
+.ot-table tbody tr.open{background:#edf7f2}
+/* One hue, darker is closer. Green to red would read as good and bad; an alignment is a
+   measurement the researcher judges (ADR 0022). */
+.strip{display:flex;width:120px;height:9px;border-radius:3px;overflow:hidden;background:#f1f5f3}
+.strip i{display:block;height:100%;min-width:2px}
+.strip.empty{background:#f1f5f3}
+.ot-detail>td{background:#f8faf9;padding:14px 20px;white-space:normal}
+.ot-detail table{background:white;border:1px solid var(--line);border-radius:8px}
+.ot-detail th{font-size:9px}
+.ot-detail td{font-size:11px;padding:9px 10px}
+.ot-title{white-space:normal;max-width:330px;line-height:1.5;color:var(--muted)}
+.footprint{display:block;border-radius:2px}
+.ot-quiet td{background:#fbfcfb;white-space:normal;padding:12px 20px}
+.ot-quiet summary{font-size:11px;color:var(--muted);cursor:pointer}
+.ot-quiet p{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6;overflow-wrap:anywhere}
+.ot-plot{padding:6px 20px 18px}
+.ot-plot h4{font-size:12px;margin-bottom:8px}
+.ot-plot svg{display:block;width:100%;height:auto;font:11px system-ui,sans-serif}
+.ot-plot svg [data-tip]{cursor:help}
+.ot-plot .hint{margin-top:8px;font-size:11px;line-height:1.6}
+button.link{border:0;background:none;padding:0;color:var(--teal);font-size:11px;text-decoration:underline}
+@media(max-width:760px){.strip{width:74px}.ot-title{max-width:160px}}
+.fp-key{display:inline-flex;gap:2px;margin-left:5px;vertical-align:middle}
+.fp-key i{display:block;width:6px;height:6px;border-radius:1px}

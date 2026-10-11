@@ -16,6 +16,7 @@ from sarna.app.service import DesignService
 from sarna.app.store import RunStore
 from sarna.app.web import AppRouter
 from sarna.genome.ensembl import EnsemblCacheMissError, EnsemblClient
+from sarna.offtarget.screening import DEFAULT_CANDIDATES, MAX_CANDIDATES
 from tests.unit.test_design_pipeline import PROMOTER_BASES
 from tests.unit.test_ensembl import (
     AUTO_SEQUENCE,
@@ -663,3 +664,112 @@ def test_identical_duplexes_are_named_in_the_order_csv(tmp_path: Path):
         assert "identical-duplex [ok]" in single["sanity_report"]
     finally:
         router.close()
+
+
+class TestChoosingHowManyCandidatesToScreen:
+    """ADR 0023: the fixed top 50 becomes a choice, validated here at the boundary.
+
+    None of these reaches NCBI. The job is queued on a pool whose work is never run, which is
+    enough to see what the route accepted and what it refused.
+    """
+
+    @staticmethod
+    def _router(tmp_path: Path) -> tuple[AppRouter, str, list[str]]:
+        service = service_for(tmp_path)
+        saved = run_request(service)
+        passing = [c["id"] for c in saved["candidates"] if c["rank"] is not None]
+        return AppRouter(service), saved["app"]["run_id"], passing
+
+    def _start(self, router: AppRouter, run_id: str, body: dict[str, Any]) -> tuple[int, Any]:
+        status, _, data = router.dispatch(
+            "POST", f"/api/runs/{run_id}/screenings", json.dumps(body).encode()
+        )
+        return status, json.loads(data)
+
+    def test_the_default_is_fifteen_rather_than_everything(self, tmp_path: Path):
+        router, run_id, passing = self._router(tmp_path)
+        try:
+            status, answer = self._start(router, run_id, {"scope": "transcript"})
+            assert status == 202
+            assert answer["candidates"] == min(DEFAULT_CANDIDATES, len(passing))
+        finally:
+            router.close()
+
+    def test_a_count_is_honoured_and_capped_at_one_jobs_worth(self, tmp_path: Path):
+        router, run_id, passing = self._router(tmp_path)
+        try:
+            assert self._start(router, run_id, {"count": 1})[1]["candidates"] == 1
+            # A courtesy to NCBI that the interface cannot talk its way out of.
+            asked = self._start(router, run_id, {"count": 10_000})[1]["candidates"]
+            assert asked <= min(MAX_CANDIDATES, len(passing))
+        finally:
+            router.close()
+
+    def test_an_explicit_selection_is_screened_as_given(self, tmp_path: Path):
+        router, run_id, passing = self._router(tmp_path)
+        try:
+            chosen = passing[:2]
+            status, answer = self._start(router, run_id, {"candidates": chosen})
+            assert status == 202
+            assert answer["candidates"] == len(chosen)
+        finally:
+            router.close()
+
+    def test_a_candidate_that_did_not_pass_the_gates_is_named_not_dropped(
+        self, tmp_path: Path
+    ):
+        # Quietly screening fewer than were asked for is indistinguishable from screening them
+        # and finding nothing, which is the confusion this whole change exists to remove.
+        service = service_for(tmp_path)
+        saved = run_request(service)
+        excluded = next(c["id"] for c in saved["candidates"] if c["rank"] is None)
+        router = AppRouter(service)
+        try:
+            status, answer = self._start(
+                router, saved["app"]["run_id"], {"candidates": [excluded]}
+            )
+            assert status == 422
+            assert excluded in answer["detail"]
+        finally:
+            router.close()
+
+    def test_an_unknown_candidate_is_refused(self, tmp_path: Path):
+        router, run_id, _ = self._router(tmp_path)
+        try:
+            status, answer = self._start(router, run_id, {"candidates": ["saRNA-nope"]})
+            assert status == 422
+            assert "saRNA-nope" in answer["detail"]
+        finally:
+            router.close()
+
+    def test_more_than_one_job_may_hold_is_refused_with_the_batch_advice(
+        self, tmp_path: Path
+    ):
+        router, run_id, _ = self._router(tmp_path)
+        try:
+            status, answer = self._start(
+                router, run_id, {"candidates": [f"saRNA-{i:04d}" for i in range(60)]}
+            )
+            assert status == 422
+            assert "batches" in answer["detail"]
+        finally:
+            router.close()
+
+    @pytest.mark.parametrize("body", [
+        {"candidates": []},
+        {"candidates": "saRNA-001"},
+        {"candidates": [1, 2]},
+        {"count": 0},
+        {"count": -1},
+        {"count": "fifteen"},
+        {"count": True},
+    ])
+    def test_a_malformed_selection_never_queues_a_job(
+        self, tmp_path: Path, body: dict[str, Any]
+    ):
+        router, run_id, _ = self._router(tmp_path)
+        try:
+            assert self._start(router, run_id, body)[0] == 422
+            assert router.service.store.screenings_for(run_id) == []
+        finally:
+            router.close()

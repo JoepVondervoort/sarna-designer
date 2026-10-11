@@ -842,6 +842,16 @@ function showResult(result) {
   $("map-orientation").textContent = result.promoter.contig ? `chr${result.promoter.contig}:${fmt(result.promoter.start)}–${fmt(result.promoter.end)} (0-based, half-open) · DNA strand ${result.promoter.strand} · plotted 5′ → 3′ in transcript orientation` : "Plotted 5′ → 3′ as supplied · no genomic location assigned";
   $("candidate-detail").innerHTML = '<p class="hint">Select a candidate in the table or promoter map to inspect its sequences, strand prediction, and every rule verdict.</p>';
   renderMap(); renderTable();
+  // A screening belongs to the run, not to the browser tab that started it, so a reopened run
+  // rebuilds its merged panel from the stored records rather than reading as never screened.
+  // Guarded because the panel is a second script: in a frozen archive app.js runs to
+  // completion before it is parsed, and a hard call here left the whole page unrendered.
+  state.screenings = {}; state.screeningJobs = {}; state.screeningOpen = null;
+  if (typeof renderOffTarget === "function") {
+    renderOffTarget("transcript");
+    renderScreeningStatus();
+    if (!frozen) loadSavedScreenings(result.app.run_id);
+  }
   if (first) selectCandidate(first.id);
 }
 function renderDiff(previous,current) {
@@ -893,6 +903,30 @@ function renderTable() {
     + `sheets. Order CSV gives the 21-mers to synthesise; core CSV gives the 19 nt cores alone. `
     + `${screened.length ? `Off-target screening (${screened.join(", ")}) travels with them.`
                          : "No off-target screening has been performed."}`;
+  // The ticked selection is one of the batch choices, so the button's count follows the table.
+  if (typeof renderBatchControls === "function") renderBatchControls();
+}
+/** What this run can honestly say about off-target screening, for whichever candidate.
+ *
+ * Three outcomes, as everywhere else: none run, run and quiet, run and found something. The
+ * three places that said this each hardcoded the first one, so a screened run went on
+ * reporting that nothing had been screened.
+ */
+function screeningSentence(candidateId = null) {
+  const held = Object.values(state.screenings || {});
+  if (!held.length) return "No off-target screening has been performed.";
+  const scopes = held.map(h => h.scope === "genomic" ? "promoters" : "transcripts").join(" and ");
+  if (!candidateId) return `Off-target screening has been run against ${scopes}; see the panel below.`;
+  const rows = held.map(h => h.byCandidate[candidateId]).filter(Boolean);
+  if (!rows.length) {
+    return `This candidate was not included in the ${scopes} screening that was run, which is `
+      + `not the same as having been screened and found clean.`;
+  }
+  const strong = rows.reduce((n, r) => n + (r.row.wang_homology_hits || 0), 0);
+  const exact = rows.reduce((n, r) => n + (r.row.perfect_hits || 0), 0);
+  return `Screened against ${scopes}: ${exact} full-length exact match`
+    + `${exact === 1 ? "" : "es"} elsewhere and ${strong} alignment`
+    + `${strong === 1 ? "" : "s"} at Wang 2015's 80%. Similarity is not measured binding.`;
 }
 async function selectCandidate(id) {
   const run = state.result, candidate = run.candidates.find(c=>c.id===id);
@@ -908,7 +942,7 @@ async function selectCandidate(id) {
     Object.assign(candidate,full);
     const primary = full.guide_prediction.assessments.find(a=>a.table===full.rating.guide_model);
     const sequenceBox = (name,sequence) => `<div class="sequence-box"><div><span>${name} · 5′ → 3′</span><button type="button" data-copy="${escapeHTML(sequence)}">Copy</button></div><code>${escapeHTML(sequence)}</code></div>`;
-    $("candidate-detail").innerHTML = `<div class="detail-heading"><div><h3>${id} <span class="muted">${full.rank?`Rank ${full.rank}`:"Excluded by gates"}</span></h3><p class="hint">${escapeHTML(positionText(full))} ${full.tss_span?"relative to reference TSS":"in supplied sequence"} · ${full.target_site_dna.length} nt core · ${full.gc_percent}% GC${full.genomic?` · genomic ${escapeHTML(full.genomic.strand)} strand`:""}</p></div><span class="tag">${ratingText(full)} PREFERENCES</span></div>${duplexPanel(run,full)}<div class="detail-body"><div>${sequenceBox("Promoter target DNA",full.target_site_dna)}${sequenceBox("Sense RNA core",full.sense_strand_rna)}${sequenceBox("Antisense RNA core",full.antisense_strand_rna)}<p class="hint">The cores above are the 19 nt RNA the rules are evaluated against, without overhangs. The duplex panel at the top is what you order. No off-target screening has been performed.</p>${twinNote(full)}</div><div><div class="guide-summary"><strong>Predicted RNA guide: ${escapeHTML(full.rating.guide || "unknown")}</strong><p>${escapeHTML(tableNames[full.rating.guide_model] || full.rating.guide_model)} · ${escapeHTML(full.guide_prediction.summary)}</p><p class="hint">This predicts duplex loading, not the identity of a promoter-associated target RNA, and not activation.</p></div><table class="model-table"><thead><tr><th>Parameter model</th><th>Guide</th><th>End difference</th></tr></thead><tbody>${full.guide_prediction.assessments.map(a=>`<tr data-tip="${escapeHTML(a.explanation)}" tabindex="0"><td>${escapeHTML(tableNames[a.table] || a.table)}</td><td>${escapeHTML(a.predicted_guide)}</td><td>${a.difference.toFixed(2)} ${escapeHTML(a.unit)}</td></tr>`).join("")}</tbody></table><details class="verdict"><summary>How the selected model reaches this prediction</summary><p>${escapeHTML(primary?.explanation || "The selected model was not assessed.")}</p></details></div></div>${full.excluded_by.length?`<p class="hint">${escapeHTML(full.rejection_summary)}</p>`:""}<div class="rule-verdicts"><h3>Every rule, explained</h3>${full.rules.map(r=>ruleVerdict(r,run.configuration)).join("")}</div>`;
+    $("candidate-detail").innerHTML = `<div class="detail-heading"><div><h3>${id} <span class="muted">${full.rank?`Rank ${full.rank}`:"Excluded by gates"}</span></h3><p class="hint">${escapeHTML(positionText(full))} ${full.tss_span?"relative to reference TSS":"in supplied sequence"} · ${full.target_site_dna.length} nt core · ${full.gc_percent}% GC${full.genomic?` · genomic ${escapeHTML(full.genomic.strand)} strand`:""}</p></div><span class="tag">${ratingText(full)} PREFERENCES</span></div>${duplexPanel(run,full)}<div class="detail-body"><div>${sequenceBox("Promoter target DNA",full.target_site_dna)}${sequenceBox("Sense RNA core",full.sense_strand_rna)}${sequenceBox("Antisense RNA core",full.antisense_strand_rna)}<p class="hint">The cores above are the 19 nt RNA the rules are evaluated against, without overhangs. The duplex panel at the top is what you order. ${escapeHTML(screeningSentence(id))}</p>${twinNote(full)}</div><div><div class="guide-summary"><strong>Predicted RNA guide: ${escapeHTML(full.rating.guide || "unknown")}</strong><p>${escapeHTML(tableNames[full.rating.guide_model] || full.rating.guide_model)} · ${escapeHTML(full.guide_prediction.summary)}</p><p class="hint">This predicts duplex loading, not the identity of a promoter-associated target RNA, and not activation.</p></div><table class="model-table"><thead><tr><th>Parameter model</th><th>Guide</th><th>End difference</th></tr></thead><tbody>${full.guide_prediction.assessments.map(a=>`<tr data-tip="${escapeHTML(a.explanation)}" tabindex="0"><td>${escapeHTML(tableNames[a.table] || a.table)}</td><td>${escapeHTML(a.predicted_guide)}</td><td>${a.difference.toFixed(2)} ${escapeHTML(a.unit)}</td></tr>`).join("")}</tbody></table><details class="verdict"><summary>How the selected model reaches this prediction</summary><p>${escapeHTML(primary?.explanation || "The selected model was not assessed.")}</p></details></div></div>${full.excluded_by.length?`<p class="hint">${escapeHTML(full.rejection_summary)}</p>`:""}<div class="rule-verdicts"><h3>Every rule, explained</h3>${full.rules.map(r=>ruleVerdict(r,run.configuration)).join("")}</div>`;
   } catch (e) {
     if (state.result!==run || state.selected!==id) return;
     $("candidate-detail").innerHTML = '<p class="hint">Candidate details could not be loaded. Select the candidate to try again.</p>';
@@ -1740,7 +1774,7 @@ function renderTopResult(result) {
           : roles.sense === "guide"
           ? "The sense strand is predicted to be loaded, against the design intent. See the candidate below."
           : "Neither strand is favoured for loading by the selected model."} `
-      + `No off-target screening has been performed. `
+      + `${escapeHTML(screeningSentence())} `
       + `<button type="button" id="inspect-top-duplex" class="text-button">See how they pair ›</button></p></div>`
     : `<p class="hint">Order-ready sequences are not in this record.</p>`;
   box.hidden = false;
@@ -1785,12 +1819,16 @@ function duplexSheetHTML(result, candidate) {
   // has. Saying "none performed" after one has run is the error the order CSV just stopped
   // making, and it would be worse here: this is the page that goes to the bench.
   const screened = Object.entries(state.screenings || {})
-    .map(([scope, r]) => {
-      const mine = (r.specificity || []).find(x => x.candidate === candidate.id);
+    .map(([scope, held]) => {
+      // Each candidate carries the date of the search that covered it, because batches mean
+      // one scope can hold several searches made on different days.
+      const mine = held.byCandidate?.[candidate.id];
       if (!mine) return null;
-      return `${scope} (${r.parameters?.database || "?"}, `
-        + `${String(r.searched_at || "").slice(0, 10)}): ${mine.perfect_hits} perfect, `
-        + `${mine.near_perfect_hits} near-perfect of ${mine.hit_count} alignments`;
+      return `${scope} (${mine.search?.parameters?.database || "?"}, `
+        + `${String(mine.search?.searched_at || "").slice(0, 10)}): `
+        + `${mine.row.perfect_hits} full-length exact, `
+        + `${mine.row.wang_homology_hits} at Wang 2015's 80%, `
+        + `of ${mine.row.hit_count} alignments`;
     }).filter(Boolean);
   return `<h1>saRNA duplex ${escapeHTML(candidate.id)}</h1>
     <table class="sheet-table">
@@ -1846,123 +1884,6 @@ async function printDuplexSheet() {
 }
 
 
-const SCOPE_BUTTON = {transcript:"screen-transcript", genomic:"screen-genomic"};
-
-function renderScreeningStatus() {
-  // The card's tag summarises both lanes; each lane carries its own detail. One shared status
-  // line could only ever describe one of two searches, which is why both buttons were disabled
-  // together and the two scopes could not run at once.
-  const jobs = state.screeningJobs || {};
-  const states = Object.values(jobs).map(j => j.status);
-  const done = Object.keys(state.screenings || {}).length;
-  $("offtarget-status").textContent = states.includes("running") ? "RUNNING"
-    : states.includes("error") ? (done ? "PARTIAL" : "FAILED")
-    : done ? "COMPLETE" : "NOT RUN";
-  $("offtarget-progress").textContent = states.includes("running")
-    ? "Searches run at NCBI and report here when they finish. You can keep working meanwhile."
-    : "";
-  for (const scope of Object.keys(SCOPE_BUTTON)) {
-    const lane = $(`screen-state-${scope}`);
-    if (!lane) continue;
-    const job = jobs[scope];
-    lane.textContent = job ? (job.stage || job.status) : "";
-    lane.className = "screen-state " + (job ? job.status : "") + (job?.status === "running" ? " is-loading" : "");
-  }
-}
-
-async function startScreening(scope) {
-  // Opt-in, and the run is already readable: this adds evidence, it never gates the designs.
-  const run = state.result;
-  if (!run || frozen) { error("Screening needs a live run."); return; }
-  state.screeningJobs = state.screeningJobs || {};
-  if (state.screeningJobs[scope]?.status === "running") return;
-  state.screeningJobs[scope] = {status:"running", stage:"Starting…"};
-  // Only this scope's button is disabled. The two searches are independent jobs at NCBI and
-  // the server now runs them on a pool of their own, so making the researcher wait for one
-  // before starting the other simply doubled the wall-clock for the answer they asked for.
-  $(SCOPE_BUTTON[scope]).disabled = true;
-  renderScreeningStatus();
-  try {
-    const started = await api(`/api/runs/${run.app.run_id}/screenings`,
-      {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({scope})});
-    if (!started.id) throw new Error("The server did not return a screening id.");
-    pollScreening(started.id, run.app.run_id, scope);
-  } catch (e) {
-    error(e.message);
-    state.screeningJobs[scope] = {status:"error", stage:e.message};
-    $(SCOPE_BUTTON[scope]).disabled = false;
-    renderScreeningStatus();
-  }
-}
-
-async function pollScreening(screeningId, runId, scope) {
-  // The server waits NCBI's requested interval; this is only the interface catching up.
-  try {
-    const record = await api(`/api/screenings/${screeningId}`);
-    if (state.result?.app.run_id !== runId) return;
-    state.screeningJobs = state.screeningJobs || {};
-    if (record.status === "running") {
-      state.screeningJobs[scope] = {status:"running", stage:record.stage || ""};
-      renderScreeningStatus();
-      setTimeout(() => pollScreening(screeningId, runId, scope), 2000);
-      return;
-    }
-    $(SCOPE_BUTTON[scope]).disabled = false;
-    state.screeningJobs[scope] = record.status === "error"
-      ? {status:"error", stage:record.error || "The screening failed."}
-      : {status:"complete", stage:"Finished"};
-    if (record.status !== "error") renderScreening(record);
-    renderScreeningStatus();
-  } catch (e) { error(e.message); }
-}
-
-function renderScreening(record) {
-  const result = record.result, rows = result.specificity || [];
-  state.screenings = state.screenings || {};
-  state.screenings[record.scope] = result;
-  state.screeningScope = record.scope;
-  const scopeName = record.scope === "genomic"
-    ? "Promoters (genomic)" : "Transcripts (RefSeq RNA)";
-  const sort = state.screeningSort || "perfect_hits";
-  const ordered = [...rows].sort((a, b) => {
-    const value = r => r[sort] === null ? Number.POSITIVE_INFINITY : r[sort];
-    return sort === "best_evalue" ? value(a) - value(b) : value(b) - value(a);
-  });
-  const header = (key, label, tip) =>
-    `<th><button data-screensort="${key}"${sort === key ? ' class="active"' : ''} `
-    + `data-tip="${escapeHTML(tip)}" tabindex="0">${label} ⇅</button></th>`;
-  const genomic = record.scope === "genomic";
-  $("offtarget-results").innerHTML =
-    `<p class="hint"><b>${escapeHTML(scopeName)}</b> · searched `
-    + `${escapeHTML(new Date(result.searched_at).toLocaleString())} · database `
-    + `${escapeHTML(result.parameters.database)} · word size ${result.parameters.word_size} `
-    + `· ${result.hit_count} alignments across ${rows.length} candidates. `
-    + `Sequence similarity is not measured binding, and nothing here changes a rank.</p>`
-    + (result.notes || []).map(n => `<p class="hint warn">${escapeHTML(n)}</p>`).join("")
-    + `<div class="table-scroll"><table><thead><tr><th>Candidate</th>`
-    + header("perfect_hits", "Perfect matches",
-             "Full-length exact matches elsewhere. One of these is a specific unintended target.")
-    + header("near_perfect_hits", "Near-perfect",
-             "Alignments matching at least 17 of the 19 bases.")
-    + header("longest_complementary_stretch", "Longest match",
-             "The most bases matched in any single alignment.")
-    + header("best_evalue", "Best E-value",
-             "Lowest E-value among the alignments. Smaller means less likely by chance.")
-    + header("hit_count", "Alignments", "How many alignments were returned at all.")
-    + (genomic ? header("in_run_window_hits", "In your window",
-         "Hits inside the same window this run designed against, near another gene's start site.")
-       : "")
-    + `</tr></thead><tbody>`
-    + ordered.map(r => `<tr><td>${escapeHTML(r.candidate)}</td>`
-        + `<td${r.perfect_hits ? ' class="flagged"' : ''}>${r.perfect_hits}</td>`
-        + `<td>${r.near_perfect_hits}</td><td>${r.longest_complementary_stretch}</td>`
-        + `<td>${r.best_evalue === null ? "n/a" : Number(r.best_evalue).toExponential(1)}</td>`
-        + `<td>${r.hit_count}</td>`
-        + (genomic ? `<td${r.in_run_window_hits ? ' class="flagged"' : ''}>`
-                     + `${r.in_run_window_hits}</td>` : "")
-        + `</tr>`).join("")
-    + `</tbody></table></div>`;
-}
 
 
 function foldText(scan) {
@@ -2271,15 +2192,6 @@ $("motif-panel").addEventListener("keydown",event=>{
   event.preventDefault();
   state.motifFocus = state.motifFocus===row.dataset.motif ? null : row.dataset.motif;
   renderMotifPanel(state.result); renderMap();
-});
-$("screen-transcript").addEventListener("click",()=>startScreening("transcript"));
-$("screen-genomic").addEventListener("click",()=>startScreening("genomic"));
-$("offtarget-results").addEventListener("click",event=>{
-  const button=event.target.closest("[data-screensort]");
-  if (!button) return;
-  state.screeningSort=button.dataset.screensort;
-  const scope=state.screeningScope;
-  if (scope) renderScreening({scope,result:state.screenings[scope],status:"complete"});
 });
 document.addEventListener("click", event => {
   const target = event.target.closest("#print-duplex,#inspect-top,#inspect-top-duplex,#export-order-top");

@@ -44,6 +44,21 @@ class OffTargetHit:
     subject_strand: str
     evalue: float
     bit_score: float
+    mismatch_positions: tuple[int, ...] = ()
+    """Which bases of the *query* did not match, 1-based, within the aligned span.
+
+    Taken from BLAST's own alignment strings rather than inferred from the identity count,
+    because "17 of 19" does not say *which* two, and that is the whole question when a reader
+    is deciding whether a partial match matters. Empty when the report carried no alignment
+    strings, which is not the same as a perfect match: see :attr:`has_alignment_detail`.
+    """
+
+    has_alignment_detail: bool = False
+    """Whether the report carried the aligned sequences these positions were read from.
+
+    Without this an empty :attr:`mismatch_positions` would be drawn as "every base matched",
+    turning a missing field into a finding.
+    """
 
     def is_perfect(self, core_length: int) -> bool:
         """Return whether the whole core matched with no gaps and no mismatches."""
@@ -69,6 +84,8 @@ class OffTargetHit:
             "subject_strand": self.subject_strand,
             "evalue": self.evalue,
             "bit_score": self.bit_score,
+            "mismatch_positions": list(self.mismatch_positions),
+            "has_alignment_detail": self.has_alignment_detail,
         }
 
 
@@ -92,6 +109,13 @@ class PromoterProximity:
     """Signed distance in bp; negative is upstream of the TSS. ``None`` when nothing is near."""
 
     inside_run_window: bool
+    on_chromosome: bool = True
+    """Whether the hit's accession is an assembled chromosome this project can place.
+
+    Two different ``None`` distances otherwise read alike: a hit on a scaffold that cannot be
+    placed at all, and a hit placed on a chromosome with no annotated transcript near it. The
+    first is a limit of the lookup, the second is a finding about the locus.
+    """
 
     def to_dict(self) -> dict[str, Any]:
         """Export the placement."""
@@ -103,6 +127,7 @@ class PromoterProximity:
             "nearest_transcript": self.nearest_transcript,
             "distance_to_tss": self.distance_to_tss,
             "inside_run_window": self.inside_run_window,
+            "on_chromosome": self.on_chromosome,
         }
 
 
@@ -195,6 +220,14 @@ class ScreeningRecord:
     """Candidates whose alignment list reached the per-candidate limit, so their counts are
     floors rather than totals."""
 
+    window: tuple[int, int] | None = None
+    """The run's own design window, which is what ``inside_run_window`` was measured against.
+
+    On the record rather than only in the run, because the flag is meaningless without it: a
+    reader of this JSON, or of the plot drawn from it, has to be able to see which window was
+    used. ``None`` when the run had no window rule, in which case nothing was flagged.
+    """
+
     def hits_for(self, candidate_id: str) -> tuple[OffTargetHit, ...]:
         """Return the hits belonging to one candidate."""
         return tuple(h for h in self.hits if h.candidate_id == candidate_id)
@@ -218,4 +251,5 @@ class ScreeningRecord:
             "notes": list(self.notes),
             "on_target_hits": [h.to_dict() for h in self.on_target_hits],
             "capped_candidates": list(self.capped_candidates),
+            "window": list(self.window) if self.window else None,
         }

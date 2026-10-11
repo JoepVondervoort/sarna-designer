@@ -182,6 +182,7 @@ def place_hit(
         return PromoterProximity(
             hit=hit, contig=hit.accession, position=position, nearest_gene=None,
             nearest_transcript=None, distance_to_tss=None, inside_run_window=False,
+            on_chromosome=False,
         )
     # Both ends are clipped to the contig. The low end always was; the high end was not, so a
     # hit within search_radius of a telomere built an interval past the end of the chromosome
@@ -220,6 +221,12 @@ def place_hit(
 
 def describe(placement: PromoterProximity) -> str:
     """Return one sentence stating where the hit is, and claiming nothing more."""
+    if not placement.on_chromosome:
+        return (
+            f"On {placement.contig}, which is not an assembled chromosome this project maps, "
+            f"so the hit could not be placed. That is a limit of the lookup rather than a "
+            f"statement about the locus."
+        )
     if placement.distance_to_tss is None:
         return (
             f"On {placement.contig} at {placement.position:,}, with no annotated transcript "
