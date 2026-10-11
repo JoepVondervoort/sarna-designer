@@ -11,6 +11,7 @@ from typing import Any
 import httpx
 import pytest
 
+from sarna.genome.coordinates import GenomicInterval
 from sarna.offtarget.models import GENOMIC_SCOPE, TRANSCRIPT_SCOPE
 from sarna.offtarget.ncbi import MINIMUM_POLL_SECONDS, BlastClient, BlastError
 from sarna.offtarget.screening import MAX_CANDIDATES, run_screening, specificity_table
@@ -155,9 +156,14 @@ class TestTheTable:
             for i in range(MAX_CANDIDATES + 10)
         ]
         client, _ = scripted([PUT_REPLY, READY_NO_HITS])
-        record = run_screening("run-1", many, TRANSCRIPT_SCOPE, 19, client, sleep=never_sleep)
+        record = run_screening(
+            "run-1", many, TRANSCRIPT_SCOPE, 19, client, sleep=never_sleep,
+            limit=MAX_CANDIDATES,
+        )
         assert len(record.candidates_searched) == MAX_CANDIDATES
-        assert record.notes and "out of" in record.notes[0]
+        # The unscreened must not read as screened clean, which is the whole point of saying so.
+        assert record.notes and "50 of the 60" in record.notes[0]
+        assert "not the same as having been searched clean" in record.notes[0]
 
 
 class TestWaitingIsPacedByNcbisOwnEstimate:
@@ -219,3 +225,159 @@ class TestWaitingIsPacedByNcbisOwnEstimate:
         estimate, floor = 27.0, MINIMUM_POLL_SECONDS
         polls_before = estimate / floor
         assert polls_before > 1, "a flat interval polls before the search can have finished"
+
+
+MANY: list[dict[str, Any]] = [
+    {"id": f"saRNA-{i:04d}", "rank": i + 1, "target_site_dna": "ACGTACGTACGTACGTACG"}
+    for i in range(40)
+]
+
+
+class TestScreeningInBatches:
+    """ADR 0023: a fixed top 50 becomes the researcher's choice, resolved to one id list.
+
+    Every button the interface offers, a count, the next fifteen, the ticked selection, comes
+    through the same ``only`` list, so there is one selection path to get right rather than
+    one per button.
+    """
+
+    def test_a_count_screens_the_best_that_many(self) -> None:
+        client, _ = scripted([PUT_REPLY, READY_NO_HITS])
+        record = run_screening(
+            "run-1", MANY, TRANSCRIPT_SCOPE, 19, client, sleep=never_sleep, limit=15
+        )
+        assert len(record.candidates_searched) == 15
+        assert record.candidates_searched[0] == "saRNA-0000"
+
+    def test_an_explicit_selection_screens_exactly_those(self) -> None:
+        client, _ = scripted([PUT_REPLY, READY_NO_HITS])
+        record = run_screening(
+            "run-1", MANY, TRANSCRIPT_SCOPE, 19, client, sleep=never_sleep,
+            only=["saRNA-0030", "saRNA-0007"],
+        )
+        # Rank order regardless of the order asked in, because the FASTA and the table should
+        # not depend on which checkbox was ticked first.
+        assert record.candidates_searched == ("saRNA-0007", "saRNA-0030")
+
+    def test_the_next_batch_is_just_another_selection(self) -> None:
+        client, _ = scripted([PUT_REPLY, READY_NO_HITS])
+        already = {c["id"] for c in MANY[:15]}
+        rest = [c["id"] for c in MANY if c["id"] not in already][:15]
+        record = run_screening(
+            "run-1", MANY, TRANSCRIPT_SCOPE, 19, client, sleep=never_sleep, only=rest
+        )
+        assert record.candidates_searched[0] == "saRNA-0015"
+        assert len(record.candidates_searched) == 15
+
+    def test_one_job_stays_capped_however_much_is_asked_for(self) -> None:
+        # The per-job ceiling is a courtesy to NCBI and is not negotiable from the interface.
+        client, _ = scripted([PUT_REPLY, READY_NO_HITS])
+        record = run_screening(
+            "run-1", MANY * 3, TRANSCRIPT_SCOPE, 19, client, sleep=never_sleep, limit=10_000
+        )
+        assert len(record.candidates_searched) <= MAX_CANDIDATES
+
+    def test_a_partial_batch_says_the_rest_were_not_searched_clean(self) -> None:
+        client, _ = scripted([PUT_REPLY, READY_NO_HITS])
+        record = run_screening(
+            "run-1", MANY, TRANSCRIPT_SCOPE, 19, client, sleep=never_sleep, limit=15
+        )
+        assert any("not the same as having been searched clean" in n for n in record.notes)
+
+    def test_a_selection_of_only_excluded_candidates_is_refused_with_a_reason(self) -> None:
+        client, _ = scripted([PUT_REPLY, READY_NO_HITS])
+        with pytest.raises(ValueError, match="none of the chosen candidates"):
+            run_screening(
+                "run-1", CANDIDATES, TRANSCRIPT_SCOPE, 19, client, sleep=never_sleep,
+                only=["saRNA-9999"],
+            )
+
+
+GENOMIC_CANDIDATES: list[dict[str, Any]] = [
+    {"id": "saRNA-1549", "rank": 1, "target_site_dna": "GTGAAGCCATAGATCTGTA",
+     "genomic": {"contig": "2", "start": 454, "end": 473, "strand": "+"}},
+]
+
+GENOMIC_REPORT = b"""<?xml version="1.0"?>
+<BlastOutput><BlastOutput_iterations><Iteration>
+  <Iteration_query-def>saRNA-1549</Iteration_query-def>
+  <Iteration_hits>
+    <Hit><Hit_accession>NC_000002.12</Hit_accession><Hit_def>Homo sapiens chromosome 2</Hit_def>
+      <Hit_hsps><Hsp><Hsp_identity>19</Hsp_identity><Hsp_align-len>19</Hsp_align-len>
+      <Hsp_gaps>0</Hsp_gaps><Hsp_query-from>1</Hsp_query-from><Hsp_query-to>19</Hsp_query-to>
+      <Hsp_hit-from>455</Hsp_hit-from><Hsp_hit-to>473</Hsp_hit-to><Hsp_hit-frame>1</Hsp_hit-frame>
+      <Hsp_evalue>0.004</Hsp_evalue><Hsp_bit-score>38.2</Hsp_bit-score></Hsp></Hit_hsps></Hit>
+    <Hit><Hit_accession>NC_000007.14</Hit_accession><Hit_def>Homo sapiens chromosome 7</Hit_def>
+      <Hit_hsps><Hsp><Hsp_identity>17</Hsp_identity><Hsp_align-len>19</Hsp_align-len>
+      <Hsp_gaps>0</Hsp_gaps><Hsp_query-from>1</Hsp_query-from><Hsp_query-to>19</Hsp_query-to>
+      <Hsp_hit-from>900</Hsp_hit-from><Hsp_hit-to>918</Hsp_hit-to><Hsp_hit-frame>1</Hsp_hit-frame>
+      <Hsp_evalue>0.5</Hsp_evalue><Hsp_bit-score>30.1</Hsp_bit-score></Hsp></Hit_hsps></Hit>
+  </Iteration_hits>
+</Iteration></BlastOutput_iterations></BlastOutput>"""
+
+
+class TestTheCandidatesOwnLocusIsNotAFinding:
+    """Without this, every genomic candidate reports a perfect match and the column is noise."""
+
+    def test_the_own_locus_hit_is_removed_from_the_findings(self) -> None:
+        client, _ = scripted([PUT_REPLY, READY_WITH_HITS, GENOMIC_REPORT])
+        record = run_screening(
+            "run-1", GENOMIC_CANDIDATES, GENOMIC_SCOPE, 19, client, sleep=never_sleep,
+            transcripts=lambda _interval: [],
+        )
+        assert [h.accession for h in record.hits] == ["NC_000007.14"]
+        assert [h.accession for h in record.on_target_hits] == ["NC_000002.12"]
+
+    def test_the_perfect_match_column_is_no_longer_one_for_everything(self) -> None:
+        client, _ = scripted([PUT_REPLY, READY_WITH_HITS, GENOMIC_REPORT])
+        record = run_screening(
+            "run-1", GENOMIC_CANDIDATES, GENOMIC_SCOPE, 19, client, sleep=never_sleep,
+            transcripts=lambda _interval: [],
+        )
+        row = specificity_table(record, 19)[0]
+        assert row["perfect_hits"] == 0, "the only perfect match was the candidate's own locus"
+        assert row["on_target_hits"] == 1, "and the row says it was taken out"
+
+    def test_the_removal_is_stated_on_the_record(self) -> None:
+        client, _ = scripted([PUT_REPLY, READY_WITH_HITS, GENOMIC_REPORT])
+        record = run_screening(
+            "run-1", GENOMIC_CANDIDATES, GENOMIC_SCOPE, 19, client, sleep=never_sleep,
+            transcripts=lambda _interval: [],
+        )
+        assert any("own target loci" in n for n in record.notes)
+
+    def test_a_transcript_search_removes_nothing(self) -> None:
+        # A promoter is not usually transcribed, and the only handle in a transcript report
+        # would be a gene name, which is a guess this project will not make silently.
+        client, _ = scripted([PUT_REPLY, READY_WITH_HITS, GENOMIC_REPORT])
+        record = run_screening(
+            "run-1", GENOMIC_CANDIDATES, TRANSCRIPT_SCOPE, 19, client, sleep=never_sleep
+        )
+        assert record.on_target_hits == ()
+        assert len(record.hits) == 2
+
+    def test_a_run_without_coordinates_says_it_could_not_tell(self) -> None:
+        # Pasted sequence has no locus to compare against. Saying nothing would let a reader
+        # assume the removal happened.
+        pasted = [{"id": "saRNA-1549", "rank": 1, "target_site_dna": "GTGAAGCCATAGATCTGTA"}]
+        client, _ = scripted([PUT_REPLY, READY_WITH_HITS, GENOMIC_REPORT])
+        record = run_screening(
+            "run-1", pasted, GENOMIC_SCOPE, 19, client, sleep=never_sleep,
+            transcripts=lambda _interval: [],
+        )
+        assert record.on_target_hits == ()
+        assert any("no genomic coordinates" in n for n in record.notes)
+
+    def test_placement_is_not_spent_on_a_hit_that_was_removed(self) -> None:
+        placed: list[GenomicInterval] = []
+
+        def lookup(interval: GenomicInterval) -> list[dict[str, Any]]:
+            placed.append(interval)
+            return []
+
+        client, _ = scripted([PUT_REPLY, READY_WITH_HITS, GENOMIC_REPORT])
+        run_screening(
+            "run-1", GENOMIC_CANDIDATES, GENOMIC_SCOPE, 19, client, sleep=never_sleep,
+            transcripts=lookup,
+        )
+        assert len(placed) == 1, "only the remaining off-target hit is placed"

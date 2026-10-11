@@ -14,8 +14,10 @@ import pytest
 from sarna.offtarget.models import OffTargetHit
 from sarna.offtarget.specificity import (
     NEAR_PERFECT_IDENTITIES,
+    WANG_HOMOLOGY_FRACTION,
     measure_specificity,
     summarise,
+    wang_homology_identities,
 )
 
 CORE = 19
@@ -154,3 +156,92 @@ class TestInputValidation:
     def test_an_impossible_core_length_is_refused(self) -> None:
         with pytest.raises(ValueError, match="core length"):
             measure_specificity("a", (), core_length=0)
+
+
+class TestWangsOwnHomologyThreshold:
+    """80% is the one homology figure Wang 2015 states, and ADR 0023 reports it beside 19/19.
+
+    The paper uses it to reject a **control** duplex showing "significant homology", not to
+    assess a candidate's off-targets, so carrying it across is an extension by analogy. The
+    cost is in the ADR; what these tests pin is that the number means what the paper says.
+    """
+
+    def test_the_threshold_is_the_smallest_count_that_reaches_eighty_percent(self) -> None:
+        # Derived from the definition rather than from the implementation: whatever the
+        # function returns must clear 80%, and one base fewer must fall short of it. A plain
+        # assertion that 19 gives 16 would pass just as well against round() or int().
+        for core in range(5, 31):
+            threshold = wang_homology_identities(core)
+            assert threshold / core >= WANG_HOMOLOGY_FRACTION, core
+            assert (threshold - 1) / core < WANG_HOMOLOGY_FRACTION, core
+
+    def test_a_nineteen_base_core_asks_for_sixteen(self) -> None:
+        # 15 of 19 is 78.9% and does not reach the published figure; 16 of 19 is 84.2%.
+        assert wang_homology_identities(19) == 16
+
+    def test_sixteen_of_nineteen_counts_and_fifteen_does_not(self) -> None:
+        measured = measure_specificity(
+            "a", (hit(identities=16), hit(identities=15)), CORE
+        )
+        assert measured.wang_homology_hits == 1
+        assert measured.strong_threshold == 16
+
+    def test_the_locally_chosen_seventeen_is_still_reported_beside_it(self) -> None:
+        # Saved runs and the xlsx export carry near_perfect_hits. Changing what a stored
+        # column means is worse than carrying two, so both travel.
+        measured = measure_specificity("a", (hit(identities=16),), CORE)
+        assert measured.near_perfect_hits == 0, "16 does not reach the local 17"
+        assert measured.wang_homology_hits == 1, "but it does reach Wang's 80%"
+        assert measured.to_dict()["near_perfect_hits"] == 0
+
+    def test_the_threshold_travels_in_the_export_so_a_column_can_label_itself(self) -> None:
+        exported = measure_specificity("a", (), CORE).to_dict()
+        assert exported["strong_threshold"] == 16
+
+
+class TestPromiscuityIsADisplayStateAndSaysSo:
+    def test_five_matches_at_wangs_threshold_is_called_promiscuous(self) -> None:
+        measured = measure_specificity("a", tuple(hit(identities=16) for _ in range(5)), CORE)
+        assert measured.is_promiscuous
+        assert "many places" in summarise(measured)
+
+    def test_four_is_not(self) -> None:
+        measured = measure_specificity("a", tuple(hit(identities=16) for _ in range(4)), CORE)
+        assert not measured.is_promiscuous
+
+    def test_weak_alignments_do_not_count_towards_it(self) -> None:
+        # Forty 13-base partial matches are noise, and the whole point of counting at a stated
+        # threshold is that noise cannot make a candidate look promiscuous.
+        measured = measure_specificity("a", tuple(hit(identities=13) for _ in range(40)), CORE)
+        assert not measured.is_promiscuous
+        assert measured.hit_count == 40
+
+    def test_it_changes_no_measure_and_no_rank(self) -> None:
+        # A display state must leave every number alone, or it is a filter wearing a disguise.
+        hits = tuple(hit(identities=16) for _ in range(6))
+        measured = measure_specificity("a", hits, CORE)
+        assert measured.hit_count == 6
+        assert measured.wang_homology_hits == 6
+        assert "rank" not in measured.to_dict()
+
+
+class TestACappedListIsNotACleanOne:
+    def test_a_capped_candidate_says_its_counts_are_floors(self) -> None:
+        measured = measure_specificity("a", (hit(identities=16),), CORE, capped=True)
+        assert measured.alignments_capped
+        assert "floor" in summarise(measured)
+
+    def test_an_uncapped_candidate_makes_no_such_claim(self) -> None:
+        assert "floor" not in summarise(measure_specificity("a", (hit(),), CORE))
+
+
+class TestRemovedOwnLocusHitsAreCounted:
+    def test_a_zero_that_had_something_taken_out_of_it_says_so(self) -> None:
+        # Otherwise it reads exactly like a zero that never did, and ADR 0023 removes the hit
+        # from the findings precisely so that the remaining number can be trusted.
+        measured = measure_specificity("a", (), CORE, on_target_hits=1)
+        assert measured.on_target_hits == 1
+        assert "own locus" in summarise(measured)
+
+    def test_nothing_is_said_when_nothing_was_removed(self) -> None:
+        assert "own locus" not in summarise(measure_specificity("a", (), CORE))

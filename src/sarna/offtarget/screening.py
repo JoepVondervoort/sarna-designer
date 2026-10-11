@@ -9,7 +9,7 @@ Sleeping is injected rather than imported so tests do not wait fifteen real seco
 """
 
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from typing import Any
 
 from sarna.offtarget.models import (
@@ -25,15 +25,26 @@ from sarna.offtarget.ncbi import (
     candidate_sequences,
     parameters_for,
 )
+from sarna.offtarget.ontarget import loci_from_candidates, split_on_target
 from sarna.offtarget.proximity import TranscriptLookup, place_hit
 from sarna.offtarget.specificity import measure_specificity
 
 MAX_CANDIDATES = 50
-"""Most candidates to screen in one job.
+"""Most candidates to screen in **one job**.
 
 A courtesy to NCBI rather than a technical limit: a run can generate thousands of candidates,
 and only the ones a researcher might order are worth a shared public service's time. Ranked
 order, so the cut falls on the least promising.
+
+Since ADR 0023 this is a per-job ceiling rather than the whole allowance. A researcher asking
+for more gets several sequential jobs, each its own dated record, never parallel submissions.
+"""
+
+DEFAULT_CANDIDATES = 15
+"""How many a screening covers when nobody says otherwise.
+
+The old fixed 50 is what made a genomic search time out after half an hour and return nothing.
+Fifteen finishes, and the next fifteen are one button away.
 """
 
 MAX_WAIT_SECONDS = 1800.0
@@ -55,8 +66,10 @@ def run_screening(
     now: Callable[[], float] = time.monotonic,
     poll_seconds: float = MINIMUM_POLL_SECONDS,
     max_wait: float = MAX_WAIT_SECONDS,
+    only: Collection[str] | None = None,
+    limit: int = MAX_CANDIDATES,
 ) -> ScreeningRecord:
-    """Screen one run's passing candidates and return the dated record.
+    """Screen some of one run's passing candidates and return the dated record.
 
     Args:
         run_id: The design run being screened.
@@ -72,6 +85,8 @@ def run_screening(
         now: Monotonic clock, injected for the same reason.
         poll_seconds: Never below NCBI's requested minimum.
         max_wait: Give up after this long.
+        only: Screen exactly these candidates rather than the best ``limit`` of them.
+        limit: Most candidates in this one job, never above :data:`MAX_CANDIDATES`.
 
     Returns:
         The screening, including the parameters and the moment it was made.
@@ -87,10 +102,14 @@ def run_screening(
             "the genomic scope places each hit against annotated start sites, so it needs a "
             "transcript lookup; without one a hit would be a coordinate with no meaning"
         )
-    sequences = candidate_sequences(candidates, limit=MAX_CANDIDATES)
+    sequences = candidate_sequences(
+        candidates, limit=min(limit, MAX_CANDIDATES), only=only
+    )
     if not sequences:
         raise ValueError(
             "no candidate passed the gates in this run, so there is nothing to screen"
+            if only is None
+            else "none of the chosen candidates passed the gates in this run"
         )
 
     say(f"Submitting {len(sequences)} sequences to NCBI")
@@ -114,7 +133,7 @@ def run_screening(
         # that overruns is still collected within one poll of finishing rather than backing off.
         wait_next = interval
         try:
-            hits = client.fetch(submitted.request_id, parameters)
+            report = client.fetch(submitted.request_id, parameters)
             break
         except BlastStillRunning:
             say(f"NCBI is still searching ({int(waited)}s elapsed)")
@@ -124,17 +143,43 @@ def run_screening(
                     f"{int(max_wait)}s. It may still complete; the designs are unaffected."
                 ) from None
 
-    say(f"Reading {len(hits)} alignments")
+    say(f"Reading {len(report.hits)} alignments")
+    # The candidate's own promoter is a perfect match to itself, so without this every genomic
+    # candidate reports at least one perfect hit and the column means nothing (ADR 0023).
+    # Only the genomic scope: a promoter is usually not transcribed, and the only handle in a
+    # transcript report would be a gene name, which is a guess.
+    loci = loci_from_candidates(candidates) if scope == GENOMIC_SCOPE else {}
+    hits, own = split_on_target(report.hits, loci)
+
     proximities: tuple[PromoterProximity, ...] = ()
     if scope == GENOMIC_SCOPE and transcripts is not None:
-        say("Placing hits against annotated start sites")
+        say(f"Placing {len(hits)} hits against annotated start sites")
         proximities = tuple(place_hit(hit, transcripts, window) for hit in hits)
 
+    passing = sum(1 for c in candidates if c.get("rank") is not None)
     notes = []
-    if len(candidates) and len(sequences) < sum(1 for c in candidates if c.get("rank")):
+    if len(sequences) < passing:
         notes.append(
-            f"Only the top {len(sequences)} ranked candidates were screened, out of "
-            f"{sum(1 for c in candidates if c.get('rank'))} that passed the gates."
+            f"{len(sequences)} of the {passing} candidates that passed the gates were screened "
+            f"in this search. The rest have not been searched, which is not the same as having "
+            f"been searched clean."
+        )
+    if report.capped:
+        notes.append(
+            f"{len(report.capped)} candidate"
+            f"{'s' if len(report.capped) != 1 else ''} returned more alignments than were kept "
+            f"({parameters.max_alignments_per_candidate} each), so those counts are floors."
+        )
+    if own:
+        notes.append(
+            f"{len(own)} alignment{'s' if len(own) != 1 else ''} at the candidates' own target "
+            f"loci {'were' if len(own) != 1 else 'was'} removed from these findings. A sequence "
+            f"matching the promoter it was designed against is the intended target."
+        )
+    if scope == GENOMIC_SCOPE and not loci:
+        notes.append(
+            "This run has no genomic coordinates, so a hit at a candidate's own target site "
+            "could not be told apart from one elsewhere and none were removed."
         )
     return ScreeningRecord(
         run_id=run_id,
@@ -145,6 +190,8 @@ def run_screening(
         request_id=submitted.request_id,
         candidates_searched=tuple(sequences),
         notes=tuple(notes),
+        on_target_hits=own,
+        capped_candidates=tuple(sorted(report.capped)),
     )
 
 
@@ -156,10 +203,15 @@ def specificity_table(
     Candidates with no hits are present with zeroes rather than absent: a missing row would read
     as "not screened", which is a different statement from "screened, nothing found".
     """
+    capped = set(record.capped_candidates)
     rows = []
     for candidate_id in record.candidates_searched:
         measured = measure_specificity(
-            candidate_id, record.hits_for(candidate_id), core_length
+            candidate_id,
+            record.hits_for(candidate_id),
+            core_length,
+            capped=candidate_id in capped,
+            on_target_hits=len(record.on_target_for(candidate_id)),
         )
         row = measured.to_dict()
         row["in_run_window_hits"] = sum(

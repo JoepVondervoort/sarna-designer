@@ -9,6 +9,7 @@ returns nothing, and "nothing" is indistinguishable from "specific" unless the p
 checked. Several tests therefore assert on what is *sent*, not only on what is parsed.
 """
 
+from collections import Counter
 from typing import Any
 
 import httpx
@@ -24,6 +25,7 @@ from sarna.offtarget.ncbi import (
     candidate_sequences,
     parameters_for,
     parse_hits,
+    parse_report,
 )
 
 PUT_REPLY = b"""
@@ -213,7 +215,9 @@ class TestSubmissionAndPolling:
         self,
     ) -> None:
         client, seen = client_for([READY_NO_HITS])
-        assert client.fetch("ABC123", parameters_for(TRANSCRIPT_SCOPE)) == ()
+        report = client.fetch("ABC123", parameters_for(TRANSCRIPT_SCOPE))
+        assert report.hits == ()
+        assert report.capped == frozenset()
         assert len(seen) == 1
 
     def test_the_polling_interval_respects_ncbis_policy(self) -> None:
@@ -273,6 +277,65 @@ class TestParsingTheReport:
 
     def test_the_hit_cap_is_honoured(self) -> None:
         assert len(parse_hits(REPORT, max_hits=1)) == 1
+
+
+def multi_query_report(counts: dict[str, int]) -> bytes:
+    """Build a report with a chosen number of alignments for each named query."""
+    def alignment(index: int) -> bytes:
+        return (
+            f"<Hit><Hit_accession>NM_{index:06d}</Hit_accession><Hit_def>x</Hit_def>"
+            f"<Hit_hsps><Hsp><Hsp_identity>14</Hsp_identity>"
+            f"<Hsp_align-len>19</Hsp_align-len><Hsp_gaps>0</Hsp_gaps>"
+            f"<Hsp_evalue>3.0</Hsp_evalue><Hsp_bit-score>24.0</Hsp_bit-score>"
+            f"</Hsp></Hit_hsps></Hit>"
+        ).encode()
+
+    iterations = b"".join(
+        b"<Iteration><Iteration_query-def>" + name.encode() + b"</Iteration_query-def>"
+        b"<Iteration_hits>" + b"".join(alignment(i) for i in range(count))
+        + b"</Iteration_hits></Iteration>"
+        for name, count in counts.items()
+    )
+    return b"<BlastOutput><BlastOutput_iterations>" + iterations + (
+        b"</BlastOutput_iterations></BlastOutput>"
+    )
+
+
+class TestOneQueryCannotStarveTheRest:
+    """The defect behind ADR 0023, pinned so it cannot come back.
+
+    A single budget shared across a multi-query report was consumed by whichever query came
+    first. In the run that exposed it, one candidate carried 500 alignments and the other 21
+    carried zero, and those zeros were printed in the same ink as a real clean result. The
+    candidates had not been searched clean. They had not been read.
+    """
+
+    def test_a_promiscuous_first_query_does_not_silence_the_later_ones(self) -> None:
+        report = multi_query_report({"saRNA-A": 600, "saRNA-B": 4, "saRNA-C": 3})
+        parsed = parse_report(report, per_candidate=100)
+        found = Counter(h.candidate_id for h in parsed.hits)
+        assert found["saRNA-A"] == 100, "the promiscuous query is capped"
+        assert found["saRNA-B"] == 4, "and the next query is still read in full"
+        assert found["saRNA-C"] == 3
+
+    def test_a_capped_candidate_is_named_so_its_counts_read_as_floors(self) -> None:
+        parsed = parse_report(
+            multi_query_report({"saRNA-A": 600, "saRNA-B": 4}), per_candidate=100
+        )
+        # Three outcomes, not two: B found four, A found at least a hundred, and neither of
+        # those is "nothing". Only A's counts are floors.
+        assert parsed.capped == frozenset({"saRNA-A"})
+
+    def test_a_query_that_exactly_fills_its_budget_is_not_called_capped(self) -> None:
+        # Off by one in the honest direction: reporting "there may be more" when there is not
+        # would be a false warning, and a check that cries wolf gets ignored.
+        parsed = parse_report(multi_query_report({"saRNA-A": 5}), per_candidate=5)
+        assert len(parsed.hits) == 5
+        assert parsed.capped == frozenset()
+
+    def test_a_budget_of_zero_is_refused_rather_than_reporting_everything_clean(self) -> None:
+        with pytest.raises(ValueError, match="must be positive"):
+            parse_report(REPORT, per_candidate=0)
 
     def test_a_document_declaring_entities_is_refused(self) -> None:
         # xml.etree expands internal entities, so a crafted reply could exhaust memory.

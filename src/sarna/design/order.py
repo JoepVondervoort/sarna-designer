@@ -350,10 +350,18 @@ class ScreeningFinding:
         Deliberately a disjunction of named counts rather than a threshold on a score. ADR 0019
         refuses a combined specificity figure because weighing one perfect match elsewhere
         against forty weak partial ones is the researcher's judgement, not the tool's.
+
+        ``wang_homology_hits`` joined the disjunction with ADR 0023: it is the only one of these
+        counts whose threshold comes from the paper rather than from this project.
         """
         return any(
             int(self.row.get(key) or 0) > 0
-            for key in ("perfect_hits", "near_perfect_hits", "in_run_window_hits")
+            for key in (
+                "perfect_hits",
+                "near_perfect_hits",
+                "wang_homology_hits",
+                "in_run_window_hits",
+            )
         )
 
     def describe(self) -> str:
@@ -363,12 +371,16 @@ class ScreeningFinding:
             for key, label in (
                 ("hit_count", "alignments"),
                 ("perfect_hits", "perfect"),
+                ("wang_homology_hits", "at Wang's 80%"),
                 ("near_perfect_hits", "near-perfect"),
                 ("in_run_window_hits", "inside this run's window"),
             )
             if key != "in_run_window_hits" or self.scope == GENOMIC_SCOPE
         )
-        return f"{self.scope} ({self.database}, {self.searched_at[:10]}): {counts}"
+        # A capped list makes every count above a floor, which a row pasted into an order form
+        # must carry with it rather than leave in the workbench.
+        capped = " (list capped, counts are floors)" if self.row.get("alignments_capped") else ""
+        return f"{self.scope} ({self.database}, {self.searched_at[:10]}): {counts}{capped}"
 
 
 GENOMIC_SCOPE = "genomic"

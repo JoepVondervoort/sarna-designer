@@ -132,7 +132,21 @@ class SearchParameters:
     word_size: int = 7
     expect: float = 1000.0
     filter_low_complexity: bool = False
-    max_hits: int = 500
+    max_hits: int = 100
+    """``HITLIST_SIZE``: database sequences kept **per query**, which is NCBI's own unit.
+
+    Was 500, which at fifteen queries is up to 7,500 alignments of which the overwhelming
+    majority match 12 or 13 of 19 bases and mean nothing. BLAST keeps the best by score, so
+    lowering this drops the weakest and never a strong match.
+    """
+
+    max_alignments_per_candidate: int = 200
+    """Alignments this client keeps per candidate when parsing.
+
+    A separate number from :attr:`max_hits` because the units differ: that one counts database
+    sequences, this one counts HSPs, and one sequence can align more than once. Headroom over
+    ``max_hits`` on purpose.
+    """
 
     def to_dict(self) -> dict[str, Any]:
         """Export the parameters."""
@@ -146,6 +160,7 @@ class SearchParameters:
             "expect": self.expect,
             "filter_low_complexity": self.filter_low_complexity,
             "max_hits": self.max_hits,
+            "max_alignments_per_candidate": self.max_alignments_per_candidate,
         }
 
 
@@ -168,10 +183,25 @@ class ScreeningRecord:
 
     candidates_searched: tuple[str, ...] = ()
     notes: tuple[str, ...] = ()
+    on_target_hits: tuple[OffTargetHit, ...] = ()
+    """Alignments removed as a candidate's own locus (ADR 0023).
+
+    Removed from :attr:`hits` and from every count, kept here. "Dropped" must not mean
+    "deleted": a reader has to be able to check that the removal was right, and a count that
+    had something taken out of it has to be able to say so.
+    """
+
+    capped_candidates: tuple[str, ...] = ()
+    """Candidates whose alignment list reached the per-candidate limit, so their counts are
+    floors rather than totals."""
 
     def hits_for(self, candidate_id: str) -> tuple[OffTargetHit, ...]:
         """Return the hits belonging to one candidate."""
         return tuple(h for h in self.hits if h.candidate_id == candidate_id)
+
+    def on_target_for(self, candidate_id: str) -> tuple[OffTargetHit, ...]:
+        """Return the removed own-locus alignments belonging to one candidate."""
+        return tuple(h for h in self.on_target_hits if h.candidate_id == candidate_id)
 
     def to_dict(self) -> dict[str, Any]:
         """Export the whole screening."""
@@ -186,4 +216,6 @@ class ScreeningRecord:
             "hits": [h.to_dict() for h in self.hits],
             "proximities": [p.to_dict() for p in self.proximities],
             "notes": list(self.notes),
+            "on_target_hits": [h.to_dict() for h in self.on_target_hits],
+            "capped_candidates": list(self.capped_candidates),
         }

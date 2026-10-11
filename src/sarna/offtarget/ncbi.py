@@ -26,7 +26,7 @@ otherwise exhaust memory.
 
 import re
 import xml.etree.ElementTree as ElementTree
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -54,6 +54,20 @@ MINIMUM_POLL_SECONDS = 15.0
 MAX_RESPONSE_BYTES = 64 * 1024 * 1024
 """Refuse a response larger than this rather than parse it."""
 
+MAX_ALIGNMENTS_PER_CANDIDATE = 200
+"""Alignments kept **per candidate**, not per job.
+
+This was one shared budget of 500 for the whole multi-query report, and the bug it caused is
+the reason ADR 0023 exists: the first query filled it, the parser returned, and the other 21
+candidates of a real run were reported with zero alignments each. They had not been searched
+clean, they had not been read at all, and the table printed their zeros in the same ink as a
+genuine result.
+
+A per-candidate budget cannot starve a later query, and a candidate that reaches it is recorded
+as capped so "nothing found" and "more than we kept" stay different statements. BLAST orders a
+query's alignments best first, so what a cap drops is always the weakest.
+"""
+
 DEFAULT_TIMEOUT_SECONDS = 60.0
 
 _RID = re.compile(r"^\s*RID\s*=\s*(\S+)", re.MULTILINE)
@@ -75,6 +89,15 @@ class BlastError(RuntimeError):
 
 class BlastStillRunning(Exception):
     """The search has not finished. Not an error: poll again later."""
+
+
+@dataclass(frozen=True, slots=True)
+class ParsedReport:
+    """Everything one BLAST report said, including where it was cut short."""
+
+    hits: tuple[OffTargetHit, ...]
+    capped: frozenset[str]
+    """Candidates whose alignment list reached the per-candidate limit."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,8 +232,8 @@ class BlastClient:
         hits = _THERE_ARE_HITS.search(text)
         return found.group(1).upper(), bool(hits and hits.group(1).lower() == "yes")
 
-    def fetch(self, request_id: str, parameters: SearchParameters) -> tuple[OffTargetHit, ...]:
-        """Retrieve a finished search's alignments.
+    def fetch(self, request_id: str, parameters: SearchParameters) -> ParsedReport:
+        """Retrieve a finished search's alignments, and which candidates were cut short.
 
         Raises:
             BlastStillRunning: If the search has not finished. Poll again, no sooner than
@@ -228,11 +251,11 @@ class BlastClient:
         if state != "READY":
             raise BlastError(f"NCBI reported search {request_id} as {state}.")
         if not there_are_hits:
-            return ()
+            return ParsedReport(hits=(), capped=frozenset())
         raw = self._request_bytes(
             {"CMD": "Get", "RID": request_id, "FORMAT_TYPE": "XML"}
         )
-        return parse_hits(raw, max_hits=parameters.max_hits)
+        return parse_report(raw, per_candidate=parameters.max_alignments_per_candidate)
 
     def _request(self, payload: Mapping[str, str]) -> str:
         """Return a reply as text."""
@@ -266,23 +289,43 @@ class BlastClient:
         return body
 
 
-def parse_hits(raw: bytes, max_hits: int = 500) -> tuple[OffTargetHit, ...]:
+def parse_hits(
+    raw: bytes, max_hits: int = MAX_ALIGNMENTS_PER_CANDIDATE
+) -> tuple[OffTargetHit, ...]:
+    """Return just the alignments from a report. See :func:`parse_report`.
+
+    ``max_hits`` is **per candidate**. A caller that needs to know which candidates were cut
+    short wants :func:`parse_report` instead.
+    """
+    return parse_report(raw, per_candidate=max_hits).hits
+
+
+def parse_report(
+    raw: bytes, per_candidate: int = MAX_ALIGNMENTS_PER_CANDIDATE
+) -> ParsedReport:
     """Parse BLAST XML into hits, attributing each to the candidate that produced it.
 
     Args:
         raw: The XML body, treated as untrusted input. A DOCTYPE is accepted (every
             genuine NCBI report has one) but an entity declaration is not.
-        max_hits: Stop after this many alignments, so one pathological query cannot produce an
-            unbounded result.
+        per_candidate: Alignments kept for each query. A budget shared across the whole report
+            lets one promiscuous query starve every later one, which is the defect ADR 0023
+            was written for; see :data:`MAX_ALIGNMENTS_PER_CANDIDATE`.
 
     Returns:
         Every HSP as its own hit, because two alignments to the same accession are two separate
-        places the duplex could bind.
+        places the duplex could bind, plus the candidates whose list reached the limit.
 
     Raises:
         BlastError: If the document declares entities, or is not parseable. `xml.etree`
             expands internal entities, so a crafted reply could otherwise exhaust memory.
+        ValueError: If the per-candidate budget is not positive.
     """
+    if per_candidate <= 0:
+        raise ValueError(
+            f"the per-candidate alignment budget must be positive, got {per_candidate}; "
+            f"zero would report every candidate as having no alignments"
+        )
     if _ENTITY_DECLARATION.search(raw):
         raise BlastError(
             "the BLAST reply declares XML entities, which this client refuses to parse because "
@@ -294,16 +337,25 @@ def parse_hits(raw: bytes, max_hits: int = 500) -> tuple[OffTargetHit, ...]:
         raise BlastError(f"could not parse NCBI's XML reply: {error}") from error
 
     hits: list[OffTargetHit] = []
+    kept: dict[str, int] = {}
+    capped: set[str] = set()
     for iteration in root.iter("Iteration"):
         candidate = _text(iteration, "Iteration_query-def") or ""
         # BLAST keeps only the first token of a FASTA header as the id in some views.
         candidate = candidate.split()[0] if candidate.split() else candidate
         for hit in iteration.iter("Hit"):
+            # Per candidate, so a promiscuous query cannot consume a later query's budget.
+            # Moving on to the next iteration rather than returning is the whole fix.
+            if kept.get(candidate, 0) >= per_candidate:
+                capped.add(candidate)
+                break
             accession = _text(hit, "Hit_accession") or _text(hit, "Hit_id") or "unknown"
             title = _text(hit, "Hit_def") or ""
             for hsp in hit.iter("Hsp"):
-                if len(hits) >= max_hits:
-                    return tuple(hits)
+                if kept.get(candidate, 0) >= per_candidate:
+                    capped.add(candidate)
+                    break
+                kept[candidate] = kept.get(candidate, 0) + 1
                 frame = _int(hsp, "Hsp_hit-frame", 1)
                 hits.append(
                     OffTargetHit(
@@ -322,7 +374,7 @@ def parse_hits(raw: bytes, max_hits: int = 500) -> tuple[OffTargetHit, ...]:
                         bit_score=_float(hsp, "Hsp_bit-score", 0.0),
                     )
                 )
-    return tuple(hits)
+    return ParsedReport(hits=tuple(hits), capped=frozenset(capped))
 
 
 def _text(element: ElementTree.Element, tag: str) -> str | None:
@@ -350,16 +402,30 @@ def _float(element: ElementTree.Element, tag: str, default: float) -> float:
 
 
 def candidate_sequences(
-    records: Sequence[Mapping[str, Any]], limit: int | None = None
+    records: Sequence[Mapping[str, Any]],
+    limit: int | None = None,
+    only: Collection[str] | None = None,
 ) -> dict[str, str]:
-    """Return the target DNA of each passing candidate, keyed by candidate id.
+    """Return the target DNA of each passing candidate, keyed by candidate id, in rank order.
 
     The **target site DNA** is searched, not the RNA core: an off-target search asks where else
     this sequence occurs in the genome or transcriptome, which is a question about DNA. Only
     candidates that passed the gates are included, because a duplex nobody would order does not
     need screening.
+
+    Args:
+        records: The run's candidates.
+        limit: Keep at most this many, the least promising dropped first.
+        only: Screen exactly these candidates. Every batch the interface offers, a count, the
+            next fifteen, the ticked selection, resolves to one of these lists, so there is one
+            selection path rather than one per button (ADR 0023). Ids that are unknown or did
+            not pass the gates are ignored here and rejected at the boundary, where a researcher
+            can be told which ones.
     """
     passing = [r for r in records if r.get("rank") is not None]
+    if only is not None:
+        wanted = set(only)
+        passing = [r for r in passing if r.get("id") in wanted]
     passing.sort(key=lambda r: r["rank"])
     if limit is not None:
         passing = passing[:limit]
