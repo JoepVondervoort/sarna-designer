@@ -15,7 +15,12 @@ from typing import Any
 import httpx
 import pytest
 
-from sarna.offtarget.models import GENOMIC_SCOPE, TRANSCRIPT_SCOPE
+from sarna.offtarget.models import (
+    BY_DATABASE,
+    BY_ENTREZ_FILTER,
+    GENOMIC_SCOPE,
+    TRANSCRIPT_SCOPE,
+)
 from sarna.offtarget.ncbi import (
     MINIMUM_POLL_SECONDS,
     BlastClient,
@@ -151,9 +156,27 @@ class TestWhatIsSent:
 
     def test_the_two_scopes_search_different_databases(self) -> None:
         assert parameters_for(TRANSCRIPT_SCOPE).database == "refseq_rna"
-        assert parameters_for(GENOMIC_SCOPE).database == "refseq_genomic"
+        # The human GRCh38 reference assembly, not the retired `refseq_genomic` (ADR 0024).
+        assert parameters_for(GENOMIC_SCOPE).database == "GPIPE/9606/current/ref_top_level"
         with pytest.raises(ValueError, match="unknown search scope"):
             parameters_for("whatever")
+
+    def test_each_scope_records_how_it_was_confined_to_human(self) -> None:
+        # Not the same guarantee, and the interface must not word them alike. The genomic
+        # assembly holds one species; the transcript database holds every species RefSeq has
+        # and is narrowed by a parameter the URL API does not document.
+        assert parameters_for(GENOMIC_SCOPE).species_restriction == BY_DATABASE
+        assert parameters_for(TRANSCRIPT_SCOPE).species_restriction == BY_ENTREZ_FILTER
+
+    def test_the_genomic_scope_sends_no_entrez_filter_because_it_needs_none(self) -> None:
+        client, seen = client_for([PUT_REPLY])
+        client.submit({"saRNA-001": "GGGTAATTTTGACAGGTCA"}, GENOMIC_SCOPE)
+        sent = form(seen[0])
+        assert sent["DATABASE"] == "GPIPE/9606/current/ref_top_level"
+        assert "ENTREZ_QUERY" not in sent, (
+            "a single-species assembly needs no species filter, and ENTREZ_QUERY is "
+            "undocumented, so sending it anyway is a dependency with nothing to gain"
+        )
 
     def test_a_whole_run_goes_in_one_job(self) -> None:
         # One job per candidate would multiply requests by fourteen and risk an IP block for
@@ -426,3 +449,65 @@ class TestWhichBasesDidNotMatch:
         assert hit.has_alignment_detail is True
         assert hit.mismatch_positions == (18, 19)
         assert hit.to_dict()["mismatch_positions"] == [18, 19]
+
+
+class TestTheCapKeepsTheStrongestNotTheFirst:
+    """On a chromosome-level database, document order is nearly the worst order to cap in.
+
+    BLAST groups a report by database sequence, and one chromosome carries thousands of
+    alignments. Taking the first N fills the budget with chromosome 1's weak partial matches
+    and never reaches the strong alignment on chromosome 7, which is the only one that would
+    have changed anybody's mind.
+    """
+
+    @staticmethod
+    def _report(scores: list[tuple[str, float, int]]) -> bytes:
+        hits = "".join(
+            f"<Hit><Hit_accession>{accession}</Hit_accession><Hit_def>x</Hit_def>"
+            f"<Hit_hsps><Hsp><Hsp_identity>{identities}</Hsp_identity>"
+            f"<Hsp_align-len>19</Hsp_align-len><Hsp_gaps>0</Hsp_gaps>"
+            f"<Hsp_query-from>1</Hsp_query-from><Hsp_query-to>19</Hsp_query-to>"
+            f"<Hsp_hit-from>1</Hsp_hit-from><Hsp_hit-to>19</Hsp_hit-to>"
+            f"<Hsp_hit-frame>1</Hsp_hit-frame><Hsp_evalue>1.0</Hsp_evalue>"
+            f"<Hsp_bit-score>{score}</Hsp_bit-score></Hsp></Hit_hsps></Hit>"
+            for accession, score, identities in scores
+        )
+        return (
+            "<BlastOutput><BlastOutput_iterations><Iteration>"
+            "<Iteration_query-def>saRNA-1</Iteration_query-def>"
+            f"<Iteration_hits>{hits}</Iteration_hits>"
+            "</Iteration></BlastOutput_iterations></BlastOutput>"
+        ).encode()
+
+    def test_a_strong_alignment_reported_last_still_survives_the_cap(self) -> None:
+        # Three weak alignments first, then the one that matters. A document-order cap of 3
+        # drops exactly the alignment a researcher is screening for.
+        report = self._report([
+            ("NC_000001.11", 26.0, 13),
+            ("NC_000001.11", 26.0, 13),
+            ("NC_000001.11", 26.0, 13),
+            ("NC_000007.14", 38.2, 19),
+        ])
+        kept = parse_report(report, per_candidate=3)
+        assert len(kept.hits) == 3
+        assert any(h.identities == 19 for h in kept.hits), (
+            "the 19 of 19 match was dropped in favour of three 13 of 19 ones"
+        )
+
+    def test_what_is_kept_is_ordered_strongest_first(self) -> None:
+        kept = parse_report(self._report([
+            ("NC_000001.11", 26.0, 13),
+            ("NC_000007.14", 38.2, 19),
+            ("NC_000002.12", 30.1, 16),
+        ]))
+        assert [h.identities for h in kept.hits] == [19, 16, 13]
+
+    def test_dropping_nothing_does_not_mark_the_candidate_capped(self) -> None:
+        kept = parse_report(self._report([("NC_000001.11", 26.0, 13)]), per_candidate=5)
+        assert kept.capped == frozenset()
+
+    def test_candidates_keep_the_order_blast_reported_them_in(self) -> None:
+        report = multi_query_report({"saRNA-B": 2, "saRNA-A": 2})
+        assert [h.candidate_id for h in parse_report(report).hits] == [
+            "saRNA-B", "saRNA-B", "saRNA-A", "saRNA-A",
+        ]

@@ -10,7 +10,8 @@
 "use strict";
 
 const SCOPE_BUTTON = {transcript:"screen-transcript", genomic:"screen-genomic"};
-const SCOPE_NAME = {transcript:"Transcripts (RefSeq RNA)", genomic:"Promoters (genomic)"};
+const SCOPE_NAME = {transcript:"Human transcripts (RefSeq RNA)",
+                    genomic:"Human promoters (GRCh38 assembly)"};
 const BATCH_SIZES = [1, 5, 10, 15, 25];
 
 // One hue, darker is closer, per ADR 0022. Green to red would read as good to bad, and an
@@ -144,10 +145,21 @@ function pollScreening(screeningId, runId, scope, label, index, total) {
         if (record.status === "running") {
           state.screeningJobs[scope] = {
             status:"running", stage:`${label}: ${record.stage || "working"}`,
-            done:index, total,
+            done:index, total, progress:record.progress || null, id:screeningId,
           };
           renderScreeningStatus();
           setTimeout(tick, 2000);
+          return;
+        }
+        if (record.status === "waiting") {
+          // Not finished and not failed. NCBI still holds the search, so the interface offers
+          // to go back for it rather than reporting a failure and losing the job.
+          state.screeningJobs[scope] = {
+            status:"waiting", stage:record.error || "Still running at NCBI.",
+            done:index, total, id:screeningId, progress:record.progress || null,
+          };
+          renderScreeningStatus();
+          resolve();
           return;
         }
         if (record.status === "error") {
@@ -167,6 +179,22 @@ function pollScreening(screeningId, runId, scope, label, index, total) {
   });
 }
 
+/** Go back to NCBI for a search that outran its wait, by the request id it already has. */
+async function resumeScreening(scope) {
+  const job = state.screeningJobs?.[scope];
+  if (!job?.id) return;
+  state.screeningJobs[scope] = {...job, status:"running", stage:"Checking NCBI again"};
+  renderScreeningStatus();
+  try {
+    await api(`/api/screenings/${job.id}/resume`, {method:"POST"});
+    await pollScreening(job.id, state.result.app.run_id, scope, "collecting", 0, 1);
+  } catch (e) {
+    error(e.message);
+    state.screeningJobs[scope] = {...job, status:"error", stage:e.message};
+  }
+  renderScreeningStatus();
+}
+
 /** Rebuild the merged panel for a saved run, so screenings survive a reload. */
 async function loadSavedScreenings(runId) {
   try {
@@ -176,17 +204,88 @@ async function loadSavedScreenings(runId) {
       mergeScreening(await api(`/api/screenings/${entry.id}`));
       any = entry.scope;
     }
-    if (any) { renderOffTarget(any); renderScreeningStatus(); }
+    // A search left running at NCBI outlives this page, so a reopened run offers to collect
+    // it rather than looking as though nothing was ever started.
+    state.screeningJobs = state.screeningJobs || {};
+    for (const entry of listed.filter(s => s.status === "waiting")) {
+      if (state.screeningJobs[entry.scope]) continue;
+      state.screeningJobs[entry.scope] = {
+        status:"waiting", id:entry.id,
+        stage:entry.error || "Still running at NCBI from an earlier search.",
+      };
+    }
+    if (any) renderOffTarget(any);
+    renderScreeningStatus();
   } catch { /* A run with no screenings is the ordinary case, not an error worth showing. */ }
 }
 
 /* ---------------------------------------------------------------- the controls */
+
+/* The bar. NCBI gives no completion percentage and never has: a search is WAITING or READY,
+ * and the only forecast is RTOE, its own estimate at submission. So the bar shows a true
+ * fraction where one exists (placing hits, and batches finished) and otherwise shows elapsed
+ * against that estimate, labelled as an estimate and never allowed past nine tenths. Once the
+ * estimate is passed it stops pretending and says so. A bar that sat at 99% for twenty
+ * minutes would be worse than no bar. */
+const PHASES = [
+  {key:"submitting", label:"Sending to NCBI"},
+  {key:"waiting", label:"NCBI is searching"},
+  {key:"reading", label:"Reading alignments"},
+  {key:"placing", label:"Placing hits"},
+];
+
+function phaseFraction(progress) {
+  if (!progress) return {fraction:null, note:""};
+  if (progress.phase === "placing" && progress.to_place) {
+    return {fraction: progress.placed / progress.to_place,
+            note: `${progress.placed} of ${progress.to_place}`};
+  }
+  if (progress.phase === "waiting") {
+    const elapsed = Number(progress.elapsed_seconds || 0);
+    const estimate = Number(progress.estimate_seconds || 0);
+    if (estimate > 0 && elapsed < estimate) {
+      // Nine tenths at most: the estimate is NCBI's, not a measurement, and a full bar that
+      // then keeps going reads as a stall rather than as an overrun.
+      return {fraction: Math.min(0.9, elapsed / estimate),
+              note: `${elapsed}s of about ${estimate}s estimated by NCBI`};
+    }
+    return {fraction: null,
+            note: estimate > 0
+              ? `${elapsed}s, longer than the ${estimate}s NCBI estimated`
+              : `${elapsed}s elapsed, with no estimate from NCBI`};
+  }
+  return {fraction: null, note: ""};
+}
+
+function progressBar(job) {
+  if (!job || job.status !== "running") return "";
+  const progress = job.progress || null;
+  const phase = progress?.phase || "submitting";
+  const reached = Math.max(0, PHASES.findIndex(p => p.key === phase));
+  const {fraction, note} = phaseFraction(progress);
+  const batch = job.total > 1 ? `Batch ${(job.done || 0) + 1} of ${job.total} · ` : "";
+  const label = PHASES[reached]?.label || "Working";
+  const bar = fraction === null
+    ? `<span class="bar indeterminate"><i></i></span>`
+    : `<span class="bar"><i style="width:${Math.round(fraction * 100)}%"></i></span>`;
+  return `<div class="screen-progress" role="group" aria-label="Screening progress">`
+    + `<div class="phase-row">`
+    + PHASES.map((p, index) => `<span class="phase${index < reached ? " done" : ""}`
+        + `${index === reached ? " now" : ""}">${escapeHTML(p.label)}</span>`).join("")
+    + `</div>${bar}`
+    + `<p class="hint">${escapeHTML(batch + label)}`
+    + `${note ? ` · ${escapeHTML(note)}` : ""}`
+    + `${fraction === null && phase === "waiting"
+        ? ". NCBI reports only started or finished, so there is no percentage to show."
+        : ""}</p></div>`;
+}
 
 function renderScreeningStatus() {
   const jobs = state.screeningJobs || {};
   const states = Object.values(jobs).map(j => j.status);
   const done = Object.keys(screenings()).length;
   $("offtarget-status").textContent = states.includes("running") ? "RUNNING"
+    : states.includes("waiting") ? "AT NCBI"
     : states.includes("error") ? (done ? "PARTIAL" : "FAILED")
     : done ? "COMPLETE" : "NOT RUN";
   $("offtarget-progress").textContent = states.includes("running")
@@ -196,14 +295,35 @@ function renderScreeningStatus() {
     const lane = $(`screen-state-${scope}`), job = jobs[scope];
     if (lane) {
       lane.textContent = job ? (job.stage || job.status) : "";
-      lane.className = "screen-state " + (job ? job.status : "")
-        + (job?.status === "running" ? " is-loading" : "");
+      lane.className = "screen-state " + (job ? job.status : "");
+    }
+    const bar = $(`screen-bar-${scope}`);
+    if (bar) {
+      bar.innerHTML = progressBar(job)
+        + (job?.status === "waiting"
+            ? `<p class="hint warn">${escapeHTML(job.stage || "")} `
+              + `You can close this page and come back: NCBI keeps the search for about a `
+              + `day. <button type="button" class="link" data-resume="${scope}">`
+              + `Check NCBI again</button></p>`
+            : "");
     }
     const button = $(SCOPE_BUTTON[scope]);
     if (button) button.disabled = job?.status === "running";
   }
   renderBatchControls();
 }
+
+/* Measured on 11 October 2026 by reading NCBI's own RTOE at submission: a single 19-mer
+ * against the human assembly is estimated at about eight hours, while the same query against
+ * refseq_rna is estimated at thirty seconds. Word size and E-value change neither. NCBI
+ * serves the genome databases from a queue, not from its interactive path (ADR 0024), so the
+ * promoter search is an errand to come back to rather than something to sit in front of. */
+const SCOPE_WARNING = {
+  genomic:
+    "NCBI runs genome searches on a queue: it usually estimates hours, not minutes, whatever "
+    + "the search asks for. Start it, carry on working, and collect it when it is done. The "
+    + "request is kept at NCBI for about a day.",
+};
 
 function renderBatchControls() {
   const host = $("offtarget-batch");
@@ -231,6 +351,7 @@ function renderBatchControls() {
         ? `<button type="button" data-batch-mode="selection" class="secondary">`
           + `Ticked (${ticked})</button>` : "")
     + `</div>`
+    + (SCOPE_WARNING[scope] ? `<p class="hint warn">${escapeHTML(SCOPE_WARNING[scope])}</p>` : "")
     + `<p class="hint">${!done.size
         ? `Nothing screened yet in this scope. Fewer candidates finish sooner: a genomic `
           + `search of fifty can take longer than NCBI will hold it.`
@@ -323,6 +444,16 @@ function summaryLine(held, entries, core, genomic) {
   const when = dates.length
     ? new Date(Math.max(...dates)).toLocaleDateString() : "an unknown date";
   const databases = [...new Set(held.searches.map(s => s.parameters.database))].join(", ");
+  // The two scopes are human in different ways, and saying so alike would overstate one of
+  // them: the assembly holds one species, RefSeq RNA holds every species and is narrowed by
+  // a parameter NCBI does not document (ADR 0024).
+  const byDatabase = held.searches.some(s => s.parameters.species_restriction === "database");
+  const humanNote = byDatabase
+    ? "Human only: the database searched is the GRCh38 reference assembly, which contains "
+      + "one species, so nothing of another organism could be returned."
+    : "Human only: RefSeq RNA spans every species NCBI holds, and this search was narrowed to "
+      + "human by an Entrez query (txid9606). That is a filter applied to the search, not a "
+      + "property of the database.";
   const findings = [
     exact ? `<b>${exact}</b> with a full-length exact match elsewhere` : "",
     strong ? `<b>${strong}</b> matching at least ${threshold} of ${core} bases, Wang 2015's 80%` : "",
@@ -330,10 +461,12 @@ function summaryLine(held, entries, core, genomic) {
     inWindow ? `<b>${inWindow}</b> with a hit near another gene's start site, inside this run's own window` : "",
     quiet ? `<b>${quiet}</b> with no alignments at all` : "",
   ].filter(Boolean);
-  return `<div class="ot-summary"><p><b>${escapeHTML(SCOPE_NAME[state.screeningScope])}</b> · `
+  return `<div class="ot-summary"><p><b>${escapeHTML(SCOPE_NAME[state.screeningScope])}</b> `
+    + `<span class="chip">HUMAN ONLY</span> · `
     + `${entries.length} candidate${entries.length === 1 ? "" : "s"} screened across `
     + `${held.searches.length} search${held.searches.length === 1 ? "" : "es"}, latest `
     + `${escapeHTML(when)} · ${escapeHTML(databases)}</p>`
+    + `<p class="hint">${escapeHTML(humanNote)}</p>`
     + `<p>${findings.length ? findings.join(". ") + "." : "Nothing found."}</p>`
     + `<p class="hint">Sequence similarity is not measured binding, and nothing here changes a `
     + `rank. Wang 2015 applies 80% to control duplexes rather than to candidate off-targets, so `
@@ -626,6 +759,8 @@ document.addEventListener("click", (event) => {
   if (event.target.closest("[data-expand-all]")) {
     state.screeningExpandAll = true; renderOffTarget(); return;
   }
+  const resume = event.target.closest("[data-resume]");
+  if (resume) { resumeScreening(resume.dataset.resume); return; }
   const row = event.target.closest("[data-screenrow]");
   if (row) {
     const id = row.dataset.screenrow;

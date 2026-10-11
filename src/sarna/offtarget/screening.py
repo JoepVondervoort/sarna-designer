@@ -20,8 +20,8 @@ from sarna.offtarget.models import (
 from sarna.offtarget.ncbi import (
     MINIMUM_POLL_SECONDS,
     BlastClient,
-    BlastError,
     BlastStillRunning,
+    SubmittedSearch,
     candidate_sequences,
     parameters_for,
 )
@@ -48,9 +48,74 @@ Fifteen finishes, and the next fifteen are one button away.
 """
 
 MAX_WAIT_SECONDS = 1800.0
-"""Give up after half an hour. A search that has not finished by then will not be waited for."""
+"""Stop *waiting* after half an hour.
 
-ProgressReporter = Callable[[str], None]
+Not "give up": NCBI holds a request id for about a day, so a search that overruns this is
+still there to be collected. :exc:`SearchStillAtNcbi` carries the id out so the interface can
+offer to come back for it, which is the difference between a slow answer and no answer.
+"""
+
+MAX_PLACEMENTS = 300
+"""Most genomic hits placed against annotated start sites in one screening.
+
+Placement is one Ensembl request per uncached megabase block, measured at 1,022 requests for
+3,000 scattered hits, so an unbounded screening spends minutes on alignments nobody will read.
+The strongest are placed first and the rest are reported without a distance, which the record
+states rather than leaving the difference invisible.
+"""
+
+ProgressReporter = Callable[[str, "Mapping[str, Any] | None"], None]
+"""Called with a sentence and, where there is one, the countable state behind it.
+
+A sentence cannot drive a progress bar and a number cannot be read aloud, so both travel.
+"""
+
+
+def _silent(_stage: str, _detail: "Mapping[str, Any] | None" = None) -> None:
+    """Swallow progress when nobody asked for it."""
+
+
+class SearchStillAtNcbi(Exception):
+    """The wait budget ran out while the search was still running.
+
+    Not an error. The search exists, NCBI is still working on it, and the request id is the
+    handle to collect it later.
+    """
+
+    def __init__(
+        self,
+        request_id: str,
+        waited: float,
+        searched: Sequence[str],
+        estimate_seconds: int = 0,
+    ) -> None:
+        """Carry everything a resume needs, and NCBI's own estimate if it gave one."""
+        super().__init__(
+            
+                f"NCBI estimates about {_plainly(estimate_seconds)} for search {request_id}, "
+                f"which is longer than this app will sit and wait. The search is queued at "
+                f"NCBI and can be collected when it is done; the designs are unaffected."
+                if estimate_seconds > waited
+                else
+                f"NCBI search {request_id} has run for {_plainly(waited)} without finishing. "
+                f"It is still queued there and can be collected when it is done; the designs "
+                f"are unaffected."
+            
+        )
+        self.request_id = request_id
+        self.waited = waited
+        self.searched = tuple(searched)
+        self.estimate_seconds = estimate_seconds
+
+
+def _plainly(seconds: float) -> str:
+    """Return a duration a reader can judge at a glance rather than count zeros in."""
+    seconds = int(seconds)
+    if seconds < 90:
+        return f"{seconds} seconds"
+    if seconds < 5400:
+        return f"{round(seconds / 60)} minutes"
+    return f"{seconds / 3600:.1f} hours"
 
 
 def run_screening(
@@ -95,8 +160,7 @@ def run_screening(
         BlastError: If the search could not be run or did not finish in time.
         ValueError: If there is nothing to screen, or the genomic scope has no lookup.
     """
-    say = progress or (lambda _stage: None)
-    parameters = parameters_for(scope)
+    say = progress or _silent
     if scope == GENOMIC_SCOPE and transcripts is None:
         raise ValueError(
             "the genomic scope places each hit against annotated start sites, so it needs a "
@@ -112,20 +176,97 @@ def run_screening(
             else "none of the chosen candidates passed the gates in this run"
         )
 
-    say(f"Submitting {len(sequences)} sequences to NCBI")
+    say(f"Submitting {len(sequences)} sequences to NCBI",
+        {"phase": "submitting", "candidates": len(sequences)})
     submitted = client.submit(sequences, scope)
-    say(f"NCBI accepted the search (id {submitted.request_id})")
+    say(f"NCBI accepted the search (id {submitted.request_id})",
+        {"phase": "waiting", "request_id": submitted.request_id,
+         "estimate_seconds": submitted.estimated_seconds, "elapsed_seconds": 0,
+         "candidates": len(sequences)})
+    return collect_screening(
+        run_id=run_id, candidates=candidates, scope=scope, core_length=core_length,
+        client=client, request_id=submitted.request_id, searched=tuple(sequences),
+        estimate_seconds=submitted.estimated_seconds, progress=progress,
+        transcripts=transcripts, window=window, sleep=sleep, now=now,
+        poll_seconds=poll_seconds, max_wait=max_wait,
+    )
+
+
+def collect_screening(
+    run_id: str,
+    candidates: Sequence[Mapping[str, Any]],
+    scope: str,
+    core_length: int,
+    client: BlastClient,
+    request_id: str,
+    searched: Sequence[str],
+    estimate_seconds: int = 0,
+    progress: ProgressReporter | None = None,
+    transcripts: TranscriptLookup | None = None,
+    window: tuple[int, int] | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+    now: Callable[[], float] = time.monotonic,
+    poll_seconds: float = MINIMUM_POLL_SECONDS,
+    max_wait: float = MAX_WAIT_SECONDS,
+    waited_already: float = 0.0,
+) -> ScreeningRecord:
+    """Wait for a submitted search, read it, place it, and build the dated record.
+
+    Separate from submission so a search that outlived its wait budget can be collected later
+    from its request id instead of being thrown away and run again (ADR 0024).
+
+    Args:
+        run_id: The design run being screened.
+        candidates: The run's candidate records, for the on-target split.
+        scope: ``transcript`` or ``genomic``.
+        core_length: Duplex core length, for judging a match complete.
+        client: The BLAST client.
+        request_id: NCBI's id for a search already submitted.
+        searched: The candidates that went into that search, in the order they were sent.
+        estimate_seconds: NCBI's own RTOE for this search, for the first wait and the bar.
+        progress: Called with each stage and its countable state, for the interface.
+        transcripts: Looks up annotated transcripts near a genomic hit.
+        window: The run's own design window, used only to flag hits that fall inside it.
+        sleep: Injected so tests need not wait.
+        now: Monotonic clock, injected for the same reason.
+        poll_seconds: Never below NCBI's requested minimum.
+        max_wait: Stop waiting after this long.
+        waited_already: Seconds an earlier attempt spent waiting, so the interface can show
+            the total rather than restarting the clock.
+
+    Raises:
+        SearchStillAtNcbi: If the budget runs out while NCBI is still working.
+        BlastError: If the search failed or its request id has expired.
+    """
+    say = progress or _silent
+    parameters = parameters_for(scope)
+    sequences = {name: "" for name in searched}
 
     deadline = now() + max_wait
     interval = max(poll_seconds, MINIMUM_POLL_SECONDS)
+    submitted = SubmittedSearch(
+        request_id=request_id, estimated_seconds=estimate_seconds, parameters=parameters,
+    )
     # NCBI answers every submission with RTOE, its own estimate of how long the search will
     # take, and the search cannot be ready before then. Waiting it out costs no latency and
     # removes every poll that could only have returned WAITING: at the fifteen-second floor a
     # seven-minute search made twenty-eight requests against a shared service ADR 0019 notes
     # can block the whole institution's address. Capped at half the budget so a wild estimate
     # cannot turn an early finish into a wait for the deadline, and floored at the rate limit.
-    wait_next = min(max(float(submitted.estimated_seconds), interval), max_wait / 2)
-    waited = 0.0
+    # NCBI's own estimate is the one forecast available, and when it dwarfs the wait budget
+    # there is nothing to be gained by polling for half an hour: measured, a 19-mer against
+    # the human assembly is estimated at about eight hours, because NCBI serves the genome
+    # databases from a queue rather than from its interactive path (ADR 0024).
+    #
+    # One look first, at the rate limit, because an estimate is not a measurement and a job
+    # that is already done should be collected rather than handed back. After that, stop
+    # waiting and return the request id.
+    beyond_budget = submitted.estimated_seconds > max_wait
+    wait_next = (
+        interval if beyond_budget
+        else min(max(float(submitted.estimated_seconds), interval), max_wait / 2)
+    )
+    waited = waited_already
     while True:
         sleep(wait_next)
         waited += wait_next
@@ -136,14 +277,21 @@ def run_screening(
             report = client.fetch(submitted.request_id, parameters)
             break
         except BlastStillRunning:
-            say(f"NCBI is still searching ({int(waited)}s elapsed)")
-            if now() > deadline:
-                raise BlastError(
-                    f"NCBI search {submitted.request_id} had not finished after "
-                    f"{int(max_wait)}s. It may still complete; the designs are unaffected."
+            say(
+                f"NCBI is still searching ({int(waited)}s elapsed)",
+                {"phase": "waiting", "request_id": submitted.request_id,
+                 "estimate_seconds": submitted.estimated_seconds,
+                 "elapsed_seconds": int(waited), "candidates": len(sequences)},
+            )
+            if beyond_budget or now() > deadline:
+                raise SearchStillAtNcbi(
+                    submitted.request_id, waited, tuple(sequences),
+                    estimate_seconds=submitted.estimated_seconds,
                 ) from None
 
-    say(f"Reading {len(report.hits)} alignments")
+    say(f"Reading {len(report.hits)} alignments",
+        {"phase": "reading", "alignments": len(report.hits),
+         "candidates": len(sequences)})
     # The candidate's own promoter is a perfect match to itself, so without this every genomic
     # candidate reports at least one perfect hit and the column means nothing (ADR 0023).
     # Only the genomic scope: a promoter is usually not transcribed, and the only handle in a
@@ -152,9 +300,24 @@ def run_screening(
     hits, own = split_on_target(report.hits, loci)
 
     proximities: tuple[PromoterProximity, ...] = ()
+    unplaced = 0
     if scope == GENOMIC_SCOPE and transcripts is not None:
-        say(f"Placing {len(hits)} hits against annotated start sites")
-        proximities = tuple(place_hit(hit, transcripts, window) for hit in hits)
+        # Strongest first, and bounded: placement costs an Ensembl request per uncached block,
+        # and the weakest alignments are the ones nobody will open.
+        ordered = sorted(hits, key=lambda h: h.bit_score, reverse=True)
+        to_place, rest = ordered[:MAX_PLACEMENTS], ordered[MAX_PLACEMENTS:]
+        unplaced = len(rest)
+        placed: list[PromoterProximity] = []
+        for index, hit in enumerate(to_place, start=1):
+            if index == 1 or index % 20 == 0 or index == len(to_place):
+                say(
+                    f"Placing hits against annotated start sites ({index} of "
+                    f"{len(to_place)})",
+                    {"phase": "placing", "placed": index, "to_place": len(to_place),
+                     "candidates": len(sequences)},
+                )
+            placed.append(place_hit(hit, transcripts, window))
+        proximities = tuple(placed)
 
     passing = sum(1 for c in candidates if c.get("rank") is not None)
     notes = []
@@ -180,6 +343,12 @@ def run_screening(
         notes.append(
             "This run has no genomic coordinates, so a hit at a candidate's own target site "
             "could not be told apart from one elsewhere and none were removed."
+        )
+    if unplaced:
+        notes.append(
+            f"The {MAX_PLACEMENTS} strongest alignments were placed against annotated start "
+            f"sites; {unplaced} weaker ones were not, so they carry no distance. They are "
+            f"still counted and still listed."
         )
     return ScreeningRecord(
         run_id=run_id,

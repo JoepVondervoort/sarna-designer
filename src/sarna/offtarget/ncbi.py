@@ -24,6 +24,7 @@ declares a DTD or entities, because `xml.etree` expands entities and a crafted r
 otherwise exhaust memory.
 """
 
+import heapq
 import re
 import xml.etree.ElementTree as ElementTree
 from collections.abc import Collection, Mapping, Sequence
@@ -34,6 +35,7 @@ import httpx
 
 from sarna import settings
 from sarna.offtarget.models import (
+    BY_DATABASE,
     GENOMIC_SCOPE,
     TRANSCRIPT_SCOPE,
     OffTargetHit,
@@ -45,8 +47,23 @@ BASE_URL = "https://blast.ncbi.nlm.nih.gov/Blast.cgi"
 TRANSCRIPT_DATABASE = "refseq_rna"
 """RefSeq RNA: could this duplex silence an mRNA? The classic siRNA off-target question."""
 
-GENOMIC_DATABASE = "refseq_genomic"
-"""RefSeq genomic: could this duplex target another promoter? The saRNA-specific question."""
+GENOMIC_DATABASE = "GPIPE/9606/current/ref_top_level"
+"""The human GRCh38 reference assembly: could this duplex target another human promoter?
+
+**Was `refseq_genomic`, which is not a database NCBI offers any more.** It appears nowhere in
+NCBI's BLAST database directory and nowhere in the database list on NCBI's own blastn page.
+The URL API still accepted it and still returned a request id, so the search ran, against
+something that is certainly not 3.3 Gbp of human genome: a real 22 candidate run was still
+unfinished after the full half-hour budget and returned nothing at all.
+
+Measured sizes from NCBI's own metadata, which is the whole argument: this assembly is
+3,272,089,205 bases in 639 sequences, where `refseq_rna` is 251,911,205,044 and `core_nt` is
+1,086,004,251,965. Searching a 19-mer at word size 7 costs roughly in proportion, so pointing
+the genomic scope at the one genome it is asking about is worth two orders of magnitude.
+
+This is the name NCBI's own blastn page submits for "Human genomic plus transcript", minus the
+transcript half, which this project searches separately as its other scope (ADR 0024).
+"""
 
 MINIMUM_POLL_SECONDS = 15.0
 """NCBI asks callers not to poll more often than this. Polling faster risks an IP block."""
@@ -124,9 +141,16 @@ def parameters_for(scope: str) -> SearchParameters:
         ValueError: If the scope is not one this project searches.
     """
     if scope == TRANSCRIPT_SCOPE:
+        # RefSeq RNA spans every species RefSeq holds, so this scope is human *by filter*.
         return SearchParameters(scope=scope, database=TRANSCRIPT_DATABASE)
     if scope == GENOMIC_SCOPE:
-        return SearchParameters(scope=scope, database=GENOMIC_DATABASE)
+        # The assembly contains one species, so no filter is sent and none is needed. That
+        # also drops a reliance on ENTREZ_QUERY, which the URL API does not document and which
+        # its own page says should not be relied upon.
+        return SearchParameters(
+            scope=scope, database=GENOMIC_DATABASE, organism="",
+            species_restriction=BY_DATABASE,
+        )
     raise ValueError(
         f"unknown search scope {scope!r}; expected {TRANSCRIPT_SCOPE!r} or {GENOMIC_SCOPE!r}"
     )
@@ -336,32 +360,32 @@ def parse_report(
     except ElementTree.ParseError as error:
         raise BlastError(f"could not parse NCBI's XML reply: {error}") from error
 
-    hits: list[OffTargetHit] = []
-    kept: dict[str, int] = {}
+    # A bounded best-of per candidate rather than the first N encountered. BLAST orders a
+    # report by database sequence, and on a chromosome-level database one sequence carries
+    # thousands of alignments, so taking them in document order fills the budget with
+    # chromosome 1's weak partial matches and never reaches chromosome 7's strong one. The
+    # heap keeps the highest bit scores and stays bounded, which is what the cap is for.
+    best: dict[str, list[tuple[float, int, OffTargetHit]]] = {}
+    order: list[str] = []
     capped: set[str] = set()
+    seen = 0
     for iteration in root.iter("Iteration"):
         candidate = _text(iteration, "Iteration_query-def") or ""
         # BLAST keeps only the first token of a FASTA header as the id in some views.
         candidate = candidate.split()[0] if candidate.split() else candidate
+        if candidate not in best:
+            best[candidate] = []
+            order.append(candidate)
         for hit in iteration.iter("Hit"):
-            # Per candidate, so a promiscuous query cannot consume a later query's budget.
-            # Moving on to the next iteration rather than returning is the whole fix.
-            if kept.get(candidate, 0) >= per_candidate:
-                capped.add(candidate)
-                break
             accession = _text(hit, "Hit_accession") or _text(hit, "Hit_id") or "unknown"
             title = _text(hit, "Hit_def") or ""
             for hsp in hit.iter("Hsp"):
-                if kept.get(candidate, 0) >= per_candidate:
-                    capped.add(candidate)
-                    break
-                kept[candidate] = kept.get(candidate, 0) + 1
                 frame = _int(hsp, "Hsp_hit-frame", 1)
                 query_from = _int(hsp, "Hsp_query-from", 0)
                 aligned = _text(hsp, "Hsp_qseq")
                 midline = _text(hsp, "Hsp_midline")
                 detailed = bool(aligned and midline)
-                hits.append(
+                parsed = (
                     OffTargetHit(
                         candidate_id=candidate,
                         accession=accession,
@@ -383,6 +407,20 @@ def parse_report(
                         has_alignment_detail=detailed,
                     )
                 )
+                # Per candidate, so a promiscuous query cannot consume a later query's budget.
+                seen += 1
+                held = best[candidate]
+                heapq.heappush(held, (parsed.bit_score, -seen, parsed))
+                if len(held) > per_candidate:
+                    heapq.heappop(held)
+                    capped.add(candidate)
+    hits: list[OffTargetHit] = []
+    for candidate in order:
+        # Strongest first within each candidate, and candidates in the order BLAST reported
+        # them, so the output is stable rather than heap order.
+        hits.extend(
+            parsed for _score, _tie, parsed in sorted(best[candidate], reverse=True)
+        )
     return ParsedReport(hits=tuple(hits), capped=frozenset(capped))
 
 

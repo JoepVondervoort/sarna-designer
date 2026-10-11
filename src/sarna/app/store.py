@@ -79,11 +79,22 @@ class RunStore:
                 "request_id TEXT, result BLOB, error TEXT, "
                 "FOREIGN KEY(run_id) REFERENCES runs(id))"
             )
+            screening_columns = {
+                row["name"] for row in connection.execute("PRAGMA table_info(screenings)")
+            }
+            if "progress" not in screening_columns:
+                # Added for the progress bar. A stage sentence says what is happening; this
+                # says how far along it is, which a sentence cannot. Nullable, so screenings
+                # saved before it exists stay readable.
+                connection.execute("ALTER TABLE screenings ADD COLUMN progress TEXT")
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS screenings_by_run ON screenings(run_id, created)"
             )
-            connection.execute("PRAGMA user_version=4")
+            connection.execute("PRAGMA user_version=5")
             connection.execute(
+                # Only 'running' is interrupted by a restart. A 'waiting' screening is not
+                # running here at all: it is queued at NCBI under a request id that outlives
+                # this process, so it stays collectable (ADR 0024).
                 "UPDATE screenings SET status='error', stage='Interrupted', "
                 "error='The application stopped while this screening was running. Start it "
                 "again.' WHERE status='running'"
@@ -262,17 +273,30 @@ class RunStore:
         return screening_id
 
     def screening_progress(
-        self, screening_id: str, stage: str, request_id: str | None = None
+        self,
+        screening_id: str,
+        stage: str,
+        request_id: str | None = None,
+        progress: dict[str, Any] | None = None,
     ) -> None:
-        """Record how far a screening has got, so the interface can say rather than spin."""
+        """Record how far a screening has got, so the interface can say rather than spin.
+
+        ``progress`` carries the countable parts: which phase, how long NCBI said it would
+        take, how long it has actually taken, and how many hits have been placed. A bar needs
+        numbers; ``stage`` is a sentence and cannot supply them.
+        """
+        fields = ["stage=?"]
+        values: list[Any] = [stage]
+        if request_id is not None:
+            fields.append("request_id=?")
+            values.append(request_id)
+        if progress is not None:
+            fields.append("progress=?")
+            values.append(json.dumps(progress, separators=(",", ":")))
+        values.append(screening_id)
         with self.connect() as connection:
-            if request_id is None:
-                connection.execute(
-                    "UPDATE screenings SET stage=? WHERE id=?", (stage, screening_id))
-            else:
-                connection.execute(
-                    "UPDATE screenings SET stage=?, request_id=? WHERE id=?",
-                    (stage, request_id, screening_id))
+            connection.execute(
+                f"UPDATE screenings SET {', '.join(fields)} WHERE id=?", tuple(values))
 
     def finish_screening(self, screening_id: str, result: dict[str, Any]) -> None:
         """Store a completed screening."""
@@ -281,6 +305,51 @@ class RunStore:
                 "UPDATE screenings SET status='complete', stage='Complete', result=? WHERE id=?",
                 (zlib.compress(json.dumps(result, separators=(",", ":")).encode(), level=6),
                  screening_id),
+            )
+
+    def pause_screening(
+        self,
+        screening_id: str,
+        request_id: str,
+        reason: str,
+        searched: list[str],
+        waited_seconds: float = 0.0,
+        estimate_seconds: int = 0,
+    ) -> None:
+        """Record that a search is still running at NCBI and can be collected later.
+
+        A fourth status beside running, complete and error, because "we stopped waiting" is
+        none of those: the job exists, nothing failed, and the request id is the handle to
+        finish it (ADR 0024). What is stored is only enough to resume, never a partial result,
+        which would be a finding nobody made.
+        """
+        waiting = {
+            "candidates_searched": searched,
+            "waited_seconds": waited_seconds,
+            "estimate_seconds": estimate_seconds,
+            "request_id": request_id,
+        }
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE screenings SET status='waiting', stage='Still running at NCBI', "
+                "request_id=?, error=?, result=? WHERE id=?",
+                (request_id, reason,
+                 zlib.compress(json.dumps(waiting, separators=(",", ":")).encode(), level=6),
+                 screening_id),
+            )
+
+    def resume_screening(self, screening_id: str) -> None:
+        """Mark a waiting screening as being collected again.
+
+        Without this the record stays ``waiting`` while a worker is already collecting it, so
+        the interface offers to collect it a second time and a researcher can queue the same
+        work twice over.
+        """
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE screenings SET status='running', stage='Checking NCBI again', "
+                "error=NULL WHERE id=? AND status='waiting'",
+                (screening_id,),
             )
 
     def fail_screening(self, screening_id: str, reason: str) -> None:
@@ -306,6 +375,7 @@ class RunStore:
             "id": row["id"], "run_id": row["run_id"], "scope": row["scope"],
             "created": row["created"], "status": row["status"], "stage": row["stage"],
             "request_id": row["request_id"], "error": row["error"],
+            "progress": json.loads(row["progress"]) if row["progress"] else None,
         }
         if row["result"] is not None:
             record["result"] = json.loads(zlib.decompress(row["result"]))

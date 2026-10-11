@@ -6,7 +6,9 @@ traceability outranks clean code: every rule carries a citation, every verdict c
 **State:** gene symbol → promoter → ranked candidates → interactive page all work.
 `design_sarnas(promoter, config)` is the engine; `EnsemblClient` resolves a gene to a promoter;
 `sarna.regulatory` annotates it; `sarna.view.html.render` writes a self-contained browser.
-1,915 tests passed in 46 s, live-network tests excluded; mypy strict and Ruff clean.
+1,931 tests passed in 49 s, live-network tests excluded; mypy strict and Ruff clean.
+**Verified, not assumed:** the whole suite passes under `unshare -rn`, with no network
+namespace at all, so it genuinely reaches no external service.
 **The unit suite reaches no external service.** It used to: the screening route built a real
 `BlastClient`, so every full run queued a live BLAST job at NCBI and then blocked closing the
 router until it came back. `DesignService.blast_factory` and `poll_sleep` are the seams that
@@ -61,7 +63,8 @@ the earlier proposal to change the default window to a preference.
 Use `.venv/bin/python`; there is a miniconda base environment that must stay untouched.
 
 ```bash
-.venv/bin/python -m pytest -q                      # 1,915 tests; excludes live network
+.venv/bin/python -m pytest -q                      # 1,931 tests; excludes live network
+unshare -rn .venv/bin/python -m pytest -q          # same, with no network at all
 .venv/bin/python -m pytest -m network              # 8 live-Ensembl tests, excluded by default
 .venv/bin/python -m pytest -m tracks               # needs the AF22 bigWigs; skips if absent
 .venv/bin/python -m mypy src tests scripts         # strict
@@ -172,6 +175,7 @@ Read the ADR before reopening its question; each records the alternatives and wh
 | Transcript expression is evidence beside the reference, never a reordering | 0021 |
 | Rank is shaded in one hue, never green to red | 0022 |
 | Wang's own 80% threshold, screening in batches, and the on-target hit | 0023 |
+| The human assembly for genomic screening, and collecting a slow search | 0024 |
 
 `docs/scientific/`:
 
@@ -308,6 +312,55 @@ Headline results:
   app.js's globals. **It must be inlined in `frozen_page` and listed in the static route**, and
   `showResult` calls into it through a `typeof` guard because a frozen archive runs app.js to
   completion before this file is parsed.
+- **The promoter scope was searching the wrong database; read
+  [ADR 0024](docs/adr/0024-human-assembly-and-collectable-searches.md).** It sent
+  `DATABASE=refseq_genomic`, a name that appears **zero times** in NCBI's BLAST database
+  directory and **zero times** in the database list on NCBI's own blastn page. The URL API
+  accepted it and returned a request id anyway, so the search ran, against something that is
+  not 3.3 Gbp of human genome, and a real run hit the full half-hour budget and returned
+  nothing. It is now `GPIPE/9606/current/ref_top_level`, the human GRCh38 reference assembly,
+  which is what NCBI's own page submits.
+  **Database size was not the reason, and measuring refuted the guess.** Reading NCBI's own
+  RTOE at submission on 11 October 2026: the human assembly is estimated at **28,502 s, about
+  8 hours**, and so is every other genome database (`human_genome`, `refseq_genomes`,
+  `RefSeqGene`, `refseq_select_rna`, all 27,757 to 28,745 s). Word size 11 and `EXPECT=10`
+  change nothing (28,747 s and 28,765 s). Meanwhile `refseq_rna` and `core_nt` are both
+  estimated at **30 s**, and `core_nt` is 332 times the size of the human genome. NCBI queues
+  the genome databases and serves the others interactively; that is the whole explanation, so
+  do not try to tune this with parameters. Lowering `EXPECT` would also lose findings: a 16 of
+  19 match on a 3 Gbp database has an E-value in the hundreds, so Wang's 80% threshold is only
+  visible *because* `EXPECT` is 1000. `core_nt` restricted to human genomic molecules does run
+  in 27 to 40 s, but its hits are RefSeqGene records and clones with no chromosome
+  coordinates, and restricting to chromosome-sized RefSeq records returns nothing, because
+  `core_nt` does not hold the assembly. **There is no fast remote route to a human
+  chromosome-level search.**
+  So a search whose RTOE exceeds the wait budget gets **one** poll at the rate limit and is
+  then handed back with its request id, and the interface says up front that genome searches
+  are an errand to collect rather than something to wait for.
+  **The one route to an interactive promoter search is a local BLAST+ backend, and ADR 0019
+  rejected it on a wrong number:** it says "roughly 10 GB of database", and the human genome
+  BLAST database is 1,157,233,426 bytes, about 1.16 GB. `BlastClient` is already the seam.
+  Undecided; worth putting to the user.
+  The assembly holds one species, so the genomic scope sends **no** `ENTREZ_QUERY`. That
+  matters beyond speed: `ENTREZ_QUERY` is not a documented URL API parameter and NCBI's page
+  says parameters it does not list "should not be relied upon". The transcript scope still
+  depends on it, so the two scopes are human in different ways and
+  `SearchParameters.species_restriction` records which; the panel words them differently on
+  purpose. Moving the transcript scope to `GPIPE/9606/current/rna` is an open question, not
+  decided.
+  **Running out of patience is now a fourth status, `waiting`, not an error.** NCBI holds a
+  request id for about a day, so `SearchStillAtNcbi` carries it out, `store.pause_screening`
+  keeps it, and `collect_screening` finishes the original job rather than queueing a duplicate.
+  A `waiting` screening survives an application restart; a `running` one does not, because
+  `running` is this process's work and `waiting` is NCBI's.
+  Two quieter fixes in the same area: the per-candidate cap is a bounded best-of **by bit
+  score**, because BLAST groups a report by database sequence and on chromosomes the first 200
+  alignments are all chromosome 1's weak ones; and placement is bounded at the 300 strongest,
+  measured at 1,022 Ensembl requests for 3,000 scattered hits.
+  **The progress bar may only claim a fraction it has.** NCBI reports started or finished and
+  nothing between, so the placing phase shows a real fraction, the waiting phase shows elapsed
+  against NCBI's own RTOE capped at nine tenths, and past the estimate it stops filling and
+  says so. The browser check calls `progressBar` with crafted states and asserts all of that.
 - **The experimental cell line control is nearly inert, and now says so.** Measured: **1 of the
   registry's 24 (cell line x evidence axis) pairs is available**, AF22 chromatin, and that one
   needs the chromatin option switched on and the bigWigs installed. The field never touches a

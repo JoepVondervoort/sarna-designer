@@ -2,7 +2,7 @@
 
 import logging
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -39,6 +39,8 @@ from sarna.offtarget.ncbi import BlastClient
 from sarna.offtarget.proximity import BlockedTranscripts
 from sarna.offtarget.screening import (
     DEFAULT_CANDIDATES,
+    SearchStillAtNcbi,
+    collect_screening,
     run_screening,
     specificity_table,
 )
@@ -162,6 +164,13 @@ class DesignService:
                 that cannot pass arguments must still be able to avoid a real wait.
         """
         client = blast_client or self.blast_factory()
+
+        def reporter(stage: str, detail: Mapping[str, Any] | None = None) -> None:
+            """Write both the sentence and the numbers behind it, for the progress bar."""
+            self.store.screening_progress(
+                screening_id, stage, progress=dict(detail) if detail else None
+            )
+
         try:
             snapshot = self.store.snapshot(run_id)
             candidates = snapshot["candidates"]
@@ -172,7 +181,7 @@ class DesignService:
                 scope=scope,
                 core_length=core,
                 client=client,
-                progress=lambda stage: self.store.screening_progress(screening_id, stage),
+                progress=reporter,
                 transcripts=self._transcript_lookup() if scope == GENOMIC_SCOPE else None,
                 window=self._run_window(snapshot),
                 sleep=sleep if sleep is not None else self.poll_sleep,
@@ -183,8 +192,85 @@ class DesignService:
                 **record.to_dict(),
                 "specificity": specificity_table(record, core),
             })
+        except SearchStillAtNcbi as pending:
+            # Not a failure. NCBI holds a request id for about a day, so the search exists and
+            # can be collected; discarding it is what cost a researcher a whole genomic lane.
+            LOGGER.info("screening %s is still running at NCBI: %s", screening_id, pending)
+            self.store.pause_screening(
+                screening_id, pending.request_id, str(pending), list(pending.searched),
+                waited_seconds=pending.waited,
+                estimate_seconds=pending.estimate_seconds,
+            )
         except Exception as error:
             LOGGER.warning("screening %s failed: %s", screening_id, error)
+            self.store.fail_screening(screening_id, str(error))
+        finally:
+            if blast_client is None:
+                client.close()
+
+    def resume(
+        self,
+        screening_id: str,
+        blast_client: BlastClient | None = None,
+        sleep: Callable[[float], None] | None = None,
+    ) -> None:
+        """Collect a search that outran its wait, from the request id NCBI gave it.
+
+        Never raises, for the same reason :meth:`screen` does not: a screening is an optional
+        extra. A second timeout simply leaves the record waiting again, with the total time
+        carried forward so the interface can say how long it has really been.
+        """
+        client = blast_client or self.blast_factory()
+
+        def reporter(stage: str, detail: Mapping[str, Any] | None = None) -> None:
+            self.store.screening_progress(
+                screening_id, stage, progress=dict(detail) if detail else None
+            )
+
+        try:
+            held = self.store.screening(screening_id)
+            request_id, pending = held.get("request_id"), held.get("result") or {}
+            searched = pending.get("candidates_searched") or []
+            if not request_id or not searched:
+                raise ValueError(
+                    "This screening has no NCBI request id to collect, so it has to be run "
+                    "again rather than resumed."
+                )
+            self.store.screening_progress(
+                screening_id, f"Checking NCBI for search {request_id}",
+                progress={"phase": "waiting", "request_id": request_id,
+                          "elapsed_seconds": int(pending.get("waited_seconds") or 0),
+                          "estimate_seconds": 0, "candidates": len(searched)},
+            )
+            snapshot = self.store.snapshot(held["run_id"])
+            candidates = snapshot["candidates"]
+            core = len(candidates[0]["target_site_dna"]) if candidates else 19
+            scope = held["scope"]
+            record = collect_screening(
+                run_id=held["run_id"],
+                candidates=candidates,
+                scope=scope,
+                core_length=core,
+                client=client,
+                request_id=request_id,
+                searched=searched,
+                progress=reporter,
+                transcripts=self._transcript_lookup() if scope == GENOMIC_SCOPE else None,
+                window=self._run_window(snapshot),
+                sleep=sleep if sleep is not None else self.poll_sleep,
+                waited_already=float(pending.get("waited_seconds") or 0),
+            )
+            self.store.finish_screening(screening_id, {
+                **record.to_dict(),
+                "specificity": specificity_table(record, core),
+            })
+        except SearchStillAtNcbi as still:
+            self.store.pause_screening(
+                screening_id, still.request_id, str(still), list(still.searched),
+                waited_seconds=still.waited, estimate_seconds=still.estimate_seconds,
+            )
+        except Exception as error:
+            LOGGER.warning("resuming screening %s failed: %s", screening_id, error)
             self.store.fail_screening(screening_id, str(error))
         finally:
             if blast_client is None:

@@ -9,6 +9,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 
 from sarna.app.models import DesignRequest
@@ -16,6 +17,7 @@ from sarna.app.service import DesignService
 from sarna.app.store import RunStore
 from sarna.app.web import AppRouter
 from sarna.genome.ensembl import EnsemblCacheMissError, EnsemblClient
+from sarna.offtarget.ncbi import BlastClient
 from sarna.offtarget.screening import DEFAULT_CANDIDATES, MAX_CANDIDATES
 from tests.unit.test_design_pipeline import PROMOTER_BASES
 from tests.unit.test_ensembl import (
@@ -27,10 +29,25 @@ from tests.unit.test_ensembl import (
     client_for,
     requests_made,
 )
+from tests.unit.test_offtarget_ncbi import READY_NO_HITS
 from tests.unit.test_workbook import sheets_of
 
 # Known 19-nt target from the cached SCN1A run; deliberately CpG-depleted flanks.
 DNA = "GCTCTACTCTCAGTTCCAAACTATGACCTACTATGATACCATAC"
+
+
+def offline_blast() -> BlastClient:
+    """A BLAST client that answers from memory and can never reach NCBI.
+
+    Injected by default, not only where a test is about screening. The route hands ``screen``
+    to a worker pool without a client, so any test that merely *queues* a screening would
+    otherwise build a real one and submit a live job: the suite used to do exactly that, and
+    the seam only helps if nothing has to remember to use it.
+    """
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=READY_NO_HITS)
+
+    return BlastClient(client=httpx.Client(transport=httpx.MockTransport(handler)))
 
 
 def service_for(tmp_path: Path, routes: dict[str, Any] | None = None) -> DesignService:
@@ -38,7 +55,10 @@ def service_for(tmp_path: Path, routes: dict[str, Any] | None = None) -> DesignS
         GENE_ROUTE: GENE_PAYLOAD, TRANSCRIPTS_ROUTE: TRANSCRIPTS_PAYLOAD,
         "/sequence/region/": {"seq": AUTO_SEQUENCE}, "/overlap/region/": [],
     })
-    return DesignService(tmp_path, client_factory=lambda _: client)
+    service = DesignService(tmp_path, client_factory=lambda _: client)
+    service.blast_factory = offline_blast
+    service.poll_sleep = lambda _seconds: None
+    return service
 
 
 def run_request(service: DesignService, **kwargs: Any) -> dict[str, Any]:  # noqa: ANN401
@@ -478,9 +498,13 @@ def test_store_migrates_existing_runs_and_preserves_their_snapshot(tmp_path: Pat
     assert store.status("old")["request"] == {"symbol": "CHD2"}
     assert store.status("old")["error_code"] is None
     with store.connect() as connection:
-        # 4 since off-target screenings were added as their own dated table (ADR 0019).
-        # Opening an older database must still migrate without touching its runs.
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
+        # 5 since a screening carries structured progress beside its stage sentence, for the
+        # progress bar. Opening an older database must still migrate without touching its runs.
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
+        screening_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(screenings)")
+        }
+        assert "progress" in screening_columns
         tables = {
             row[0]
             for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
@@ -773,3 +797,105 @@ class TestChoosingHowManyCandidatesToScreen:
             assert router.service.store.screenings_for(run_id) == []
         finally:
             router.close()
+
+
+class TestASlowSearchIsCollectedRatherThanLost:
+    """NCBI holds a request id for about a day, so running out of patience is not failing.
+
+    The 1800s cap used to raise, the screening was recorded as an error, and the job NCBI was
+    still working on became unreachable. A researcher lost the whole genomic lane and the only
+    way forward was to queue an identical second job (ADR 0024).
+    """
+
+    @staticmethod
+    def _waiting(tmp_path: Path) -> tuple[AppRouter, str, str]:
+        service = service_for(tmp_path)
+        saved = run_request(service)
+        run_id = saved["app"]["run_id"]
+        screening_id = service.store.start_screening(run_id, "genomic")
+        searched = [c["id"] for c in saved["candidates"] if c["rank"] is not None][:2]
+        service.store.pause_screening(
+            screening_id, "RID-ABC-1", "NCBI search RID-ABC-1 has run for 1800s without "
+            "finishing.", searched, waited_seconds=1800.0,
+        )
+        return AppRouter(service), run_id, screening_id
+
+    def test_a_paused_screening_keeps_its_request_id_and_its_candidates(
+        self, tmp_path: Path
+    ):
+        router, _run_id, screening_id = self._waiting(tmp_path)
+        try:
+            held = router.service.store.screening(screening_id)
+            assert held["status"] == "waiting"
+            assert held["request_id"] == "RID-ABC-1"
+            assert held["result"]["candidates_searched"]
+            assert held["result"]["waited_seconds"] == 1800.0
+        finally:
+            router.close()
+
+    def test_it_is_neither_complete_nor_failed(self, tmp_path: Path):
+        # Both would be wrong, and in opposite directions: one invents a finding, the other
+        # throws away a job that still exists.
+        router, run_id, _screening_id = self._waiting(tmp_path)
+        try:
+            listed = json.loads(router.dispatch("GET", f"/api/runs/{run_id}/screenings")[1:][1])
+            assert [s["status"] for s in listed] == ["waiting"]
+            # Nothing incomplete may reach the order export.
+            body = router.dispatch("GET", f"/api/runs/{run_id}/export.order.csv")[2]
+            assert b"not-performed" in body
+        finally:
+            router.close()
+
+    def test_resuming_queues_a_collection_rather_than_a_second_search(self, tmp_path: Path):
+        router, _run_id, screening_id = self._waiting(tmp_path)
+        try:
+            status, _, body = router.dispatch(
+                "POST", f"/api/screenings/{screening_id}/resume")
+            assert status == 202
+            assert json.loads(body)["request_id"] == "RID-ABC-1"
+        finally:
+            router.close()
+
+    def test_resuming_marks_it_running_so_it_cannot_be_collected_twice(
+        self, tmp_path: Path
+    ):
+        # Left as 'waiting' while a worker is already collecting, the interface would offer
+        # the button again and a researcher could queue the same work twice.
+        router, _run_id, screening_id = self._waiting(tmp_path)
+        try:
+            router.service.store.resume_screening(screening_id)
+            held = router.service.store.screening(screening_id)
+            assert held["status"] == "running"
+            assert held["error"] is None
+            status, _, body = router.dispatch(
+                "POST", f"/api/screenings/{screening_id}/resume")
+            assert status == 409
+            assert "already being collected" in json.loads(body)["detail"]
+        finally:
+            router.close()
+
+    def test_a_finished_screening_cannot_be_resumed(self, tmp_path: Path):
+        service = service_for(tmp_path)
+        saved = run_request(service)
+        screening_id = service.store.start_screening(saved["app"]["run_id"], "transcript")
+        service.store.finish_screening(screening_id, {"specificity": []})
+        router = AppRouter(service)
+        try:
+            status, _, body = router.dispatch(
+                "POST", f"/api/screenings/{screening_id}/resume")
+            assert status == 409
+            assert "already finished" in json.loads(body)["detail"]
+        finally:
+            router.close()
+
+    def test_restarting_the_app_does_not_interrupt_a_search_held_at_ncbi(
+        self, tmp_path: Path
+    ):
+        # A 'running' screening is this process's work and is interrupted. A 'waiting' one is
+        # NCBI's, under an id that outlives the process, so it must survive a restart.
+        router, _run_id, screening_id = self._waiting(tmp_path)
+        router.close()
+        reopened = RunStore(tmp_path / "runs.sqlite3")
+        held = reopened.screening(screening_id)
+        assert held["status"] == "waiting"
+        assert held["request_id"] == "RID-ABC-1"

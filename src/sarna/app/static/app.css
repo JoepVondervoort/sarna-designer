@@ -128,8 +128,8 @@ body.frozen .setup,body.frozen .intro-note,body.frozen .saved-label,body.frozen 
 /* Two scopes, two independent searches, two lanes. One shared status line could only describe
    one of them, which is why both buttons used to be disabled together. */
 .offtarget-actions{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;padding:0 20px 16px}
-.screen-lane{display:flex;align-items:center;gap:9px;min-width:0}
-.screen-state{font-size:11px;color:var(--muted);line-height:1.5;overflow-wrap:anywhere}
+.screen-lane{display:flex;flex-wrap:wrap;align-items:center;gap:9px;min-width:0;flex:1 1 300px}
+.screen-state{font-size:11px;color:var(--muted);line-height:1.5;overflow-wrap:anywhere;min-width:70px}
 .screen-state.running{color:var(--teal)}
 /* A quiet activity indicator shared by local work and remote evidence searches. */
 .is-loading{display:flex;align-items:baseline;gap:8px;color:var(--teal)}
@@ -327,3 +327,20 @@ button.link{border:0;background:none;padding:0;color:var(--teal);font-size:11px;
 @media(max-width:760px){.strip{width:74px}.ot-title{max-width:160px}}
 .fp-key{display:inline-flex;gap:2px;margin-left:5px;vertical-align:middle}
 .fp-key i{display:block;width:6px;height:6px;border-radius:1px}
+
+/* Screening progress. NCBI reports started or finished and nothing between, so the bar is
+   determinate only where a real fraction exists and says so when it does not. */
+.screen-bar{flex:1 1 100%;min-width:0}
+.screen-bar:empty{display:none}
+.screen-progress{margin-top:8px}
+.phase-row{display:flex;gap:10px;flex-wrap:wrap;font-size:9px;letter-spacing:.5px;color:var(--muted);text-transform:uppercase;margin-bottom:5px}
+.phase.done{color:#2c7556}
+.phase.now{color:var(--teal);font-weight:600}
+.bar{display:block;height:6px;border-radius:4px;background:#e8eeeb;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--teal);border-radius:4px;transition:width .4s ease}
+.bar.indeterminate i{width:35%;animation:bar-slide 1.4s ease-in-out infinite}
+@keyframes bar-slide{0%{margin-left:-35%}100%{margin-left:100%}}
+@media(prefers-reduced-motion:reduce){.bar.indeterminate i{animation:none;width:100%;opacity:.45}}
+.screen-progress .hint{font-size:11px;margin-top:5px}
+.chip{display:inline-block;padding:2px 6px;border-radius:4px;background:#edf6f0;color:#2c7556;font-size:9px;letter-spacing:.6px;vertical-align:middle}
+.screen-state.waiting{color:var(--gold)}

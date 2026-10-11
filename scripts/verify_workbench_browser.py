@@ -606,6 +606,8 @@ def check_offtarget(browser: Browser, blast: StubBlast, screenshots: Path | None
         assert "No off-target screening has been performed" not in text, (
             f"{where} still reports that no screening was performed after one ran"
         )
+    check_progress_bar(browser)
+    check_human_only(browser)
     if screenshots:
         browser.evaluate("document.querySelector('[data-scope-tab=\"genomic\"]')?.click();"
                          "document.getElementById('offtarget-card')"
@@ -623,6 +625,121 @@ def check_offtarget(browser: Browser, blast: StubBlast, screenshots: Path | None
         browser.screenshot(screenshots / "offtarget-panel.png")
     print(f"    off-target: {screened} of {pool} screened in the first batch, alignments named "
           f"and placed, own-locus handling stated")
+
+
+def check_progress_bar(browser: Browser) -> None:
+    """The bar must not claim a completion it cannot know.
+
+    NCBI reports a search as started or finished and nothing between; the only forecast is
+    RTOE, its own estimate at submission. So the bar is exercised directly with crafted
+    states, because what matters is the judgement in it rather than the animation: a real
+    fraction where one exists, and an honest refusal where one does not.
+    """
+    states = browser.evaluate(r"""(()=>{
+      const read = job => {
+        const html = progressBar(job);
+        const host = document.createElement('div');
+        host.innerHTML = html;
+        const fill = host.querySelector('.bar i');
+        return {
+          html,
+          indeterminate: !!host.querySelector('.bar.indeterminate'),
+          width: fill && fill.style.width ? parseFloat(fill.style.width) : null,
+          text: host.textContent,
+        };
+      };
+      const running = extra => ({status:'running', progress:extra});
+      return {
+        early: read(running({phase:'waiting', elapsed_seconds:10, estimate_seconds:100})),
+        nearly: read(running({phase:'waiting', elapsed_seconds:99, estimate_seconds:100})),
+        over: read(running({phase:'waiting', elapsed_seconds:500, estimate_seconds:100})),
+        noEstimate: read(running({phase:'waiting', elapsed_seconds:40, estimate_seconds:0})),
+        placing: read(running({phase:'placing', placed:5, to_place:10})),
+        idle: read({status:'complete'}),
+      };
+    })()""")
+    assert isinstance(states, dict), states
+    early, nearly, over = states["early"], states["nearly"], states["over"]
+    assert early["width"] == 10, early
+    assert "estimated by NCBI" in early["text"], early["text"]
+    # Never past nine tenths on an estimate. A bar that reaches the end and then keeps going
+    # reads as a stall, and this one can legitimately run for half an hour.
+    assert nearly["width"] is not None and nearly["width"] <= 90, nearly
+    assert over["indeterminate"], "an overrun still shows a filling bar"
+    assert "longer than" in over["text"], over["text"]
+    assert states["noEstimate"]["indeterminate"], states["noEstimate"]
+    assert "no percentage to show" in states["noEstimate"]["text"], states["noEstimate"]["text"]
+    # Placing is the one phase with a real fraction, so it is the one that may claim it.
+    assert states["placing"]["width"] == 50, states["placing"]
+    assert states["placing"]["indeterminate"] is False
+    assert states["idle"]["html"] == "", "a finished job still draws a progress bar"
+    # A search still running at NCBI must offer to be collected, not read as a failure. The
+    # id outlives this page, so the only wrong answer is to hide it.
+    waiting = browser.evaluate(r"""(()=>{
+      const kept = state.screeningJobs;
+      state.screeningJobs = {transcript:{status:'waiting', id:'RID-TEST',
+        stage:'Still running at NCBI.'}};
+      renderScreeningStatus();
+      const lane = document.getElementById('screen-bar-transcript');
+      const answer = {
+        button: !!lane.querySelector('[data-resume="transcript"]'),
+        text: lane.textContent,
+        tag: document.getElementById('offtarget-status').textContent,
+        buttonEnabled: !document.getElementById('screen-transcript').disabled,
+      };
+      state.screeningJobs = kept;
+      renderScreeningStatus();
+      return answer;
+    })()""")
+    assert isinstance(waiting, dict), waiting
+    assert waiting["button"], "a search still at NCBI offers no way to collect it"
+    assert "Still running at NCBI" in str(waiting["text"]), waiting["text"]
+    assert waiting["tag"] == "AT NCBI", (
+        f"a search still running at NCBI is labelled {waiting['tag']!r}, which reads as "
+        f"finished or failed when it is neither"
+    )
+    print("    progress bar: estimate capped at 90%, overrun says so, placing is a real "
+          "fraction, a search left at NCBI can be collected")
+
+
+def check_human_only(browser: Browser) -> None:
+    """Both scopes are human, in two different ways, and must not be worded alike.
+
+    The genomic assembly holds one species. RefSeq RNA holds every species NCBI has and is
+    narrowed by ENTREZ_QUERY, which the URL API does not document. Calling both "human" with
+    no further detail would overstate the weaker of the two.
+    """
+    card = str(browser.evaluate(
+        "document.getElementById('offtarget-card').innerText"))
+    assert "human sequence only" in card, card[:200]
+    for scope, expected in (("transcript", "Entrez query"), ("genomic", "one species")):
+        browser.evaluate(
+            f"document.querySelector('[data-scope-tab=\"{scope}\"]')?.click()")
+        text = str(browser.evaluate(
+            "document.getElementById('offtarget-results').innerText"))
+        assert "HUMAN ONLY" in text, f"{scope}: no human marker in the results"
+        assert expected in text, (
+            f"{scope}: the summary does not say how the search was confined to human, so the "
+            f"two scopes read as the same guarantee. Got: {text[:300]}"
+        )
+    database = browser.evaluate(
+        "state.screenings.genomic.searches[0].parameters.database")
+    assert database == "GPIPE/9606/current/ref_top_level", database
+    assert not browser.evaluate(
+        "state.screenings.genomic.searches[0].parameters.organism"), (
+        "the human assembly was sent with a species filter it does not need"
+    )
+    # A full-width progress bar dropped into the flex row squeezed the status text to one
+    # character per line, which every assertion above still passed. Measure the box.
+    squeezed = browser.evaluate(r"""(()=>{
+      return ['transcript','genomic'].map(scope => {
+        const node = document.getElementById('screen-state-' + scope);
+        const box = node.getBoundingClientRect();
+        return {scope, text:node.textContent.trim(), width:box.width, height:box.height};
+      }).filter(s => s.text && (s.width < 60 || s.height > 40));
+    })()""")
+    assert squeezed == [], f"the screening status text is squeezed out of shape: {squeezed}"
+    print("    human only: stated on the card and in both scopes, each naming how")
 
 
 def exercise(browser: Browser, url: str, directory: Path, gene: str | None,

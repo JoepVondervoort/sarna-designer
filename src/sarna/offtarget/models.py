@@ -131,6 +131,18 @@ class PromoterProximity:
         }
 
 
+BY_DATABASE = "database"
+"""Human because the database holds one species. The stronger of the two guarantees."""
+
+BY_ENTREZ_FILTER = "entrez-filter"
+"""Human because an Entrez query restricted a multi-species database.
+
+Weaker, and worth naming as such: ``ENTREZ_QUERY`` is not a documented URL API parameter, and
+NCBI's own page says parameters it does not list "should not be relied upon". A scope resting
+on it is human by request rather than by construction.
+"""
+
+
 @dataclass(frozen=True, slots=True)
 class SearchParameters:
     """Exactly how a search was run, so the same question can be asked again.
@@ -150,6 +162,14 @@ class SearchParameters:
     They are real alignments and entirely irrelevant, they swamp the measures and would make a
     specific duplex look promiscuous. Measured on a live search before this was added: 500
     alignments returned, 230 of them "near-perfect", none of them human.
+    """
+
+    species_restriction: str = BY_ENTREZ_FILTER
+    """How this search was confined to human. See :data:`BY_DATABASE`, :data:`BY_ENTREZ_FILTER`.
+
+    Recorded because the two are not equally strong and the interface must not word them
+    alike: one is a property of the database searched, the other a request that an
+    undocumented parameter be honoured.
     """
 
     program: str = "blastn"
@@ -179,6 +199,7 @@ class SearchParameters:
             "scope": self.scope,
             "database": self.database,
             "organism": self.organism,
+            "species_restriction": self.species_restriction,
             "program": self.program,
             "task": self.task,
             "word_size": self.word_size,

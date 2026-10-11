@@ -219,6 +219,9 @@ class AppRouter:
         if method == "GET" and len(parts) == 3 and parts[:2] == ["api", "screenings"]:
             return self._json(200, self.service.store.screening(parts[2]))
         if (method == "POST" and len(parts) == 4
+                and parts[:2] == ["api", "screenings"] and parts[3] == "resume"):
+            return self._resume_screening(parts[2])
+        if (method == "POST" and len(parts) == 4
                 and parts[:2] == ["api", "runs"] and parts[3] == "screenings"):
             return self._start_screening(parts[2], body)
         if len(parts) >= 3 and parts[:2] == ["api", "batches"]:
@@ -355,6 +358,28 @@ class AppRouter:
             "scope": scope,
             "candidates": len(only) if only is not None else min(limit, len(passing)),
         })
+
+    def _resume_screening(self, screening_id: str) -> tuple[int, str, bytes]:
+        """Collect a search that outran its wait, rather than running it again.
+
+        NCBI holds a request id for about a day. Resubmitting would queue a second identical
+        job against a shared service and throw away the first (ADR 0024).
+        """
+        held = self.service.store.screening(screening_id)
+        if held["status"] == "complete":
+            return self._json(409, {"detail": "This screening has already finished."})
+        if held["status"] == "running":
+            return self._json(409, {"detail": "This screening is already being collected."})
+        if held["status"] != "waiting" or not held.get("request_id"):
+            raise ValueError(
+                "This screening has no NCBI request id to collect, so it has to be run again "
+                "rather than resumed."
+            )
+        # Back to 'running' before the worker starts, or the interface offers to collect the
+        # same search again while it is already being collected.
+        self.service.store.resume_screening(screening_id)
+        self.screeners.submit(self.service.resume, screening_id)
+        return self._json(202, {"id": screening_id, "request_id": held["request_id"]})
 
     @staticmethod
     def _requested_candidates(

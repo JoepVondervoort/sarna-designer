@@ -6,6 +6,7 @@ is bounded, and that a candidate with nothing found is still present in the tabl
 missing from it.
 """
 
+from collections.abc import Mapping
 from typing import Any
 
 import httpx
@@ -13,8 +14,15 @@ import pytest
 
 from sarna.genome.coordinates import GenomicInterval
 from sarna.offtarget.models import GENOMIC_SCOPE, TRANSCRIPT_SCOPE
-from sarna.offtarget.ncbi import MINIMUM_POLL_SECONDS, BlastClient, BlastError
-from sarna.offtarget.screening import MAX_CANDIDATES, run_screening, specificity_table
+from sarna.offtarget.ncbi import MINIMUM_POLL_SECONDS, BlastClient
+from sarna.offtarget.screening import (
+    MAX_CANDIDATES,
+    ProgressReporter,
+    SearchStillAtNcbi,
+    collect_screening,
+    run_screening,
+    specificity_table,
+)
 from tests.unit.test_offtarget_ncbi import (
     PUT_REPLY,
     READY_NO_HITS,
@@ -69,8 +77,11 @@ class TestTheHappyPath:
     def test_each_stage_is_reported_so_the_interface_need_not_spin(self) -> None:
         stages: list[str] = []
         client, _ = scripted([PUT_REPLY, WAITING, READY_WITH_HITS, REPORT])
+        def record_stage(stage: str, _detail: Mapping[str, Any] | None = None) -> None:
+            stages.append(stage)
+
         run_screening("run-1", CANDIDATES, TRANSCRIPT_SCOPE, 19, client,
-                      progress=stages.append, sleep=never_sleep)
+                      progress=record_stage, sleep=never_sleep)
         assert any("Submitting" in s for s in stages)
         assert any("accepted" in s for s in stages)
         assert any("still searching" in s for s in stages)
@@ -86,11 +97,33 @@ class TestTheHappyPath:
 
 class TestFailureIsNotAnEmptyResult:
     def test_waiting_for_ever_is_bounded_and_says_the_designs_are_unaffected(self) -> None:
+        # Running out of patience is not the same as failing. NCBI holds a request id for
+        # about a day, so the search still exists and the id is the handle to collect it
+        # (ADR 0024). Throwing it away is what cost a researcher a whole genomic lane.
         client, _ = scripted([PUT_REPLY, WAITING])
         clock = iter([0.0, 10.0, 99_999.0, 99_999.0])
-        with pytest.raises(BlastError, match="had not finished"):
+        with pytest.raises(SearchStillAtNcbi) as raised:
             run_screening("run-1", CANDIDATES, TRANSCRIPT_SCOPE, 19, client,
                           sleep=never_sleep, now=lambda: next(clock), max_wait=60)
+        assert raised.value.request_id == "ABC123XYZ014"
+        assert raised.value.searched == ("saRNA-1549", "saRNA-0002")
+        assert "designs are unaffected" in str(raised.value)
+
+    def test_a_search_that_outlived_its_wait_can_be_collected_later(self) -> None:
+        # The whole point of keeping the id: the second attempt must not resubmit, and must
+        # produce the same record the first attempt would have.
+        client, seen = scripted([READY_WITH_HITS, REPORT])
+        record = collect_screening(
+            run_id="run-1", candidates=CANDIDATES, scope=TRANSCRIPT_SCOPE, core_length=19,
+            client=client, request_id="ABC123XYZ014",
+            searched=("saRNA-1549", "saRNA-0002"), sleep=never_sleep,
+        )
+        assert record.request_id == "ABC123XYZ014"
+        assert record.candidates_searched == ("saRNA-1549", "saRNA-0002")
+        assert len(record.hits) == 2
+        assert not any(r.method == "POST" and b"CMD=Put" in r.content for r in seen), (
+            "collecting an existing search must never submit a second one"
+        )
 
     def test_a_run_with_nothing_passing_is_refused_rather_than_screened_emptily(self) -> None:
         client, _ = scripted([PUT_REPLY])
@@ -118,7 +151,7 @@ class TestTheGenomicScope:
             "run-1", CANDIDATES, GENOMIC_SCOPE, 19, client, transcripts=lookup,
             window=(-1000, -100), sleep=never_sleep,
         )
-        assert record.parameters.database == "refseq_genomic"
+        assert record.parameters.database == "GPIPE/9606/current/ref_top_level"
         assert len(record.proximities) == len(record.hits)
         # Hit at 455, TSS at 1055 -> 600 bp upstream, inside Wang's -1000..-100 window.
         first = record.proximities[0]
@@ -381,3 +414,144 @@ class TestTheCandidatesOwnLocusIsNotAFinding:
             transcripts=lookup,
         )
         assert len(placed) == 1, "only the remaining off-target hit is placed"
+
+
+class TestProgressCarriesNumbersAndNotJustWords:
+    """A sentence cannot drive a progress bar, so each stage reports its countable state.
+
+    What NCBI gives is RTOE, its own estimate, and a binary status. There is no completion
+    percentage to be had, so what travels is the estimate and the elapsed time, and the
+    interface is responsible for not dressing that up as certainty.
+    """
+
+    @staticmethod
+    def _collect(seen: list[dict[str, Any]]) -> ProgressReporter:
+        """Return a reporter that keeps every detail payload."""
+        def report(_stage: str, detail: Mapping[str, Any] | None = None) -> None:
+            seen.append(dict(detail or {}))
+        return report
+
+    def _detail(self, phases: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        return {str(d["phase"]): d for d in phases if d}
+
+    def test_every_phase_reports_what_can_be_counted(self) -> None:
+        seen: list[dict[str, Any]] = []
+        client, _ = scripted([PUT_REPLY, WAITING, READY_WITH_HITS, REPORT])
+        run_screening(
+            "run-1", CANDIDATES, TRANSCRIPT_SCOPE, 19, client, sleep=never_sleep,
+            progress=self._collect(seen),
+        )
+        phases = self._detail(seen)
+        assert set(phases) >= {"submitting", "waiting", "reading"}
+        assert phases["submitting"]["candidates"] == 2
+        # NCBI's RTOE is the only forecast available, and it has to reach the interface or
+        # the bar has nothing to scale against.
+        assert phases["waiting"]["estimate_seconds"] == 27
+        assert phases["waiting"]["request_id"] == "ABC123XYZ014"
+        assert phases["reading"]["alignments"] == 2
+
+    def test_the_waiting_phase_reports_elapsed_time_as_it_grows(self) -> None:
+        seen: list[dict[str, Any]] = []
+        client, _ = scripted([PUT_REPLY, WAITING, WAITING, READY_WITH_HITS, REPORT])
+        run_screening(
+            "run-1", CANDIDATES, TRANSCRIPT_SCOPE, 19, client, sleep=never_sleep,
+            progress=self._collect(seen),
+        )
+        elapsed = [d["elapsed_seconds"] for d in seen if d.get("phase") == "waiting"]
+        assert elapsed == sorted(elapsed), elapsed
+        assert elapsed[-1] > 0
+
+    def test_placing_reports_how_far_through_it_is(self) -> None:
+        seen: list[dict[str, Any]] = []
+        client, _ = scripted([PUT_REPLY, READY_WITH_HITS, GENOMIC_REPORT])
+        run_screening(
+            "run-1", GENOMIC_CANDIDATES, GENOMIC_SCOPE, 19, client, sleep=never_sleep,
+            transcripts=lambda _interval: [],
+            progress=self._collect(seen),
+        )
+        placing = [d for d in seen if d.get("phase") == "placing"]
+        assert placing, "the placing phase reported nothing, so the bar would stall there"
+        assert placing[-1]["placed"] == placing[-1]["to_place"]
+
+
+class TestPlacementIsBounded:
+    def test_only_the_strongest_are_placed_and_the_rest_are_named(self) -> None:
+        # Placement is one Ensembl request per uncached block. Unbounded, a screening spends
+        # minutes on alignments nobody will open.
+        from sarna.offtarget import screening as module
+
+        many = "".join(
+            f"<Hit><Hit_accession>NC_0000{(n % 22) + 1:02d}.11</Hit_accession>"
+            f"<Hit_def>chromosome</Hit_def><Hit_hsps><Hsp>"
+            f"<Hsp_identity>{13 + n % 4}</Hsp_identity><Hsp_align-len>19</Hsp_align-len>"
+            f"<Hsp_gaps>0</Hsp_gaps><Hsp_query-from>1</Hsp_query-from>"
+            f"<Hsp_query-to>19</Hsp_query-to><Hsp_hit-from>{1000 * n + 1}</Hsp_hit-from>"
+            f"<Hsp_hit-to>{1000 * n + 19}</Hsp_hit-to><Hsp_hit-frame>1</Hsp_hit-frame>"
+            f"<Hsp_evalue>1.0</Hsp_evalue><Hsp_bit-score>{20 + n % 9}</Hsp_bit-score>"
+            f"</Hsp></Hit_hsps></Hit>"
+            for n in range(40)
+        )
+        report = (
+            '<?xml version="1.0"?><BlastOutput><BlastOutput_iterations><Iteration>'
+            "<Iteration_query-def>saRNA-1549</Iteration_query-def>"
+            f"<Iteration_hits>{many}</Iteration_hits>"
+            "</Iteration></BlastOutput_iterations></BlastOutput>"
+        ).encode()
+        client, _ = scripted([PUT_REPLY, READY_WITH_HITS, report])
+        original = module.MAX_PLACEMENTS
+        module.MAX_PLACEMENTS = 10
+        try:
+            record = run_screening(
+                "run-1", GENOMIC_CANDIDATES, GENOMIC_SCOPE, 19, client, sleep=never_sleep,
+                transcripts=lambda _interval: [],
+            )
+        finally:
+            module.MAX_PLACEMENTS = original
+        assert len(record.proximities) == 10
+        assert any("weaker ones were not" in n for n in record.notes)
+        # Every alignment is still counted and still listed; only the distance is missing.
+        assert len(record.hits) == 40
+        placed_scores = {p.hit.bit_score for p in record.proximities}
+        assert min(placed_scores) >= max(
+            h.bit_score for h in record.hits if h.bit_score not in placed_scores
+        )
+
+
+class TestAnEstimateBeyondTheBudgetIsNotWaitedOut:
+    """Measured: NCBI estimates about eight hours for a 19-mer against the human assembly.
+
+    It serves the genome databases from a queue rather than from the interactive path that
+    answers `refseq_rna` in thirty seconds, and no word size or E-value changes that. Sitting
+    through half an hour of polling to learn what the first reply already said wastes the
+    researcher's afternoon and the service's capacity.
+    """
+
+    @staticmethod
+    def _slow(seconds: int) -> bytes:
+        return PUT_REPLY.replace(b"RTOE = 27", f"RTOE = {seconds}".encode())
+
+    def test_it_is_handed_back_after_a_single_look(self) -> None:
+        intervals: list[float] = []
+        client, _ = scripted([self._slow(28_500), WAITING])
+        with pytest.raises(SearchStillAtNcbi) as raised:
+            run_screening("run-1", CANDIDATES, TRANSCRIPT_SCOPE, 19, client,
+                          sleep=intervals.append, max_wait=1800)
+        # One look, at the rate limit, not half an hour of polling.
+        assert intervals == [MINIMUM_POLL_SECONDS]
+        assert raised.value.estimate_seconds == 28_500
+        assert "7.9 hours" in str(raised.value)
+        assert "can be collected" in str(raised.value)
+
+    def test_a_job_already_done_is_collected_rather_than_handed_back(self) -> None:
+        # An estimate is not a measurement. If the first look finds it finished, take it.
+        client, _ = scripted([self._slow(28_500), READY_WITH_HITS, REPORT])
+        record = run_screening("run-1", CANDIDATES, TRANSCRIPT_SCOPE, 19, client,
+                               sleep=never_sleep, max_wait=1800)
+        assert len(record.hits) == 2
+
+    def test_an_estimate_inside_the_budget_is_waited_out_as_before(self) -> None:
+        intervals: list[float] = []
+        client, _ = scripted([self._slow(120), WAITING, READY_NO_HITS])
+        run_screening("run-1", CANDIDATES, TRANSCRIPT_SCOPE, 19, client,
+                      sleep=intervals.append, max_wait=1800)
+        assert intervals[0] == pytest.approx(120.0)
