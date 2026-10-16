@@ -90,7 +90,12 @@ class RunStore:
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS screenings_by_run ON screenings(run_id, created)"
             )
-            connection.execute("PRAGMA user_version=5")
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS shortlists (run_id TEXT PRIMARY KEY, "
+                "revision INTEGER NOT NULL, updated TEXT, entries TEXT NOT NULL, "
+                "FOREIGN KEY(run_id) REFERENCES runs(id))"
+            )
+            connection.execute("PRAGMA user_version=6")
             connection.execute(
                 # Only 'running' is interrupted by a restart. A 'waiting' screening is not
                 # running here at all: it is queued at NCBI under a request id that outlives
@@ -395,10 +400,49 @@ class RunStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
-    def list_runs(self) -> list[dict[str, Any]]:
-        """Return recent completed and failed runs, newest first."""
+    def list_runs(
+        self, search: str = "", status: str = "", offset: int = 0, limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Search saved labels, references and identifiers with bounded pagination."""
+        if status not in ("", "complete", "error", "running"):
+            raise ValueError("Unknown run status.")
+        if len(search) > 300 or offset < 0 or not 1 <= limit <= 100:
+            raise ValueError("Use a search up to 300 characters and a valid page range.")
         with self.connect() as connection:
-            return [dict(row) for row in connection.execute(
-                "SELECT id,created,label,status,stage,error FROM runs "
-                "ORDER BY created DESC LIMIT 100"
-            )]
+            rows = connection.execute(
+                "SELECT id,created,label,status,stage,error,summary FROM runs "
+                "WHERE (?='' OR status=?) AND instr(lower(label || ' ' || id || ' ' || "
+                "COALESCE(summary,'')),lower(?))>0 "
+                "ORDER BY created DESC,rowid DESC LIMIT ? OFFSET ?",
+                (status, status, search, limit, offset),
+            ).fetchall()
+        return [{**dict(row), "summary": json.loads(row["summary"]) if row["summary"] else None}
+                for row in rows]
+
+    def shortlist(self, run_id: str) -> dict[str, Any]:
+        """Return researcher notes separately from the frozen scientific snapshot."""
+        self.status(run_id)
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT revision,updated,entries FROM shortlists WHERE run_id=?", (run_id,),
+            ).fetchone()
+        return ({"revision": row["revision"], "updated": row["updated"],
+                 "entries": json.loads(row["entries"])} if row else
+                {"revision": 0, "updated": None, "entries": []})
+
+    def save_shortlist(
+        self, run_id: str, revision: int, entries: list[dict[str, str]],
+    ) -> dict[str, Any] | None:
+        """Use an atomic revision check to prevent one browser overwriting another's notes."""
+        updated = datetime.now(UTC).isoformat()
+        with self.connect() as connection:
+            connection.execute(
+                "INSERT OR IGNORE INTO shortlists VALUES(?,0,NULL,'[]')", (run_id,),
+            )
+            changed = connection.execute(
+                "UPDATE shortlists SET revision=revision+1,updated=?,entries=? "
+                "WHERE run_id=? AND revision=?",
+                (updated, json.dumps(entries), run_id, revision),
+            ).rowcount
+        return ({"revision": revision + 1, "updated": updated, "entries": entries}
+                if changed else None)

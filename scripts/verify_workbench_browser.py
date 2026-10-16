@@ -588,9 +588,11 @@ def check_offtarget(browser: Browser, blast: StubBlast, screenshots: Path | None
             "the on-target hit was not removed, so every candidate reads as a perfect match"
         )
         perfect = browser.evaluate(
-            "Object.values(state.screenings.genomic.byCandidate)"
-            ".every(e=>e.row.perfect_hits===0||e.row.on_target_hits===0)")
-        assert perfect is True, "an own-locus hit is still being counted as a perfect match"
+            "(()=>{const entries=Object.values(state.screenings.genomic.byCandidate);"
+            "return entries.every(e=>e.row.on_target_hits===1) && "
+            "entries.reduce((sum,e)=>sum+e.row.perfect_hits,0)===1})()")
+        # The stub includes one separate perfect off-target as well as every own-locus hit.
+        assert perfect is True, "own-locus hits and the scripted off-target are not separated"
     else:
         assert "no genomic coordinates" in genomic, (
             "a run without coordinates must say the removal could not be made"
@@ -802,6 +804,33 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     browser.evaluate("document.querySelector('#promoter-map [data-tip]').dispatchEvent("
                      "new FocusEvent('focusin',{bubbles:true}))")
     assert browser.evaluate("!document.getElementById('tooltip').hidden") is True
+    # Opening results and using the setup shortcut must never hide the live design controls.
+    for _ in range(2):
+        browser.evaluate("document.getElementById('edit-setup').click()")
+        assert browser.evaluate("getComputedStyle(document.getElementById('setup')).display"
+                                "!=='none'") is True
+    geometry = browser.evaluate("(()=>{const svg=document.getElementById('promoter-map');"
+                                "return {width:svg.getBoundingClientRect().width,"
+                                "height:svg.getBoundingClientRect().height,"
+                                "units:svg.viewBox.baseVal.width}})()")
+    assert isinstance(geometry, dict)
+    assert abs(geometry["width"] - geometry["units"]) < 1
+    assert geometry["height"] == 306
+    # Wider layouts should add plotting space, retaining native-sized text and track heights.
+    for viewport_width in (1920, 1440):
+        browser.call("Emulation.setDeviceMetricsOverride", width=viewport_width, height=1100,
+                     deviceScaleFactor=1, mobile=False)
+        browser.wait("(()=>{const svg=document.getElementById('promoter-map');return "
+                     "svg.viewBox.baseVal.width===Math.max(900,Math.round("
+                     "svg.parentElement.clientWidth-24))})()")
+        assert browser.evaluate(
+            "Math.abs(document.getElementById('promoter-map').getScreenCTM().a-1)<0.001"
+        ) is True
+        assert browser.evaluate("document.getElementById('promoter-map').getBoundingClientRect()"
+                                ".height") == 306
+    if screenshots:
+        browser.evaluate("document.querySelector('.promoter-card').scrollIntoView({block:'start'})")
+        browser.screenshot(screenshots / "promoter-landscape.png")
     # Every candidate the map draws must be inside the clip region. A clip ending above the
     # excluded-target track once hid 1,643 of 2,468 rejected candidates completely and left the
     # rest a 2px sliver, while the legend still invited the reader to hover them. The promise
@@ -962,7 +991,8 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
                                 ...ramp]);
       const generated = new Set([...REJECTION_COLOURS, OTHER_REJECTION]
         .map(c => c.toLowerCase()));
-      const drawn = new Set([...document.querySelectorAll('#promoter-map rect[fill]')]
+      const drawn = new Set([...document.querySelectorAll(
+        '#promoter-map rect[fill]:not(.map-decoration)')]
         .map(r => (r.getAttribute('fill')||'').toLowerCase())
         .filter(f => f && f !== 'none' && f !== 'transparent'));
       const legend = document.getElementById('map-legend');
@@ -1016,7 +1046,7 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
       // those agree everywhere except a sub-2-unit sliver at the very edge, so comparing a
       // clamped mark compares the floor rather than the panning arithmetic.
       const inside=r=>{const x=+r.getAttribute('x'), w=+r.getAttribute('width');
-                       return x>140 && x+w<958;};
+                       return x>MAP_LEFT+7 && x+w<MAP_LEFT+MAP_PLOT-7;};
       const candidates=[...svg.querySelectorAll('[data-candidate]')].filter(inside);
       if(!candidates.length) return {error:"no unclamped candidate mark to track"};
       const id=candidates[Math.floor(candidates.length/2)].dataset.candidate;
@@ -1243,6 +1273,51 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     assert browser.evaluate(
         "!!document.getElementById('export-xlsx')") is True, "no Excel button"
 
+    # Durable researcher notes, history search and comparisons must preserve the science.
+    browser.evaluate("selectCandidate(state.result.candidates.find(c=>c.rank===1).id)")
+    browser.wait("document.getElementById('shortlist-candidate')!==null")
+    scientific_before = browser.evaluate(
+        "JSON.stringify([state.result.counts,state.result.candidates.map(c=>[c.id,c.rank])])")
+    browser.evaluate("document.getElementById('shortlist-candidate').click()")
+    browser.wait("document.querySelector('[data-shortlist-reason]')!==null")
+    browser.evaluate("const reason=document.querySelector('[data-shortlist-reason]');"
+                     "reason.value='Review cell context; activity unknown.';"
+                     "reason.dispatchEvent(new Event('input',{bubbles:true}));"
+                     "flushWorkspace(state.result.app.run_id)")
+    assert browser.evaluate("activeWorkspace().dirty") is False
+    assert browser.evaluate(
+        "JSON.stringify([state.result.counts,state.result.candidates.map(c=>[c.id,c.rank])])"
+    ) == scientific_before
+    notes = browser.evaluate(
+        f"fetch('/api/runs/{run_id}/shortlist').then(r=>r.json())")
+    assert isinstance(notes, dict) and notes["entries"][0]["reason"] == (
+        "Review cell context; activity unknown.")
+    browser.evaluate("document.getElementById('open-history').click()")
+    browser.wait("document.querySelectorAll('[data-history-choose]').length>=2")
+    browser.evaluate("document.getElementById('history-search').value='no-such-gene-xyz';"
+                     "loadHistory(true)")
+    assert "No saved runs" in str(browser.evaluate(
+        "document.getElementById('history-message').textContent"))
+    browser.evaluate("document.getElementById('history-search').value='';loadHistory(true)")
+    browser.evaluate("[...document.querySelectorAll('[data-history-choose]')].slice(0,2)"
+                     ".forEach(field=>{field.checked=true;field.dispatchEvent("
+                     "new Event('change',{bubbles:true}))});"
+                     "document.getElementById('history-compare').click()")
+    browser.wait("document.getElementById('history-comparison').textContent"
+                 ".includes('Run comparison')")
+    assert "activity" in str(browser.evaluate(
+        "document.getElementById('history-comparison').textContent"))
+    if screenshots:
+        browser.screenshot(screenshots / "run-comparison.png")
+    browser.evaluate("document.getElementById('close-history').click();"
+                     "document.getElementById('candidate-layout').scrollIntoView({block:'start'})")
+    if screenshots:
+        browser.screenshot(screenshots / "candidate-workspace.png")
+    # A changed reference is a separate context; ranks are not matched across promoters.
+    assert browser.evaluate("(()=>{const changed=clone(state.result);"
+                            "changed.promoter.sequence+='A';"
+                            "return compareRuns(state.result,changed)"
+                            ".includes('ranks are not matched')})()") is True
     if screenshots:
         browser.screenshot(screenshots / "workbench.png")
     browser.evaluate(f"const history=document.getElementById('saved-runs');"
@@ -1280,6 +1355,9 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     browser.evaluate("document.querySelector('#candidate-rows [data-candidate]').click()")
     browser.wait("document.querySelector('#candidate-detail .verdict .outcome.fail')!==null")
     assert browser.evaluate("state.result.candidates.every(c=>Array.isArray(c.rules))") is True
+    assert browser.evaluate("document.querySelector('[data-shortlist-reason]').value") == (
+        "Review cell context; activity unknown.")
+    assert browser.evaluate("document.querySelector('[data-shortlist-reason]').readOnly") is True
     # A passing candidate in the archive, which is the case the rejected one above cannot
     # cover: the duplex panel is built from result.order, and the archive has no backend to
     # ask for it. If that table were not embedded, the panel would quietly degrade to "this

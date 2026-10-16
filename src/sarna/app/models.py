@@ -22,6 +22,29 @@ class CustomReference(BaseModel):
     note: str = Field(min_length=1, max_length=2000)
 
 
+class ShortlistEntry(BaseModel):
+    """A researcher selection with a reason, independent of scientific ranking."""
+
+    model_config = ConfigDict(extra="forbid")
+    candidate: str = Field(min_length=1, max_length=80)
+    reason: str = Field(default="", max_length=2000)
+
+
+class ShortlistRequest(BaseModel):
+    """Replace one run's shortlist only if its saved revision still matches."""
+
+    model_config = ConfigDict(extra="forbid")
+    revision: int = Field(ge=0, strict=True)
+    entries: list[ShortlistEntry] = Field(max_length=40_000)
+
+    @model_validator(mode="after")
+    def unique_candidates(self) -> Self:
+        """Reject duplicate selections rather than silently losing a reason."""
+        if len({entry.candidate for entry in self.entries}) != len(self.entries):
+            raise ValueError("Each shortlisted candidate must occur once.")
+        return self
+
+
 class DesignRequest(BaseModel):
     """A deliberate input, promoter reference and editable scientific configuration."""
 

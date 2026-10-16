@@ -81,6 +81,7 @@ function markDraft() {
     $("design-button").innerHTML = 'Apply changes &amp; design <span>→</span>';
   }
   if (state.batch) $("batch-draft-notice").hidden = false;
+  if (typeof workflowStatus === "function") workflowStatus();
 }
 function roleChoices(def) {
   if (def.id === "target-length-19") return ["mandatory"];
@@ -786,6 +787,7 @@ async function openSavedBatch(id) {
 async function exportBatch(type) {
   if (!state.batch) return;
   try {
+    if (typeof flushWorkspace === "function") await Promise.all(state.batch.runs.map(run=>flushWorkspace(run.id)));
     const name=`${state.batch.symbol || "promoters"}-${state.batch.id.slice(0,8)}.${type}`;
     if (frozen) { downloadBlob(new Blob([JSON.stringify(state.batch,null,2)],{type:"application/json"}),name); return; }
     const response=await fetch(`/api/batches/${state.batch.id}/export.${type}`);
@@ -866,6 +868,7 @@ function showResult(result) {
     renderScreeningStatus();
     if (!frozen) loadSavedScreenings(result.app.run_id);
   }
+  if (typeof workflowRun === "function") workflowRun(result);
   if (first) selectCandidate(first.id);
 }
 function renderDiff(previous,current) {
@@ -957,6 +960,7 @@ async function selectCandidate(id) {
     const primary = full.guide_prediction.assessments.find(a=>a.table===full.rating.guide_model);
     const sequenceBox = (name,sequence) => `<div class="sequence-box"><div><span>${name} · 5′ → 3′</span><button type="button" data-copy="${escapeHTML(sequence)}">Copy</button></div><code>${escapeHTML(sequence)}</code></div>`;
     $("candidate-detail").innerHTML = `<div class="detail-heading"><div><h3>${id} <span class="muted">${full.rank?`Rank ${full.rank}`:"Excluded by gates"}</span></h3><p class="hint">${escapeHTML(positionText(full))} ${full.tss_span?"relative to reference TSS":"in supplied sequence"} · ${full.target_site_dna.length} nt core · ${full.gc_percent}% GC${full.genomic?` · genomic ${escapeHTML(full.genomic.strand)} strand`:""}</p></div><span class="tag">${ratingText(full)} PREFERENCES</span></div>${duplexPanel(run,full)}<div class="detail-body"><div>${sequenceBox("Promoter target DNA",full.target_site_dna)}${sequenceBox("Sense RNA core",full.sense_strand_rna)}${sequenceBox("Antisense RNA core",full.antisense_strand_rna)}<p class="hint">The cores above are the 19 nt RNA the rules are evaluated against, without overhangs. The duplex panel at the top is what you order. ${escapeHTML(screeningSentence(id))}</p>${twinNote(full)}</div><div><div class="guide-summary"><strong>Predicted RNA guide: ${escapeHTML(full.rating.guide || "unknown")}</strong><p>${escapeHTML(tableNames[full.rating.guide_model] || full.rating.guide_model)} · ${escapeHTML(full.guide_prediction.summary)}</p><p class="hint">This predicts duplex loading, not the identity of a promoter-associated target RNA, and not activation.</p></div><table class="model-table"><thead><tr><th>Parameter model</th><th>Guide</th><th>End difference</th></tr></thead><tbody>${full.guide_prediction.assessments.map(a=>`<tr data-tip="${escapeHTML(a.explanation)}" tabindex="0"><td>${escapeHTML(tableNames[a.table] || a.table)}</td><td>${escapeHTML(a.predicted_guide)}</td><td>${a.difference.toFixed(2)} ${escapeHTML(a.unit)}</td></tr>`).join("")}</tbody></table><details class="verdict"><summary>How the selected model reaches this prediction</summary><p>${escapeHTML(primary?.explanation || "The selected model was not assessed.")}</p></details></div></div>${full.excluded_by.length?`<p class="hint">${escapeHTML(full.rejection_summary)}</p>`:""}<div class="rule-verdicts"><h3>Every rule, explained</h3>${full.rules.map(r=>ruleVerdict(r,run.configuration)).join("")}</div>`;
+    if (typeof workflowCandidate === "function") workflowCandidate(candidate);
   } catch (e) {
     if (state.result!==run || state.selected!==id) return;
     $("candidate-detail").innerHTML = '<p class="hint">Candidate details could not be loaded. Select the candidate to try again.</p>';
@@ -1365,11 +1369,25 @@ function drawPassing(parts, r, scale, tip, rect) {
 
 function renderMap() {
   if (!state.result) return;
-  const r = state.result, p = r.promoter, left = 133, right = 965, width = right-left;
+  const svg = $("promoter-map");
+  // One SVG unit is one CSS pixel: widening the workspace adds plot space, not larger type.
+  const mapWidth = Math.max(900, Math.round(svg.parentElement.clientWidth - 24));
+  MAP_PLOT = mapWidth - MAP_LEFT - 26;
+  svg.setAttribute("viewBox", `0 0 ${mapWidth} 306`);
+  svg.style.width = `${mapWidth}px`;
+  const r = state.result, p = r.promoter, left = MAP_LEFT, right = left + MAP_PLOT;
+  const width = MAP_PLOT;
   const scale = offset => left+(offset-state.start)/(state.end-state.start)*width;
   const inView = (start,end) => end>state.start && start<state.end;
   const tip = text => `data-tip="${escapeHTML(text)}" tabindex="0" aria-label="${escapeHTML(text)}"`;
-  const parts = ['<defs><clipPath id="map-clip"><rect x="133" y="20" width="832" height="265"/></clipPath></defs>'];
+  const parts = [`<defs><clipPath id="map-clip"><rect x="${left}" y="25" width="${width}" height="260"/></clipPath></defs>`];
+  // Subtle lanes and a separate label gutter keep annotation colors as the data channel.
+  parts.push(`<rect class="map-decoration" aria-hidden="true" x="0" y="29" width="${mapWidth}" height="256" rx="8" fill="#fbfdfc"/>`);
+  for (const [top,bottom] of [[29,72],[116,153],[187,222],[254,285]]) {
+    parts.push(`<rect class="map-decoration" aria-hidden="true" x="${left}" y="${top}" width="${width}" height="${bottom-top}" fill="#f2f7f5"/>`);
+  }
+  parts.push(`<rect class="map-decoration" aria-hidden="true" x="0" y="29" width="${left-12}" height="256" rx="8" fill="#f5f8f7"/>`);
+  parts.push(`<text class="map-axis-caption" x="${left}" y="301">${p.tss_offset===null?"Position in supplied sequence (bp)":"Position relative to chosen reference (bp)"}</text>`);
   const label = (text,y,help) => parts.push(`<text class="track-label" x="12" y="${y}" `
     + `${tip(help)}>${escapeHTML(text)}</text>`);
   const emptyNote = (y, text) => parts.push(
@@ -1384,7 +1402,7 @@ function renderMap() {
     parts.push(`<rect x="${x1}" y="${y}" width="${Math.max(2,x2-x1)}" height="${height}" rx="2" fill="${fill}"${edge} ${tip(help)} ${attrs}/>`);
   };
   for (const track of TRACKS) label(track.name, track.y, track.help);
-  for (const y of [65,110,148,182,217,251,279]) parts.push(`<line x1="${left}" x2="${right}" y1="${y}" y2="${y}" stroke="#e8efeb"/>`);
+  for (const y of [72.5,116.5,153.5,187.5,222.5,254.5,285.5]) parts.push(`<line x1="${left}" x2="${right}" y1="${y}" y2="${y}" stroke="#e8efeb"/>`);
   parts.push(`<g id="map-ticks">${tickMarkup(state.start,state.end,p)}</g>`);
   // Two nested groups on purpose: the clip stays in the untransformed coordinate system while
   // the inner group is translated during a drag. Putting both on one element leaves the clip's
@@ -1392,7 +1410,7 @@ function renderMap() {
   parts.push('<g clip-path="url(#map-clip)"><g id="map-pan">');
   if (p.tss_offset!==null && p.tss_offset>=state.start && p.tss_offset<state.end) {
     const x=scale(p.tss_offset);
-    parts.push(`<line x1="${x}" x2="${x}" y1="29" y2="281" stroke="#52726b" stroke-dasharray="4 4" opacity=".5"/><path d="M${x-5} 37h10l-5 7z" fill="#344d55" ${tip("+1 · chosen reference. The first transcribed base in this coordinate system. Its source and uncertainty are recorded in run evidence.")}/><text x="${x+7}" y="46" fill="#344d55" font-size="10">+1 reference</text>`);
+    parts.push(`<line x1="${x}" x2="${x}" y1="29" y2="281" stroke="#52726b" stroke-dasharray="4 4" opacity=".5"/><path d="M${x-5} 37h10l-5 7z" fill="#344d55" ${tip("+1 · chosen reference. The first transcribed base in this coordinate system. Its source and uncertainty are recorded in run evidence.")}/><text x="${x+7}" y="46" fill="#344d55" font-size="11">+1 reference</text>`);
   }
   for (const t of r.tracks.alternative_tss) rect(t.start,t.end,53,12,TRACK_COLOURS.altTss,t.detail);
   if (p.tss_offset!==null) for (const id of ["tss-window","tss-preferred-window"]) {
@@ -1431,7 +1449,6 @@ function renderMap() {
     rect(c.offset,c.offset+c.target_site_dna.length,c.rank===null?261:228,c.rank===null?19:25,"none",`${c.id} selected`,`stroke="#b97a2b" stroke-width="2" data-candidate="${c.id}"`);
   }
   parts.push('</g></g>');
-  const svg = $("promoter-map");
   svg.innerHTML=parts.join("");
   // Only offer the grab cursor when there is somewhere to pan. At full extent the drag is a
   // no-op, and advertising it is a promise the map does not keep.
@@ -1449,7 +1466,8 @@ function renderMap() {
       : "";
   }
 }
-const MAP_LEFT = 133, MAP_PLOT = 832, MAP_MIN_SPAN = 40;
+const MAP_LEFT = 160, MAP_MIN_SPAN = 40;
+let MAP_PLOT = 814;
 
 function tickMarkup(start,end,p) {
   // Coordinate labels only: Python already supplies scientific candidate spans.
@@ -1480,7 +1498,10 @@ function enableMapDrag() {
   // once on release. Only the seven tick labels are refreshed live.
   const svg = $("promoter-map");
   let drag = null;
-  const perPixel = () => 1000 / (svg.getBoundingClientRect().width || 1000);
+  const perPixel = () => svg.viewBox.baseVal.width / (svg.getBoundingClientRect().width || 1);
+  new ResizeObserver(() => {
+    if (state.result && Math.max(900, Math.round(svg.parentElement.clientWidth - 24)) !== svg.viewBox.baseVal.width) renderMap();
+  }).observe(svg.parentElement);
 
   const move = event => {
     if (!drag) return;
@@ -1581,6 +1602,7 @@ async function exportOrder() {
 }
 async function exportRun(type) {
   try {
+    if (typeof flushWorkspace === "function") await flushWorkspace(state.result.app.run_id);
     const r=state.result, name=`${r.gene?.symbol || "promoter"}-${r.app.run_id.slice(0,8)}.${type}`;
     if (frozen) { downloadBlob(new Blob([type==="csv"?csvText(r):JSON.stringify(r,null,2)],{type:type==="csv"?"text/csv":"application/json"}),name); return; }
     // A selection applies to the row-wise exports; an HTML or JSON archive is the whole run.

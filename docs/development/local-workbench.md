@@ -230,3 +230,14 @@ the preceding single-reference version and must not be read as its verification 
 See [ADR 0015](../adr/0015-local-workbench-and-frozen-ui.md) for the local architecture and
 [ADR 0016](../adr/0016-multiple-promoter-designs.md) for reference grouping, custom genomic
 inputs, separate ranks and remaining limits.
+
+## Research workspace
+
+Use the stage bar to move from target/reference selection to candidates, screening and export.
+**Design setup** stays visible after a run; **Go to design setup** returns to its controls. The candidate inspector sits beside the
+table on wide screens. **Add to research shortlist** saves a selection with your reason, separately
+from scientific results; table checkboxes remain temporary export/screening selections.
+
+**Run history** supports search, status filters and comparison of two saved runs. Read the
+[research workflow guide](research-workflow.md) for shortlist persistence, conflict recovery,
+offline notes, exports and the limits of cross-run comparison.

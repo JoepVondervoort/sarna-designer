@@ -453,7 +453,9 @@ def test_archive_has_inline_ui_complete_verdicts_and_escaped_data(tmp_path: Path
         assert b'class="brand" href="/"' not in page
         assert b"</script><script>alert('injected')" not in page
         _, _, data = router.dispatch("GET", f"/api/runs/{run_id}/export.json")
-        assert json.loads(data) == saved
+        archived = json.loads(data)
+        assert archived.pop("workspace")["shortlist"]["entries"] == []
+        assert archived == saved
     finally:
         router.close()
 
@@ -498,9 +500,8 @@ def test_store_migrates_existing_runs_and_preserves_their_snapshot(tmp_path: Pat
     assert store.status("old")["request"] == {"symbol": "CHD2"}
     assert store.status("old")["error_code"] is None
     with store.connect() as connection:
-        # 5 since a screening carries structured progress beside its stage sentence, for the
-        # progress bar. Opening an older database must still migrate without touching its runs.
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 5
+        # Researcher shortlists are separate from frozen runs in schema 6.
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
         screening_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(screenings)")
         }
@@ -579,7 +580,8 @@ class TestTheSpreadsheetExport:
         service = service_for(tmp_path)
         saved = run_request(service)
         sheets = self.book(service, saved["app"]["run_id"])
-        assert list(sheets) == ["saRNA candidates", "Run", "Rules", "Reference sources"]
+        assert list(sheets) == ["saRNA candidates", "Run", "Rules", "Reference sources",
+                                "Shortlist"]
 
     def test_every_candidate_appears_in_rank_order_with_its_values(
         self, tmp_path: Path

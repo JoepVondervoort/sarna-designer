@@ -17,7 +17,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 from pydantic import ValidationError
 
 from sarna import __version__, settings
-from sarna.app.models import BatchRequest, DesignRequest
+from sarna.app.models import BatchRequest, DesignRequest, ShortlistRequest
 from sarna.app.service import DesignService
 from sarna.app.workbook import Sheet, write_workbook
 from sarna.design.duplicates import identical_duplex_groups
@@ -50,6 +50,7 @@ def frozen_page(data: dict[str, Any], snapshot: dict[str, Any] | None) -> bytes:
     css = STATIC.joinpath("app.css").read_text(encoding="utf-8")
     js = STATIC.joinpath("app.js").read_text(encoding="utf-8")
     offtarget = STATIC.joinpath("offtarget.js").read_text(encoding="utf-8")
+    workflow = STATIC.joinpath("workflow.js").read_text(encoding="utf-8")
     data["catalogue"] = {
         "engine_version": snapshot["app"]["engine_version"] if snapshot else __version__,
         "rules": (snapshot["app"].get("available_rules") or list({
@@ -68,6 +69,8 @@ def frozen_page(data: dict[str, Any], snapshot: dict[str, Any] | None) -> bytes:
     # and a frozen page that dropped it would lose the whole screening card without saying so.
     page = page.replace('<script src="/offtarget.js" defer></script>',
                         f"<script>{offtarget}</script>")
+    page = page.replace('<script src="/workflow.js" defer></script>',
+                        f"<script>{workflow}</script>")
     icon = b64encode(STATIC.joinpath("favicon.svg").read_bytes()).decode()
     page = page.replace('href="/favicon.svg"', f'href="data:image/svg+xml;base64,{icon}"')
     page = page.replace('<a class="brand" href="/"', '<a class="brand" href="#"')
@@ -173,7 +176,8 @@ class AppRouter:
         path = unquote(parsed.path)
         query = parse_qs(parsed.query)
         if method == "GET" and path in (
-            "/", "/app.js", "/offtarget.js", "/app.css", "/favicon.svg", "/favicon.ico",
+            "/", "/app.js", "/offtarget.js", "/workflow.js", "/app.css",
+            "/favicon.svg", "/favicon.ico",
         ):
             name = {"/": "index.html", "/favicon.ico": "favicon.svg"}.get(path, path[1:])
             media = {"html": "text/html", "js": "text/javascript", "css": "text/css",
@@ -203,7 +207,11 @@ class AppRouter:
                 return self._queue_batch(BatchRequest.model_validate_json(body))
         if path == "/api/runs":
             if method == "GET":
-                return self._json(200, self.service.store.list_runs())
+                return self._json(200, self.service.store.list_runs(
+                    search=query.get("q", [""])[0], status=query.get("status", [""])[0],
+                    offset=int(query.get("offset", ["0"])[0]),
+                    limit=int(query.get("limit", ["100"])[0]),
+                ))
             if method == "POST":
                 if len(body) > MAX_BODY:
                     raise ValueError("Request is too large.")
@@ -216,6 +224,22 @@ class AppRouter:
                 self.workers.submit(self.service.run, run_id, request)
                 return self._json(202, {"id": run_id})
         parts = path.strip("/").split("/")
+        if (method == "POST" and len(parts) == 4
+                and parts[:2] == ["api", "runs"] and parts[3] == "shortlist"):
+            if len(body) > MAX_BODY:
+                raise ValueError("Request is too large.")
+            draft = ShortlistRequest.model_validate_json(body)
+            snapshot = self.service.store.snapshot(parts[2])
+            known = {candidate["id"] for candidate in snapshot["candidates"]}
+            if any(entry.candidate not in known for entry in draft.entries):
+                raise ValueError("A shortlisted candidate does not belong to this run.")
+            saved = self.service.store.save_shortlist(
+                parts[2], draft.revision, [entry.model_dump() for entry in draft.entries],
+            )
+            return (self._json(200, saved) if saved is not None else self._json(409, {
+                "detail": "This shortlist changed in another window. Reload saved notes "
+                          "before replacing them.", "code": "shortlist-conflict",
+            }))
         if method == "GET" and len(parts) == 3 and parts[:2] == ["api", "screenings"]:
             return self._json(200, self.service.store.screening(parts[2]))
         if (method == "POST" and len(parts) == 4
@@ -267,7 +291,7 @@ class AppRouter:
                     return self._json(409, {"detail": "Wait for this group to finish exporting."})
                 for run in batch["runs"]:
                     if run["status"] == "complete":
-                        run["result"] = self.service.store.snapshot(run["id"])
+                        run["result"] = self._workspace_snapshot(run["id"])
                 if parts[3] == "export.json":
                     return self._json(200, batch)
                 first = next((run["result"] for run in batch["runs"]
@@ -278,26 +302,29 @@ class AppRouter:
             if len(parts) == 3:
                 status = self.service.store.status(run_id)
                 if status["status"] == "complete":
-                    snapshot = self.service.store.snapshot(run_id)
+                    snapshot = self._workspace_snapshot(run_id)
                     # Large verdict arrays load only when a candidate is selected.
                     snapshot["candidates"] = [{k: v for k, v in c.items() if k != "rules"}
                                               for c in snapshot["candidates"]]
                     status["result"] = snapshot
                 return self._json(200, status)
             snapshot = self.service.store.snapshot(run_id)
+            if len(parts) == 4 and parts[3] == "shortlist" and method == "GET":
+                return self._json(200, self.service.store.shortlist(run_id))
             if len(parts) == 5 and parts[3] == "candidates":
                 candidate = next((c for c in snapshot["candidates"] if c["id"] == parts[4]), None)
                 if candidate is None:
                     raise KeyError("Candidate not in this run.")
                 return self._json(200, candidate)
             if len(parts) == 4 and parts[3] == "export.json":
-                return self._json(200, snapshot)
+                return self._json(200, self._workspace_snapshot(run_id))
             if len(parts) == 4 and parts[3] == "export.html":
                 # The screenings travel with the archive. They are separate dated records and
                 # stay separate, but an offline copy of a screened run that showed no screening
                 # would be a record quietly missing its own evidence.
                 return 200, "text/html; charset=utf-8", frozen_page(
-                    {"result": snapshot, "screenings": self._complete_screenings(run_id)},
+                    {"result": self._workspace_snapshot(run_id),
+                     "screenings": self._complete_screenings(run_id)},
                     snapshot,
                 )
             if len(parts) == 4 and parts[3] == "export.csv":
@@ -323,6 +350,11 @@ class AppRouter:
             if len(parts) == 4 and parts[3] == "screenings":
                 return self._json(200, self.service.store.screenings_for(run_id))
         return self._json(404, {"detail": "No such local app route."})
+
+    def _workspace_snapshot(self, run_id: str) -> dict[str, Any]:
+        """Attach current researcher notes to exports without changing the scientific snapshot."""
+        return {**self.service.store.snapshot(run_id),
+                "workspace": {"shortlist": self.service.store.shortlist(run_id)}}
 
 
     def _start_screening(self, run_id: str, body: bytes) -> tuple[int, str, bytes]:
@@ -606,7 +638,18 @@ class AppRouter:
              source["annotation_release"] or "unknown", source["note"])
             for source in reproducibility.get("sources", [])
         ))
-        data = write_workbook([candidates, run, rule_sheet, source_sheet])
+        shortlist = self.service.store.shortlist(run_id)
+        by_id = {candidate["id"]: candidate for candidate in snapshot["candidates"]}
+        shortlist_sheet = Sheet("Shortlist", (
+            "candidate", "researcher reason", "checklist rank", "excluded by gates",
+            "saved revision", "updated at",
+        ), tuple(
+            (entry["candidate"], entry["reason"], by_id[entry["candidate"]]["rank"],
+             "; ".join(by_id[entry["candidate"]]["excluded_by"]),
+             shortlist["revision"], shortlist["updated"])
+            for entry in shortlist["entries"]
+        ))
+        data = write_workbook([candidates, run, rule_sheet, source_sheet, shortlist_sheet])
         return 200, ("application/vnd.openxmlformats-officedocument."
                      "spreadsheetml.sheet"), data
 
