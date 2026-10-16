@@ -579,7 +579,7 @@ class TestTheSpreadsheetExport:
         service = service_for(tmp_path)
         saved = run_request(service)
         sheets = self.book(service, saved["app"]["run_id"])
-        assert list(sheets) == ["saRNA candidates", "Run", "Rules"]
+        assert list(sheets) == ["saRNA candidates", "Run", "Rules", "Reference sources"]
 
     def test_every_candidate_appears_in_rank_order_with_its_values(
         self, tmp_path: Path

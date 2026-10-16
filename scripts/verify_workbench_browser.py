@@ -1060,6 +1060,12 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
 
     # The measured ranking performance is shown, not left to the footer.
     assert browser.evaluate("!document.getElementById('ranking-performance').hidden") is True
+    assert browser.evaluate(
+        "state.result.reproducibility.software.package_sha256.length"
+    ) == 64
+    assert "software" in str(browser.evaluate(
+        "document.getElementById('reproducibility-panel').textContent"
+    )).lower()
     assert "has not demonstrated discrimination above chance" in str(browser.evaluate(
         "document.getElementById('ranking-performance').textContent"))
     # A rule row must look openable. `display:flex` on a <summary> drops Chrome's native

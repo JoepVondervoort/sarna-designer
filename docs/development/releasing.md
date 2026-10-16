@@ -134,3 +134,11 @@ tags, and why the placeholder is gone.
   someone who has none.
 - **A release checklist run in CI.** The gates above are run by hand today. Nothing enforces
   that they passed before a tag was pushed.
+
+## Preserve the build identity
+
+The custom Hatch hook now embeds the Git revision, working-tree state and package content
+fingerprint in wheels and source archives. Build from the intended checkout and retain the
+artifact distributed to colleagues. New runs record this identity separately from the package
+version. A dirty build is explicitly labelled; a commit alone cannot recover its edited files.
+See [reproducibility](reproducibility.md) for offline replay and the remaining data-source limits.

@@ -48,6 +48,7 @@ from sarna.regulatory.chromatin import open_af22_reader
 from sarna.regulatory.evidence import CELL_TYPES
 from sarna.regulatory.features import fetch_regulatory_features
 from sarna.regulatory.motifs import scan_all
+from sarna.reproducibility import run_manifest, software_identity
 from sarna.rules.catalog import CATALOGUE
 from sarna.rules.resolved import ResolvedRule
 from sarna.rules.results import RuleOutcome
@@ -358,8 +359,10 @@ class DesignService:
             self.store.fail(run_id, str(error) or type(error).__name__)
 
     def _run(self, run_id: str, request: DesignRequest) -> None:
+        software = software_identity()
         config = request.resolve()
         client = self.client_factory(request.offline)
+        observation_start = len(client.observations)
         self.store.progress(run_id, "Retrieving the promoter sequence")
         gene, transcript = None, None
         transcripts: tuple[Transcript, ...] = ()
@@ -513,5 +516,8 @@ class DesignService:
             "notices": notices, "rating_note": "Criteria met, not a probability of activation.",
             "available_rules": [ResolvedRule(rule).to_dict() for rule in CATALOGUE],
         }
+        payload["reproducibility"] = run_manifest(
+            payload, client.observations[observation_start:], software,
+        )
         self.store.progress(run_id, "Saving the complete local record")
         self.store.complete(run_id, payload)

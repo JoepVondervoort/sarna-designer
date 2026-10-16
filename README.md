@@ -273,6 +273,15 @@ siRNA-derived extrapolations, project choices, exploratory hypotheses and unknow
 citation is not validation of this application's ranking. New rule records carry an evidence-scope
 explanation and curated source links; custom roles and values remain researcher choices.
 
+### Reproduce a saved calculation
+
+New runs record code/build fingerprints, installed package versions, input identities and Ensembl
+response metadata. Export whole-run JSON and run `sarna-designer-replay run.json` to repeat the core
+calculation offline using the saved sequence and resolved rules. The report distinguishes matching
+outputs from matching software and environment. Annotation releases and original legacy-cache
+retrieval dates remain explicitly unknown. See [reproducibility](docs/development/reproducibility.md)
+for scope and limitations; enrichment annotations and BLAST are preserved rather than replayed.
+
 ### Honest expectations
 
 Wang et al. report that of designed duplexes, **15–20 % significantly activate** the target

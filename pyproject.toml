@@ -39,6 +39,10 @@ dev = [
 [project.scripts]
 sarna-designer = "sarna.app.__main__:main"
 sarna-designer-check = "sarna.app.check:main"
+sarna-designer-replay = "sarna.app.replay:main"
+
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sarna"]

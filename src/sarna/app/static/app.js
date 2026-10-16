@@ -847,6 +847,7 @@ function showResult(result) {
   $("metric-best").textContent = first ? `${first.rating.met}/${first.rating.evaluated}` : "n/a";
   $("metric-length").textContent = `${fmt(result.promoter.length)} bp`;
   renderRankingPerformance(result.ranking_performance);
+  renderReproducibility(result);
   renderMotifPanel(result);
   renderTopResult(result);
   const cell = result.cell_types.find(c => [c.id,c.name.toLowerCase()].includes(result.app.cell_line.toLowerCase()));
@@ -1590,6 +1591,19 @@ async function exportRun(type) {
     if (!response.ok) throw new Error(`Export failed (${response.status})`);
     downloadBlob(await response.blob(),name);
   } catch(e) { error(e.message); }
+}
+function renderReproducibility(result) {
+  const box = $("reproducibility-panel"), record = result.reproducibility;
+  if (!box) return;
+  if (!record) {
+    box.innerHTML = '<summary>Reproducibility metadata not recorded</summary><p class="hint">This historical run retains its saved results. Its exact build and reference fingerprints were not recorded and cannot be inferred from today’s installation.</p>';
+    return;
+  }
+  const software = record.software || {};
+  const revision = software.git_revision || "Git revision unknown";
+  const dirty = software.git_dirty === null ? "working-tree status unknown" : software.git_dirty ? "uncommitted changes at capture" : "clean source checkout at capture";
+  const sources = (record.sources || []).map(source => `<li>${escapeHTML(source.source)} · ${source.cache_hit?"cached response":"live response"} · observed ${escapeHTML(source.observed_at)} · original retrieval ${escapeHTML(source.retrieved_at || "unknown")} · annotation release ${escapeHTML(source.annotation_release || "unknown")}<br>${provenanceText({display:source.url,url:source.url})}<br>Response SHA-256: <code>${escapeHTML(source.response_sha256)}</code></li>`).join("");
+  box.innerHTML = `<summary>Reproducibility: saved inputs, software &amp; sources</summary><p class="hint">${escapeHTML(record.replay_scope)} Export the whole-run JSON and run <code>sarna-designer-replay run.json</code> offline. The report compares outputs, software and environment separately.</p><p class="hint">Revision: <code>${escapeHTML(revision)}</code> · ${escapeHTML(dirty)}<br>Package SHA-256: <code>${escapeHTML(software.package_sha256)}</code><br>Promoter sequence SHA-256: <code>${escapeHTML(record.sequence_sha256)}</code><br>Python ${escapeHTML(record.environment?.python)} · ${Object.keys(record.environment?.packages || {}).length} installed package versions recorded.</p><ul class="hint">${sources || "<li>No external reference responses were recorded for this run.</li>"}</ul><ul class="hint">${record.limitations.map(note=>`<li>${escapeHTML(note)}</li>`).join("")}</ul>`;
 }
 function renderRankingPerformance(measured) {
   // Shows the engine's own measured performance beside the rating it produces. Python computes

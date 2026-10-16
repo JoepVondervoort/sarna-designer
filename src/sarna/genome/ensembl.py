@@ -42,6 +42,7 @@ from sarna.genome.anchors import DEFAULT_REGION_PADDING_BP as ANCHOR_REGION_PADD
 from sarna.genome.anchors import PromoterAnchor
 from sarna.genome.coordinates import Assembly, GenomicInterval, Strand
 from sarna.genome.promoter import Promoter
+from sarna.reproducibility import source_observation
 from sarna.sequence.alphabet import Nucleic
 from sarna.sequence.nucleic import NucleicSequence
 
@@ -224,6 +225,7 @@ class EnsemblClient:
         "assembly",
         "base_url",
         "cache_dir",
+        "observations",
         "offline",
     )
 
@@ -257,6 +259,7 @@ class EnsemblClient:
         self._timeout = timeout
         self._client = client
         self._backoff = backoff_seconds
+        self.observations: list[dict[str, Any]] = []
         if cache_dir is not None:
             try:
                 cache_dir.mkdir(parents=True, exist_ok=True)
@@ -338,6 +341,7 @@ class EnsemblClient:
         cached = self._cache_path(path)
         from_cache = self._read_cache(cached)
         if isinstance(from_cache, dict):
+            self.observations.append(source_observation(f"{self.base_url}{path}", from_cache, True))
             return from_cache
         if self.offline:
             self._refuse_offline(path)
@@ -349,6 +353,7 @@ class EnsemblClient:
                 f"expected a JSON object from {url} but got {type(payload).__name__}"
             )
         self._write_cache(cached, payload)
+        self.observations.append(source_observation(url, payload, False))
         return payload
 
     def _get_with_retries(self, url: str, path: str) -> JsonPayload:
@@ -457,6 +462,7 @@ class EnsemblClient:
         cached = self._cache_path(path)
         from_cache = self._read_cache(cached)
         if isinstance(from_cache, list):
+            self.observations.append(source_observation(f"{self.base_url}{path}", from_cache, True))
             return from_cache
         if self.offline:
             self._refuse_offline(path)
@@ -466,6 +472,7 @@ class EnsemblClient:
                 f"expected a JSON array from {path} but got {type(payload).__name__}"
             )
         self._write_cache(cached, payload)
+        self.observations.append(source_observation(f"{self.base_url}{path}", payload, False))
         return payload
 
     def _check_assembly(self, reported: str | None, what: str) -> None:

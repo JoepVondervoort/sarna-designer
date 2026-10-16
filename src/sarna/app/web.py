@@ -548,6 +548,8 @@ class AppRouter:
                   for c in selected),
         )
         performance = snapshot.get("ranking_performance") or {}
+        reproducibility = snapshot.get("reproducibility") or {}
+        software = reproducibility.get("software") or {}
         app = snapshot.get("app", {})
         gene = snapshot.get("gene") or {}
         anchor = app.get("anchor") or {}
@@ -570,6 +572,14 @@ class AppRouter:
             ("targets evaluated", snapshot.get("counts", {}).get("generated")),
             ("passing every evaluable gate", snapshot.get("counts", {}).get("passing")),
             ("engine version", app.get("engine_version", "")),
+            ("Git revision", software.get("git_revision") or "not recorded"),
+            ("uncommitted changes", software.get("git_dirty")
+             if software.get("git_dirty") is not None else "not recorded"),
+            ("package SHA-256", software.get("package_sha256") or "not recorded"),
+            ("promoter sequence SHA-256", reproducibility.get("sequence_sha256") or "not recorded"),
+            ("resolved configuration SHA-256", reproducibility.get("configuration_sha256")
+             or "not recorded"),
+            ("replay scope", reproducibility.get("replay_scope") or "not recorded"),
             ("ranking performance", performance.get("headline", "not measured for this run")),
             ("what a rating is", "criteria met, counted equally. Not a probability that the "
                                  "duplex activates the gene."),
@@ -587,7 +597,16 @@ class AppRouter:
              rule.get("application_note", "Application note not recorded in this saved run"))
             for rule in rules
         ))
-        data = write_workbook([candidates, run, rule_sheet])
+        source_sheet = Sheet("Reference sources", (
+            "source", "URL", "response SHA-256", "cache hit", "observed at",
+            "original retrieval", "annotation release", "note",
+        ), tuple(
+            (source["source"], source["url"], source["response_sha256"], source["cache_hit"],
+             source["observed_at"], source["retrieved_at"] or "unknown",
+             source["annotation_release"] or "unknown", source["note"])
+            for source in reproducibility.get("sources", [])
+        ))
+        data = write_workbook([candidates, run, rule_sheet, source_sheet])
         return 200, ("application/vnd.openxmlformats-officedocument."
                      "spreadsheetml.sheet"), data
 

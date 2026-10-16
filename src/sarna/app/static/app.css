@@ -344,3 +344,4 @@ button.link{border:0;background:none;padding:0;color:var(--teal);font-size:11px;
 .screen-progress .hint{font-size:11px;margin-top:5px}
 .chip{display:inline-block;padding:2px 6px;border-radius:4px;background:#edf6f0;color:#2c7556;font-size:9px;letter-spacing:.6px;vertical-align:middle}
 .screen-state.waiting{color:var(--gold)}
+#reproducibility-panel{overflow-wrap:anywhere}#reproducibility-panel code{white-space:normal}#reproducibility-panel ul{padding-left:20px}#reproducibility-panel li{margin:8px 0}
