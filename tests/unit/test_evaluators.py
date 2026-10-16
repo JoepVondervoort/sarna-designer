@@ -290,7 +290,7 @@ class TestCpgIsland:
     ISLAND_PROMOTER = "CG" * 300
 
     def _island_context(self, offset: int) -> CandidateContext:
-        sequence = NucleicSequence.parse(self.ISLAND_PROMOTER + "AT" * 300)
+        sequence = NucleicSequence.parse(self.ISLAND_PROMOTER + "AT" * 1000)
         islands = find_cpg_islands(sequence, GARDINER_GARDEN_FROMMER_1987)
         promoter = Promoter(sequence=sequence)
         return CandidateContext.at(promoter, offset=offset, length=19, cpg_islands=islands)
@@ -301,7 +301,7 @@ class TestCpgIsland:
         assert result.excludes is True
 
     def test_a_target_outside_every_island_passes(self) -> None:
-        result = check("not-in-cpg-island", self._island_context(offset=1000))
+        result = check("not-in-cpg-island", self._island_context(offset=1500))
         assert result.outcome is RuleOutcome.PASS
 
     def test_not_running_detection_is_not_applicable(self) -> None:
@@ -310,9 +310,9 @@ class TestCpgIsland:
         assert result.outcome is RuleOutcome.NOT_APPLICABLE
         assert result.excludes is False
 
-    def test_finding_no_islands_is_a_pass(self) -> None:
-        promoter = Promoter(sequence=NucleicSequence.parse(GOOD + "TTTT"))
-        context = CandidateContext.at(promoter, offset=0, length=19, cpg_islands=())
+    def test_finding_no_islands_with_enough_context_is_a_pass(self) -> None:
+        promoter = Promoter(sequence=NucleicSequence.parse("AT" * 600))
+        context = CandidateContext.at(promoter, offset=550, length=19, cpg_islands=())
         result = check("not-in-cpg-island", context)
         assert result.outcome is RuleOutcome.PASS
 
@@ -444,3 +444,14 @@ class TestEvaluatorLookupFailsLoudly:
     def test_the_error_says_what_to_do_about_it(self) -> None:
         with pytest.raises(KeyError, match="rather than leaving the rule inert"):
             evaluator_for("another-missing-rule")
+
+
+@pytest.mark.parametrize(('bases', 'offset'), [(GOOD + 'TTTT', 0), ('AT' * 600, 0)])
+def test_missing_island_context_is_unknown_not_a_negative(bases: str, offset: int) -> None:
+    context = CandidateContext.at(
+        Promoter(sequence=NucleicSequence.parse(bases)), offset=offset, length=19, cpg_islands=(),
+    )
+    result = check('not-in-cpg-island', context)
+    assert result.outcome is RuleOutcome.NOT_APPLICABLE
+    assert not result.excludes
+    assert 'unknown' in result.detail.lower()

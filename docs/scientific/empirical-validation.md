@@ -1,9 +1,17 @@
 # Empirical validation against measured activity
 
-**What this establishes.** Wang et al. 2015's sequence gates exclude none of the 14 saRNAs known
-to activate their target. The legacy script's gates exclude five of them. No preset's *ranking*
-separates activators from non-activators, which is the expected result on this dataset and not
-evidence against the ranking.
+**What this establishes.** On the bundled heterogeneous dataset, the sequence-only
+preference score has not demonstrated discrimination above chance. This does not establish
+that ranking is useless or that the dataset alone explains the result. It provides no positive
+validation of predictive efficacy. Known activators can fail both sequence and location gates:
+CEBPA fails position 19, and recovered coordinates place several activators outside the window.
+
+**Scope of the displayed AUC.** The application calls `benchmark` without recovered locations.
+It evaluates sequence-only preference points, not the complete production order with its
+thermodynamic tiebreak. Coordinate-aware gate findings below are a separate analysis. There
+are 14 labelled positives, with different assays and evidential strength; some project results
+were reproducible without reaching statistical significance. The labels are retained as recorded,
+not promoted to equivalent independent confirmations.
 
 Produced by `scripts/validate_against_chapter4.py` against
 `sarna.validation.dataset.load_chapter4_dataset`. Reproducible; the seed is printed with every
@@ -16,21 +24,20 @@ without. Three limits decide what any number here means, and they are not incide
 
 **The gate is largely untestable, in one direction.** Every sequence was designed to satisfy
 Wang's structural criteria, so the set contains almost nothing the gate should reject. It cannot
-show a gate to be too permissive. It *can* show a gate to be too strict (if a sequence that
-demonstrably worked is excluded, that is a real finding, and it is the finding this page leads
-with.
+establish how permissive a gate should be in an unselected population. It can identify
+recorded activators that a gate excludes, subject to the label and coordinate caveats.
 
 **The coordinates have since been recovered** (`scripts/locate_dataset_designs.py`), so the
-location rules are now testable too) see "The TSS window excludes most of the activators" below.
+location rules can now be assessed separately; see "The TSS window excludes most of the activators" below.
 123 of the 125 designs are placed; CHD8-9 and CHD8-10 each match 12 places in their locus and are
 left unplaced rather than guessed. CpG-island overlap remains unevaluable, because 519 bp of stored
-context cannot support a detector that needs 500 bp of island before it calls one.
+context does not provide enough flanking sequence to exclude islands extending beyond it.
 
 **Cell type dominated the experiment.** AF22 neural stem cells produced no activators at any
 locus, including the P21 control that works reliably in HeLa. No sequence rule can represent that,
 so a rule fitted to these labels should not be expected to transfer between cell types.
 
-## Wang's gates are well calibrated; the legacy script's are not
+## Known activators excluded by sequence gates
 
 Cost of each gate, measured as known activators excluded:
 
@@ -47,9 +54,9 @@ Cost of each gate, measured as known activators excluded:
 | Position 18 A/T | Wang | **0** of 14 | 2 of 111 |
 | Position 19 A | Wang | 1 of 14 | 11 of 111 |
 
-Wang's published settings are the only ones in the table that cost nothing. That is a genuine, if
-narrow, positive result for the default preset: on the one dataset available, every one of its
-sequence gates admits every duplex known to work.
+Several Wang settings exclude none of the 14 labelled activators in this dataset; position 19 A
+excludes one. Admitting known activators is a limited compatibility check, not calibration of a
+gate, proof of necessity, or evidence of predictive benefit on unselected candidates.
 
 ### The CpG gate points the wrong way
 
@@ -61,14 +68,13 @@ less: mean 0.29 against 0.17, and 71 % of activators have no CpG against 83 % of
 A small difference on 14 sequences, so not a finding on its own, but it removes any empirical
 case for tightening the gate, and tightening it has a measured cost of 29 % of known activators.
 
-Mechanistically this is unsurprising in hindsight. saRNA targets sit in promoters; promoters are
-CpG-rich; and the rule that matters for methylation-related silencing is CpG *island* overlap,
-which is a property of the surrounding region rather than of 19 bases. The island rule already
-covers that, which leaves the per-target CpG count doing little except excluding good candidates.
+Per-target CpG count and regional CpG-island overlap describe different sequence features.
+Neither measures methylation or accessibility in the experimental cell. These observations do
+not establish a causal mechanism or the predictive value of either rule.
 
 **Acted on.** The `strict` preset was first written with `cpg-count: 0`, on the reasoning that
 fewer CpGs must be safer. The harness caught it on the first run: that version excluded 5 of 14
-activators. `strict` now tightens only location criteria, which this dataset cannot test, and
+activators. `strict` now tightens only location criteria, which the sequence-only benchmark does not test, and
 leaves every sequence criterion at Wang's value. The rejected tightenings are recorded in the
 preset's own `divergences` so the next person does not reinstate them.
 
@@ -124,13 +130,13 @@ AUC is the probability that a randomly chosen activator outranks a randomly chos
 ties counted as half, so 0.5 is a coin flip. Every preset is indistinguishable from chance, and
 three of the four fall slightly below it.
 
-This is the expected result and it is worth being precise about why, because "the ranking does not
-work" is the wrong conclusion. The ranking orders candidates by how many *preferences* they meet.
+This result does not establish predictive benefit. Range restriction and missing context limit
+its interpretation, but do not establish why the score failed to separate the labels. The ranking orders candidates by how many *preferences* they meet.
 The dataset was built by applying those same criteria and keeping what passed, so it contains
 almost none of the variation the ranking exists to order, and of the seven preferences, four
 (the 3' flank positions) and one (the preferred TSS window) cannot be evaluated at all without
 promoter coordinates. Two preferences are doing all the work. A near-0.5 AUC under those
-conditions tells you about the dataset, not about the ranking.
+conditions is inconclusive about performance in a different design population.
 
 ### `exploratory` scoring highest is circular, not encouraging
 
@@ -139,18 +145,20 @@ rules in the entire catalogue (+25 pp and +18 pp). Both were derived **from this
 
 The +25 pp for `pos10-g` is the same +24.8 pp from the motif analysis, on the same 125 sequences.
 Measuring it here is not validation; it is reading the training set back. And even with two rules
-fitted to the data it is scored against, `exploratory` reaches p = 0.37, which is the clearest
-possible statement of how little signal there is to fit.
+fitted to the data it is scored against, `exploratory` reaches p = 0.37, which does not establish predictive benefit. A non-significant result does not quantify
+how much signal exists.
 
 ## What would make this answerable
 
-- **Recover the promoter coordinates.** Would activate five of the seven preferences and the
-  location gates, and is the one improvement that needs no new experiments.
+- **Use the recovered coordinates in a separate contextual benchmark.** Locations are now
+  available for 123 designs. Report which rules are evaluable and keep the sequence-only
+  benchmark separate; limited context still prevents some island conclusions.
 - **Hold out the chapter 4 sequences.** `pos10-g` and `central-stability` cannot be assessed on
   the data that produced them. Six published activators are available as an independent set, but
   six is too few.
-- **Test one hypothesis prospectively.** Duplexes differing at position 10 and nowhere else would
-  make the existing data decisive, because the grid collapses from 76 cells to one.
+- **Evaluate a prespecified hypothesis on independent observations.** Define the assay context,
+  endpoints, comparison and uncertainty analysis before collecting data. A sequence change can
+  also change target identity and context; it does not isolate one mechanism automatically.
 - **Record the negatives per cell line.** "Did not activate" currently pools HeLa and AF22, and
   the chapter's own strongest effect is that these differ. Separating them would let a cell-type
   term enter the model at all.
@@ -162,7 +170,7 @@ Added after the coordinates were recovered. This is the one finding of the "gate
 that a range-restricted set can legitimately deliver, and it is a large one.
 
 With coordinates supplied, `wang-2015` excludes **10 of the 14** duplexes known to activate their
-target, all 10 on `tss-window` alone. The four survivors are exactly the four published literature
+target; all 10 fail `tss-window`, and CEBPA also fails `pos19-a`. The four survivors are exactly the four published literature
 duplexes:
 
 | Activator | Offset from MANE Select TSS | Inside −1000…−100? |
@@ -224,11 +232,12 @@ Table 1 says and conformance is the default preset's job. Three things changed i
 - The rule now offers a **sourced alternative**: the thesis's own −2000…+500 definition, with the
   measured trade-off in its note. A user who does not want KLF4-like candidates excluded can select
   it as a recorded decision.
-- The parameter cannot express the `+500` half, because both edges are capped at 0. A target
+- The parameter cannot express the `+500` half, because both edges are capped upstream of +1. A target
   downstream of the TSS overlaps the transcript, where the rule's own rationale (and the
-  distinction from silencing) stops applying. Selecting the thesis option gives −2000…0.
+  distinction from silencing) stops applying. The app rejects position 0 because this coordinate convention has no base 0; the selected alternative must end at −1.
 - **Whether `tss-window` should be a gate at all is an open question for the user.** Making it a
-  preference would admit every one of the 14 activators while costing the strongest single filter
+  preference would remove location-based exclusions but would not resolve CEBPA's position-19
+  rejection while costing the strongest single filter
   in the engine, which currently rejects 64% of candidates on a real promoter. That is a scientific
   trade-off, not a code change, and it is not being made unilaterally.
 
@@ -246,3 +255,11 @@ off-by-one. Three checks, the last of them external:
   `VHL-821` recovers at **−818** and `dsP21-322` at **−310**, 3 and 12 bases from the names, across
   twenty years of annotation drift. Nothing in the chain can be meaningfully wrong and still land
   there.
+
+## Sources and interpretation
+
+The bundled data and computations are project evidence, not independent replication. See
+[data loading and label caveats](../../src/sarna/validation/dataset.py),
+[the benchmark implementation](../../src/sarna/validation/benchmark.py), and
+[the evidence guide](evidence-guide.md). Published protocol guidance is
+[Wang et al. 2015, Table 1](https://doi.org/10.14440/jbm.2015.39).

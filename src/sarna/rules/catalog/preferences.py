@@ -30,8 +30,9 @@ _START_CONSEQUENCE = (
 )
 
 _FLANK_RATIONALE = (
-    "The four bases immediately 3' of the target are preferably A or T. An A/T-rich flank is "
-    "easier to unwind, which helps the duplex engage the target site."
+    "Wang Table 1 prefers A or T at the four bases immediately 3' of the target. "
+    "An accessibility explanation is a mechanistic hypothesis; these bases do not measure "
+    "target engagement, chromatin accessibility or activation in the experimental cell."
 )
 _FLANK_CONSEQUENCE = (
     "Worth one point per position, so this group contributes 0 to 4 of the 7 available points. "

@@ -19,12 +19,14 @@ indistinguishable from the source having no data, which is the error this projec
 avoid making.
 """
 
+import hashlib
 import json
 import logging
 import os
 import time
 from collections.abc import Mapping
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any
 
 import httpx
@@ -149,11 +151,9 @@ class JsonHttpCache:
         """Return the cache file for ``path``, or ``None`` if caching is off."""
         if self.cache_dir is None:
             return None
-        safe = "".join(
-            character if character.isalnum() or character in "._-" else "_"
-            for character in path
-        )
-        return self.cache_dir / f"{self.name}_{safe[:180]}.json"
+        identity = json.dumps([self.base_url, path], separators=(",", ":"))
+        digest = hashlib.sha256(identity.encode()).hexdigest()
+        return self.cache_dir / f"{self.name}_{digest}.json"
 
     def _read_cache(self, cached: Path | None) -> JsonObject | None:
         """Return a cached object, or ``None`` if there is none or it is unusable."""
@@ -174,14 +174,21 @@ class JsonHttpCache:
         """Write a cache entry so a reader never sees half of it."""
         if cached is None:
             return
-        temporary = cached.with_name(f"{cached.name}.{os.getpid()}.part")
+        temporary: Path | None = None
         try:
-            temporary.write_text(json.dumps(payload), encoding="utf-8")
+            with NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=cached.parent,
+                prefix=f"{cached.name}.", suffix=".part", delete=False,
+            ) as handle:
+                temporary = Path(handle.name)
+                json.dump(payload, handle)
             os.replace(temporary, cached)
         except OSError as error:
             # A cache that cannot be written makes the tool slower, not broken.
             LOGGER.warning("could not cache %s: %s", cached.name, error)
-            temporary.unlink(missing_ok=True)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
 
     def _refuse_offline(self, path: str) -> None:
         """Raise rather than reach the network, naming what was missing.

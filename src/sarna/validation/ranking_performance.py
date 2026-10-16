@@ -56,7 +56,11 @@ RANGE_RESTRICTION = (
     "The dataset is range-restricted: every sequence in it was designed to pass Wang's gate, so "
     "it can show that a gate is too strict but never that one is too permissive. Four of the "
     "seven preferences also cannot be evaluated without promoter coordinates, so on this set a "
-    "near-chance result describes the dataset at least as much as the ranking."
+    "near-chance result cannot establish performance on an independent design population. "
+    "This benchmark uses sequence-only preference points without recovered coordinates or "
+    "the production ranking's thermodynamic tiebreak. It does not validate the full workflow. "
+    "The 14 positives combine different studies and assay contexts; some project results "
+    "were reproducible without reaching statistical significance."
 )
 
 
@@ -89,6 +93,8 @@ def performance_summary(preset_id: str) -> dict[str, Any] | None:
     circular = preset_id in CIRCULAR_PRESETS
     return {
         "preset": preset_id,
+        "evaluation_scope": "sequence-only preference points; no thermodynamic tiebreak",
+        "coordinates_used": False,
         "auc": round(result.auc, 3),
         "auc_p_value": round(result.auc_p_value, 3),
         "chance_auc": CHANCE_AUC,
@@ -116,7 +122,8 @@ def _headline(result: BenchmarkResult) -> str:
             f"(AUC {result.auc:.2f}, p = {result.auc_p_value:.2f})."
         )
     return (
-        f"Measured on {len(result.scored)} assayed sequences, this ranking does not beat "
+        f"Measured on {len(result.scored)} assayed sequences, this preference score has not "
+        f"demonstrated discrimination above "
         f"chance (AUC {result.auc:.2f} against {CHANCE_AUC:.2f} for a coin flip, "
         f"p = {result.auc_p_value:.2f}). Treat it as a prioritisation aid, not a prediction."
     )

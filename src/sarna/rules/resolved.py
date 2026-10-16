@@ -108,6 +108,11 @@ class ResolvedRule:
         exported["kind"] = str(self.kind)
         exported["default_kind"] = str(self.rule.kind)
         exported["kind_overridden"] = self.kind is not self.rule.kind
+        exported["application_note"] = (
+            "Gate, preference and off describe software behavior, not evidence strength. "
+            "Custom values and roles are researcher choices; the cited source does not "
+            "automatically support those changes."
+        )
         exported["selected_option"] = (
             self.rule.option(self.option_id).to_dict() if self.option_id is not None else None
         )

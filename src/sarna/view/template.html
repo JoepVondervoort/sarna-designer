@@ -596,9 +596,9 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
      unit and legal range, and the alternatives not chosen. The footer claimed otherwise. */
 
   const EVIDENCE_NOTE = {
-    established: "Supported by primary literature beyond this project's source paper.",
-    empirical: "Observed or asserted by the source, without a mechanistic account.",
-    exploratory: "Speculative. Carried for traceability, not because it is believed.",
+    established: "Published support in the source setting; saRNA predictive benefit is not established.",
+    empirical: "Published observation or recommendation; not a universal activation requirement.",
+    exploratory: "Hypothesis; improved saRNA activation has not been demonstrated.",
   };
 
   function evidenceTag(rule) {
@@ -608,15 +608,20 @@ footer.src ul { margin: 6px 0 0; padding-left: 18px; }
     if (!label) return "";
     const title = warn
       ? "No source could be traced for this rule. It must not be read as established biology."
-      : (EVIDENCE_NOTE[rule.evidence_class] || "");
-    return `<span class="tag ${esc(label)}" title="${esc(title)}">${esc(label)}</span>`;
+      : (rule.evidence_note || EVIDENCE_NOTE[rule.evidence_class] || "");
+    const display = {established:"published support in source setting",
+      empirical:"published observation or guidance", exploratory:"exploratory hypothesis"};
+    return `<span class="tag ${esc(label)}" title="${esc(title)}">${esc(display[label] || label)}</span>`;
   }
 
   function citationLine(rule) {
     if (!rule || !rule.provenance) return "";
     const p = rule.provenance;
     const text = p.kind === "unsourced" ? "No source traced. " + (p.note || "") : p.display;
-    return `<div class="src">${esc(text || "")}</div>`;
+    const link = typeof p.url === "string" && /^https:\/\//.test(p.url)
+      ? `<a href="${esc(p.url)}" target="_blank" rel="noopener noreferrer">${esc(text || "")}</a>`
+      : esc(text || "");
+    return `<div class="src">${link}</div><p>${esc(rule.evidence_note || "Evidence scope was not recorded; a citation does not validate activation prediction.")}</p><p>${esc(rule.application_note || "Gate and preference describe software behavior, not evidence strength.")}</p>`;
   }
 
   function parameterValue(rule, name) {

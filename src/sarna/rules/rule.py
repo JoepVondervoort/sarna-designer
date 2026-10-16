@@ -179,6 +179,48 @@ class Rule(BaseModel):
         """Return whether the UI must show a provenance warning beside this rule."""
         return self.provenance.is_warning
 
+    @property
+    def evidence_note(self) -> str:
+        """State the scope of support without implying validated activation prediction."""
+        source = self.provenance.source or ""
+        if self.provenance.is_warning:
+            return "No traceable supporting source. This is an unsupported design hypothesis."
+        if self.provenance.kind.value == "legacy-script":
+            return "Inherited implementation choice; legacy behavior is not biological evidence."
+        if source in ("Reynolds et al. 2004", "Ui-Tei et al. 2004"):
+            return (
+                "Evidence from siRNA knockdown experiments. Transfer to promoter-targeted "
+                "saRNA activation is an extrapolation, not demonstrated efficacy."
+            )
+        if source == "van de Vondervoort 2026":
+            return (
+                "Project thesis evidence or hypothesis, not independent validation. "
+                "Rules derived from these data cannot be validated on the same data."
+            )
+        if self.evidence_class is EvidenceClass.EXPLORATORY:
+            return "Exploratory hypothesis; improved saRNA activation has not been demonstrated."
+        if self.kind is RuleKind.TIEBREAK:
+            return (
+                "RNAi strand-selection research motivates this calculation. Using terminal "
+                "energy as a ranking tiebreak is a project choice without demonstrated "
+                "predictive benefit for saRNA activation."
+            )
+        if self.id == "not-in-cpg-island":
+            return (
+                "Wang recommends avoiding CpG islands. The detection definition and "
+                "sliding-window implementation are project choices; island sequence does "
+                "not establish methylation, accessibility or saRNA response."
+            )
+        if source == "Wang et al. 2015":
+            return (
+                "Published saRNA protocol guidance. A citation supports the recommendation, "
+                "not a universal biological requirement or this application's ranking."
+            )
+        return (
+            "Published support applies to the phenomenon studied in the cited work. "
+            "It does not establish that this rule predicts saRNA activation."
+        )
+
     def to_dict(
         self, values: Mapping[str, ParameterValue] | None = None
     ) -> dict[str, Any]:
@@ -204,6 +246,7 @@ class Rule(BaseModel):
             "name": self.name,
             "kind": str(self.kind),
             "evidence_class": str(self.evidence_class),
+            "evidence_note": self.evidence_note,
             "provenance": self.provenance.to_dict(),
             "rationale": self.rationale,
             "consequence": self.consequence,

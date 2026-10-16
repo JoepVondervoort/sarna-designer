@@ -438,25 +438,28 @@ class AppRouter:
     def _screenings_by_candidate(
         self, run_id: str
     ) -> dict[str, list[ScreeningFinding]]:
-        """Return the newest complete screening per scope, indexed by candidate.
+        """Return the newest complete finding per candidate and scope.
 
         ADR 0019 left this join open, so the order export reported "not-performed" even after
         a real screening, honest, and useless to somebody deciding what to synthesise. A
         screening stays its own dated record; this reads it rather than writing into the run.
 
-        Newest per scope, because re-screening adds a record rather than replacing one and the
+        Newest per candidate and scope, because batches cover different candidates and the
         export should carry the most recent observation. An incomplete or failed screening
         contributes nothing: a search that did not finish is not a search that found nothing.
         """
         findings: dict[str, list[ScreeningFinding]] = {}
-        seen: set[str] = set()
+        seen: set[tuple[str, str]] = set()
         for listed in self.service.store.screenings_for(run_id):
-            if listed["status"] != "complete" or listed["scope"] in seen:
+            if listed["status"] != "complete":
                 continue
-            seen.add(listed["scope"])
             result = (self.service.store.screening(listed["id"]) or {}).get("result") or {}
             parameters = result.get("parameters") or {}
             for row in result.get("specificity") or []:
+                key = (row["candidate"], listed["scope"])
+                if key in seen:
+                    continue
+                seen.add(key)
                 findings.setdefault(row["candidate"], []).append(ScreeningFinding(
                     scope=listed["scope"],
                     database=str(parameters.get("database", "unknown")),
@@ -574,10 +577,14 @@ class AppRouter:
                 f.scope for rows in screenings.values() for f in rows})) or "none performed"),
         ))
         rule_sheet = Sheet("Rules", ("rule", "name", "role", "evidence", "source",
-                                     "parameters"), tuple(
+                                     "parameters", "source URL", "evidence scope",
+                                     "application note"), tuple(
             (rule["id"], rule["name"], rule["kind"], rule.get("evidence_class", ""),
              rule.get("provenance", {}).get("display", ""),
-             "; ".join(f"{p['name']}={p['value']}" for p in rule.get("parameters", [])))
+             "; ".join(f"{p['name']}={p['value']}" for p in rule.get("parameters", [])),
+             rule.get("provenance", {}).get("url") or "not recorded",
+             rule.get("evidence_note", "Evidence scope not recorded in this saved run"),
+             rule.get("application_note", "Application note not recorded in this saved run"))
             for rule in rules
         ))
         data = write_workbook([candidates, run, rule_sheet])

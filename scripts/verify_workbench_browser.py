@@ -1060,7 +1060,7 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
 
     # The measured ranking performance is shown, not left to the footer.
     assert browser.evaluate("!document.getElementById('ranking-performance').hidden") is True
-    assert "does not beat chance" in str(browser.evaluate(
+    assert "has not demonstrated discrimination above chance" in str(browser.evaluate(
         "document.getElementById('ranking-performance').textContent"))
     # A rule row must look openable. `display:flex` on a <summary> drops Chrome's native
     # marker, and for a while these seventeen rows looked like a static checklist while the
@@ -1078,6 +1078,10 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     assert "why" in opened.lower()
     # The explanation itself, not just the verdict.
     assert "Why this rule:" in opened and "Changing it:" in opened, opened[:300]
+    assert "Evidence scope:" in opened
+    assert browser.evaluate(
+        "!!document.querySelector('#candidate-detail a[href^=\"https://doi.org/\"]')"
+    ) is True
     # The cell line's identity and evidence. All of this reached the browser from the start and
     # none of it was drawn -- the banner printed the name the researcher typed and stopped. A
     # cell line named without its accession cannot be checked against anybody else's record.
@@ -1189,7 +1193,8 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     )
     assert "refseq" in sheet, f"the bench sheet omits the database screened against: {sheet[:300]}"
     assert "Wang 2015's 80%" in sheet, "the bench sheet omits the sourced homology count"
-    assert "does not beat chance" in sheet, "the sheet must carry the measurement too"
+    assert "has not demonstrated discrimination above chance" in sheet, (
+        "the sheet must carry the measurement too")
     stated = re.search(r"meeting (\d+) of (\d+) evaluated preferences", sheet)
     listed = re.search(r"Preferences met \((\d+)\)", sheet)
     assert stated and listed, sheet[:400]

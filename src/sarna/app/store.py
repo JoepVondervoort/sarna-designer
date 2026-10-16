@@ -391,7 +391,7 @@ class RunStore:
             rows = connection.execute(
                 "SELECT id,run_id,scope,created,status,stage,request_id,error,"
                 "       (result IS NOT NULL) AS has_result "
-                "FROM screenings WHERE run_id=? ORDER BY created DESC", (run_id,)
+                "FROM screenings WHERE run_id=? ORDER BY created DESC,rowid DESC", (run_id,)
             ).fetchall()
         return [dict(row) for row in rows]
 

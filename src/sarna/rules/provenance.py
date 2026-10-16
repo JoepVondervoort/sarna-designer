@@ -12,6 +12,18 @@ from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
+SOURCE_URLS = {
+    "Wang et al. 2015": "https://doi.org/10.14440/jbm.2015.39",
+    "Reynolds et al. 2004": "https://doi.org/10.1038/nbt936",
+    "Ui-Tei et al. 2004": "https://doi.org/10.1093/nar/gkh247",
+    "Xia et al. 1998": "https://doi.org/10.1021/bi9809425",
+    "SantaLucia 1998": "https://doi.org/10.1073/pnas.95.4.1460",
+    "Schwarz et al. 2003": "https://doi.org/10.1016/S0092-8674(03)00759-1",
+    "Takai & Jones 2002": "https://doi.org/10.1073/pnas.052410099",
+    "Gardiner-Garden & Frommer 1987": "https://doi.org/10.1016/0022-2836(87)90689-9",
+}
+"""Curated links only; an unverified source gets no guessed URL."""
+
 
 class EvidenceClass(Enum):
     """How well supported a rule is."""
@@ -137,6 +149,7 @@ class Provenance(BaseModel):
         return {
             "kind": self.kind.value,
             "source": self.source,
+            "url": SOURCE_URLS.get(self.source or ""),
             "locator": self.locator,
             "note": self.note,
             "is_warning": self.is_warning,

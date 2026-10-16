@@ -19,8 +19,8 @@ another `--port` and the matching URL.
    grouped, with their identities retained. MANE Select is selected only when unique. Neither
    a grouped annotated start site nor MANE establishes cell-specific promoter activity;
    literature anchors retain their source and uncertainty.
-2. Choose the upstream/downstream span and experimental cell line. No expression adapter is
-   loaded yet: a cell name does not establish transcription. AF22 histone tracks are an optional
+2. Choose the upstream/downstream span and experimental cell line. GTEx expression can provide tissue context; it does not establish transcription in the
+   selected experimental cell line. AF22 histone tracks are an optional
    local input; other lines do not acquire histone evidence simply by being selected.
 3. Keep Wang defaults or open **All rules & evidence**. Edit supported values, choose a sourced
    alternative, or make a binary rule a gate, preference or off. Citations, evidence classes,
@@ -39,8 +39,8 @@ another `--port` and the matching URL.
    - **Order CSV** is what you synthesise: both strands as 19 nt RNA cores plus a 3′ `[dT][dT]`
      overhang, 21 nt each, in 5′→3′ orientation. Core, overhang and joined form are separate
      columns, because vendor notation for a chimeric oligo differs between suppliers. Every row
-     carries its own sanity report, including that **no off-target screening was performed**,
-     this project implements none, so screen the sequences independently before ordering. Passing
+     carries its own sanity report, including the latest completed screening findings per candidate and scope, or an explicit
+     not-screened status. A similarity search does not establish biological specificity. Passing
      candidates only, unless you select specific ones. See
      [ADR 0017](../adr/0017-order-ready-duplex-export.md).
    - **Core sequences CSV** is the engine's view: RNA cores alone, no overhangs. Deliberately not

@@ -266,6 +266,13 @@ marked "preferably". It is **not** a formula taken from the paper: the paper pub
 weights and no ranking formula at all. Equal weighting is a deliberate choice, because the
 evidence gives no basis for ranking the preferences against each other.
 
+### Evidence and uncertainty
+
+[Reading the evidence](docs/scientific/evidence-guide.md) distinguishes published saRNA guidance,
+siRNA-derived extrapolations, project choices, exploratory hypotheses and unknowns. A source
+citation is not validation of this application's ranking. New rule records carry an evidence-scope
+explanation and curated source links; custom roles and values remain researcher choices.
+
 ### Honest expectations
 
 Wang et al. report that of designed duplexes, **15–20 % significantly activate** the target
@@ -364,9 +371,9 @@ for lost in report.rejected_activators:        # duplexes that worked and the ga
   Windows/macOS installers were not verified in this environment. Packaged installers remain
   to be built; see the
   [continuation plan](docs/development/continuation-plan.md).
-- **3' overhangs are not modelled.** Candidates are 19 nt cores; what a researcher orders is a
-  21-mer with a 3' dTdT overhang on both strands. Order-ready CSV and chemistry validation
-  remain to be implemented.
+- **Order exports use the project's dTdT chemistry.** Candidates are 19 nt cores and order
+  CSV represents a 3' dTdT overhang on each strand. This is not a general chemistry model.
+  Completed screening findings are included per candidate and scope; unscreened remains explicit.
 - **Empirical validation is narrow.** 125 assayed sequences exist, but all were designed to pass
   Wang's gate, so the set cannot show a gate to be too permissive, only too strict. The sequences
   have recovered coordinates and 519 bp context for 123 of 125 designs, enabling window and

@@ -240,3 +240,25 @@ class TestTheRequestItSends:
             offline=False,
         )
         assert fetcher.base_url == "https://example.invalid"
+
+
+@pytest.mark.parametrize(('left', 'right'), [
+    ('/x?a=b', '/x/a=b'),
+    ('/' + 'a' * 200 + '?id=1', '/' + 'a' * 200 + '?id=2'),
+])
+def test_distinct_requests_never_reuse_a_colliding_cache_entry(
+    tmp_path: Path, left: str, right: str,
+) -> None:
+    fetcher, transport = cache_for({'id': 1}, {'id': 2}, cache_dir=tmp_path)
+    assert fetcher.get(left) == {'id': 1}
+    assert fetcher.get(right) == {'id': 2}
+    assert fetcher.get(left) == {'id': 1}
+    assert len(transport.requested) == 2
+
+
+def test_cache_identity_includes_source_endpoint(tmp_path: Path) -> None:
+    first, _ = cache_for({'id': 1}, cache_dir=tmp_path)
+    second, _ = cache_for({'id': 2}, cache_dir=tmp_path)
+    second.base_url = 'https://another.invalid'
+    assert first.get('/same') == {'id': 1}
+    assert second.get('/same') == {'id': 2}

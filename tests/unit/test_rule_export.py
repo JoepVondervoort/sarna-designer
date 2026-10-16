@@ -162,3 +162,15 @@ class TestConfigurationExport:
     @pytest.mark.parametrize("field", ["id", "name", "kind", "evidence_class"])
     def test_the_fields_that_were_already_exported_are_still_there(self, field: str) -> None:
         assert self.rule("gc-content")[field]
+
+
+def test_rule_evidence_distinguishes_source_scope_from_activation_validation() -> None:
+    assert 'protocol guidance' in CATALOGUE['pos19-a'].to_dict()['evidence_note']
+    sirna = CATALOGUE['au-rich-guide-5-prime'].to_dict()
+    assert 'extrapolation' in sirna['evidence_note']
+    assert sirna['provenance']['url'] == 'https://doi.org/10.1093/nar/gkh247'
+    assert 'unsupported' in CATALOGUE['pos7-u'].to_dict()['evidence_note']
+    assert CATALOGUE['pos7-u'].to_dict()['provenance']['url'] is None
+    assert Provenance.citation('Unverified source', 'Table 1').to_dict()['url'] is None
+    for rule in WANG_2015.resolve().to_dict()['rules']:
+        assert 'not evidence strength' in rule['application_note']

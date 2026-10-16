@@ -5,6 +5,8 @@ property these tests exist to hold: a screening is an *addition* to the evidence
 with its own provenance, not an edit to the frozen record (ADR 0019).
 """
 
+import csv
+import io
 import json
 import threading
 import time
@@ -20,6 +22,7 @@ from sarna.offtarget.models import GENOMIC_SCOPE, TRANSCRIPT_SCOPE
 from sarna.offtarget.ncbi import BlastClient
 from tests.unit.test_app import DNA, run_request, service_for
 from tests.unit.test_offtarget_ncbi import PUT_REPLY, READY_WITH_HITS, REPORT
+from tests.unit.test_workbook import sheets_of
 
 
 def blast_answering(replies: list[bytes]) -> BlastClient:
@@ -358,3 +361,41 @@ def test_the_route_screens_through_the_injectable_client_and_not_a_real_one(
         "the route did not take its BLAST client from blast_factory, so it built a real one "
         "and this test just submitted a search to NCBI")
     assert service.store.screening(screening_id)["status"] == "complete"
+
+
+def test_export_keeps_batches_and_replaces_only_rescreened_candidates(tmp_path: Path) -> None:
+    service, run_id, saved = completed_run(tmp_path)
+    candidates = [c['id'] for c in saved['candidates'] if c['rank'] is not None][:2]
+    assert len(candidates) == 2
+    first, second = candidates
+    for ids, marker in (([first], 'older-A'), ([second], 'B'), ([first], 'newer-A')):
+        screening_id = service.store.start_screening(run_id, TRANSCRIPT_SCOPE)
+        service.store.finish_screening(screening_id, {
+            'specificity': [{'candidate': candidate, 'marker': marker} for candidate in ids],
+            'parameters': {'database': 'refseq_rna'}, 'searched_at': marker,
+        })
+    failed = service.store.start_screening(run_id, TRANSCRIPT_SCOPE)
+    service.store.fail_screening(failed, 'Interrupted search')
+    with service.store.connect() as connection:
+        connection.execute('UPDATE screenings SET created=?', ('2026-10-16T00:00:00Z',))
+    router = AppRouter(service)
+    try:
+        findings = router._screenings_by_candidate(run_id)
+        assert findings[first][0].row['marker'] == 'newer-A'
+        assert findings[second][0].row['marker'] == 'B'
+        status, _, body = router.dispatch('GET', f'/api/runs/{run_id}/export.order.csv', b'')
+        assert status == 200
+        orders = {row['candidate']: row for row in csv.DictReader(io.StringIO(body.decode()))}
+        assert 'newer-A' in orders[first]['sanity_report']
+        assert 'older-A' not in orders[first]['sanity_report']
+        assert 'transcript (refseq_rna, B)' in orders[second]['sanity_report']
+        status, _, body = router.dispatch('GET', f'/api/runs/{run_id}/export.xlsx', b'')
+        assert status == 200
+        rows = sheets_of(body)['saRNA candidates']
+        scope_column = rows[0].index('off_target_scopes')
+        candidate_column = rows[0].index('candidate')
+        scopes = {row[candidate_column]: row[scope_column] for row in rows[1:]}
+        assert scopes[first] == scopes[second] == TRANSCRIPT_SCOPE
+        assert service.store.snapshot(run_id) == saved
+    finally:
+        router.close()

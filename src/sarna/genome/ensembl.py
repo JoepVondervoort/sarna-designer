@@ -32,6 +32,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any
 
 import httpx
@@ -297,14 +298,21 @@ class EnsemblClient:
         """
         if cached is None:
             return
-        temporary = cached.with_name(f"{cached.name}.{os.getpid()}.part")
+        temporary: Path | None = None
         try:
-            temporary.write_text(json.dumps(payload), encoding="utf-8")
+            with NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=cached.parent,
+                prefix=f"{cached.name}.", suffix=".part", delete=False,
+            ) as handle:
+                temporary = Path(handle.name)
+                json.dump(payload, handle)
             os.replace(temporary, cached)
         except OSError as error:
             # A cache that cannot be written makes the tool slower, not broken.
             LOGGER.warning("could not cache %s: %s", cached.name, error)
-            temporary.unlink(missing_ok=True)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
 
     def _cache_path(self, path: str) -> Path | None:
         """Return the cache file for ``path``, or ``None`` if caching is off."""

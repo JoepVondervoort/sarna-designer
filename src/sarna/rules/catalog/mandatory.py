@@ -242,10 +242,10 @@ NOT_IN_CPG_ISLAND = _gate(
     "Target does not lie inside a CpG island",
     EvidenceClass.EMPIRICAL,
     rationale=(
-        "CpG islands are densely methylatable and typically the most tightly regulated part "
-        "of a promoter. Targets inside one are harder to access and vary more between cell "
-        "types. Wang et al. say to avoid them but name no detection algorithm, so the island "
-        "definition is this project's choice and is stated explicitly below."
+        "Wang et al. recommend avoiding CpG islands. Sequence-based island detection does "
+        "not measure methylation, accessibility or activity in the experimental cell type. "
+        "The paper names no detection algorithm; the definition below is a project choice. "
+        "Its thresholds describe sequence composition, not a validated activation boundary."
     ),
     consequence=(
         "Switching this off admits candidates in the CpG-rich promoter core, which is exactly "
@@ -358,16 +358,16 @@ TSS_WINDOW = _gate(
     "Target lies 100-1000 bp upstream of the TSS",
     EvidenceClass.EMPIRICAL,
     rationale=(
-        "Activating duplexes in Wang et al. cluster in the promoter-proximal region upstream "
-        "of the transcription start site. Further upstream the sequence is less likely to be "
-        "the functional promoter; downstream the duplex overlaps the transcript itself and "
-        "tends to silence rather than activate."
+        "Wang et al. Table 1 recommends this upstream window. It is protocol guidance, "
+        "not a universal activation boundary. Recovered project coordinates place known "
+        "activators outside it; offsets depend on the chosen transcript or reference. "
+        "An annotated TSS does not establish promoter activity in the experimental cell."
     ),
     consequence=(
         "The original script has no concept of a TSS at all and scans whatever sequence is "
         "pasted in, so this is the largest single difference between the presets on a "
-        "genome-based run. Widening the window admits candidates with weaker evidence of "
-        "promoter activity."
+        "genome-based run. Widening the window changes the search space; it does not by "
+        "itself establish stronger or weaker biological activity."
     ),
     parameters=(
         RuleParameter(
@@ -444,14 +444,15 @@ POS19_A = _gate(
     "Position 19 is A",
     EvidenceClass.ESTABLISHED,
     rationale=(
-        "An A at target position 19 places a U at the 5' end of the guide strand. AGO2 "
-        "strongly prefers U there (Ui-Tei et al. 2004), so this is one of the most reliable "
-        "levers on which strand gets loaded."
+        "An A at target position 19 places U at the intended guide's 5' end. Wang Table 1 "
+        "specifies A; Ui-Tei's siRNA criteria allow A/U at the antisense 5' end. Neither "
+        "establishes A at target position 19 as universally necessary for saRNA activation. "
+        "The bundled CEBPA activator fails this gate."
     ),
     consequence=(
         "This is the most restrictive rule in the set, cutting roughly three quarters of "
         "candidates on its own. Turning it off greatly increases the candidate count at a "
-        "real cost in strand-selection confidence."
+        "change in sequence selection. The activity trade-off has not been established."
     ),
 )
 
@@ -460,9 +461,10 @@ THERMODYNAMIC_ASYMMETRY = _gate(
     "Guide 5' end is less stable than the passenger 5' end",
     EvidenceClass.ESTABLISHED,
     rationale=(
-        "RISC loads whichever strand has the more weakly paired 5' end (Schwarz et al. 2003; "
-        "Khvorova et al. 2003). The difference is computed with a nearest-neighbour "
-        "thermodynamic model over the terminal base pairs of the duplex."
+        "RNAi studies support a bias toward loading the strand with the less stable 5' end "
+        "(Schwarz et al. 2003; Khvorova et al. 2003). Here a nearest-neighbour model estimates "
+        "terminal stability. This predicts a loading preference, not observed strand loading "
+        "or activation in the experimental cell."
     ),
     consequence=(
         "Raising the threshold above zero demands a stronger asymmetry, giving fewer "

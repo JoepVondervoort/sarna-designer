@@ -67,7 +67,14 @@ def not_in_cpg_island(context: CandidateContext, resolved: ResolvedRule) -> Rule
     rather than per candidate, so the islands arrive in the context. ``None`` there means
     detection was not run, which is reported rather than treated as a clean result.
     """
+    minimum = resolved.integer("island-minimum-length")
     overlaps = context.overlaps_cpg_island
+    if context.promoter.length < minimum:
+        return RuleResult.not_applicable(
+            resolved,
+            f"Only {context.promoter.length} bp of sequence are available; the selected CpG "
+            f"island definition needs at least {minimum} bp. Island overlap is unknown.",
+        )
     if overlaps is None:
         return RuleResult.not_applicable(
             resolved,
@@ -77,6 +84,16 @@ def not_in_cpg_island(context: CandidateContext, resolved: ResolvedRule) -> Rule
     islands = context.cpg_islands or ()
     measurements = {"islands-in-promoter": len(islands)}
     if not overlaps:
+        if (
+            context.offset < minimum - 1
+            or context.promoter.length - context.offset - len(context.target) < minimum - 1
+        ):
+            return RuleResult.not_applicable(
+                resolved,
+                "No overlapping island was detected in the supplied sequence, but the target "
+                "is too close to a sequence boundary to exclude an island extending beyond it. "
+                "Island overlap is unknown; supply more flanking sequence.",
+            )
         found = (
             f"{len(islands)} island(s) were found in the promoter, none overlapping the target"
             if islands

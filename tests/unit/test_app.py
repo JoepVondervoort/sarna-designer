@@ -634,7 +634,12 @@ class TestTheSpreadsheetExport:
         service = service_for(tmp_path)
         saved = run_request(service)
         rows = self.book(service, saved["app"]["run_id"])["Rules"]
-        assert rows[0] == ["rule", "name", "role", "evidence", "source", "parameters"]
+        assert rows[0] == ["rule", "name", "role", "evidence", "source", "parameters",
+                           "source URL", "evidence scope", "application note"]
+        by_id = {row[0]: row for row in rows[1:]}
+        assert by_id["pos19-a"][6] == "https://doi.org/10.14440/jbm.2015.39"
+        assert "protocol guidance" in by_id["pos19-a"][7]
+        assert "not evidence strength" in by_id["pos19-a"][8]
         sources = [row[4] for row in rows[1:]]
         assert all(sources), "a rule reached the spreadsheet without its provenance"
         assert any("Wang" in str(s) for s in sources)
