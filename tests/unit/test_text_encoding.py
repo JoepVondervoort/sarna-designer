@@ -37,6 +37,18 @@ def _binary_mode(call: ast.Call) -> bool:
 
 def _offenders(tree: ast.AST) -> list[tuple[int, str]]:
     """Return (line, name) for each text I/O call with no explicit encoding."""
+    # ZipFile.open returns a binary ZipExtFile and cannot accept an encoding argument.
+    zip_handles = {
+        item.optional_vars.id
+        for node in ast.walk(tree) if isinstance(node, ast.With)
+        for item in node.items
+        if isinstance(item.optional_vars, ast.Name)
+        and isinstance(item.context_expr, ast.Call)
+        and isinstance(item.context_expr.func, ast.Attribute)
+        and isinstance(item.context_expr.func.value, ast.Name)
+        and item.context_expr.func.value.id == "zipfile"
+        and item.context_expr.func.attr == "ZipFile"
+    }
     found: list[tuple[int, str]] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
@@ -46,6 +58,9 @@ def _offenders(tree: ast.AST) -> list[tuple[int, str]]:
             continue
         # pyBigWig.open and similar third-party openers take no encoding argument.
         if isinstance(node.func.value, ast.Name) and node.func.value.id in {"pyBigWig", "gzip"}:
+            continue
+        if (name == "open" and isinstance(node.func.value, ast.Name)
+                and node.func.value.id in zip_handles):
             continue
         if _binary_mode(node):
             continue

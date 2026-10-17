@@ -192,3 +192,43 @@ program. Old runs retain their original results; start a new run to use the upda
 | Port 8001 is already in use | An app may already be running. Alternatively run `sarna-designer --port 8002` and open `http://localhost:8002/`. |
 | Upgrade says `Nothing to upgrade` after a new update | Check that the changes reached `main`. If your installation still came from a wheel, repeat step 6 to switch to GitHub. |
 | Anything else | Share the complete error output and the output of `sarna-designer-check`. |
+
+## Set up fast local off-target screening (once per computer)
+
+After installing or updating the app, start it normally. No additional PowerShell command,
+Python installation or WSL installation is needed for this setup on Windows x64.
+
+1. Open **Local off-target screening · reference setup** near the top of the app.
+2. Click **Download & prepare local references**. The app downloads about 1.2 GB from NCBI
+   and the official Bowtie release, verifies the files, and builds search indexes locally.
+   Have at least **20 GiB free disk space**. The first setup can take an hour or more on a modest computer;
+   the time depends on your connection and computer. Keep the app process running.
+3. Wait for **Local human references are ready**, then use **Local reference** in the
+   off-target panel. Genome and transcript searches use separate indexes. Candidate sequences
+   are not sent to NCBI in this mode.
+
+You can click **Pause setup** and later **Resume / retry reference setup**. Interrupted
+file downloads resume when the server supports byte ranges; already verified downloads are
+reused. An interrupted index build is rebuilt safely. Closing the browser alone does not stop
+setup while the app process continues running.
+
+References are stored under `%USERPROFILE%\.sarna-designer\references`, outside the installed
+app. Updating the app with `uv` keeps them and does **not** automatically download the genome
+again. **Check reference status / updates** compares your installation with the reference
+release supplied by your installed app. If a later app version supplies a new reference,
+click **Download reference update** to install it explicitly. The previous active reference
+remains usable until preparation of the new release finishes. It does not search online for
+an unpinned “latest” dataset.
+
+The first supplied reference is **GRCh38.p14, GCF_000001405.40, RefSeq annotation release 110**.
+This is a pinned, reproducible release, not a claim to have the latest annotation. Source URLs,
+checksums, tool version and search policy travel in the JSON screening record. Linux x64 is
+also supported. Native Windows execution still needs validation on a Windows machine; the
+installer uses the official Windows Bowtie 1.2.2 release, while Linux uses Bowtie 1.3.1.
+
+Local screening searches **full-length 19-base cores with 0–3 mismatches on both strands**.
+It does not assess gaps, bulges, shorter seed matches, personal genetic variants or biological
+binding. All matching alignments are counted; up to 200 detail alignments per candidate are
+stored for display. Very repetitive batches that exceed the resource budget fail explicitly
+instead of producing a truncated “clean” result. NCBI BLAST remains an explicitly selected,
+remote cross-check with different search behavior and potentially long queues.

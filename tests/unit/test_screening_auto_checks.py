@@ -78,6 +78,46 @@ vm.runInContext(`
   };
   await resumeScreening('transcript');
   assert(state.screeningJobs.transcript.status==='complete','Another tab completion looked failed');
+  // Migration: a previous NCBI queue and completed NCBI records cannot block local work.
+  reset();timers.clear();AUTO_SCREEN_CHECKS.clear();
+  $('screening-backend').value='local';
+  REFERENCE_STATUS={ready:true,installed:{release:'R1'},catalog_release:'R1'};
+  state.result.candidates=[{id:'c1',rank:1},{id:'c2',rank:2}];
+  state.screeningJobs={genomic:{status:'waiting',id:'old-ncbi',backend:'ncbi'}};
+  const row=id=>({candidate:id,hit_count:0,perfect_hits:0,strong_threshold:16,
+    wang_homology_hits:0,near_perfect_hits:0});
+  const old={id:'old-record',scope:'genomic',result:{backend:'ncbi',
+    searched_at:'2026-01-01',specificity:[row('c1'),row('c2')]}};
+  mergeScreening(old);
+  assert(alreadyScreened('genomic').size===0,'NCBI findings counted as local coverage');
+  assert(currentScreeningJob('genomic')===null,'Old NCBI queue blocks local work');
+  renderScreeningStatus();
+  assert(!$('screen-genomic').disabled,'Local search disabled by old NCBI queue');
+  assert(timers.size===0,'Local mode resumed an old NCBI request');
+  assert(state.screeningJobs.genomic.id==='old-ncbi','Switching methods deleted the old ID');
+  mergeScreening({id:'local-record',scope:'genomic',result:{backend:'local',
+    reference:{release:'R1'},searched_at:'2026-02-01',specificity:[row('c1')]}});
+  assert(alreadyScreened('genomic').size===1,'Completed local coverage missing');
+  mergeScreening({...old,id:'later-ncbi',result:{...old.result,searched_at:'2026-03-01'}});
+  assert(alreadyScreened('genomic').size===1,'Later NCBI result erased local coverage');
+  REFERENCE_STATUS.installed.release='R2';
+  assert(alreadyScreened('genomic').size===0,'Earlier reference counted as current coverage');
+  $('screening-backend').value='ncbi';
+  assert(alreadyScreened('genomic').size===2,'Saved NCBI coverage was lost');
+  assert(localScreeningDelay({result:{backend:'local'},poll_after_seconds:1})===1000,
+    'Local result collection is unnecessarily slow');
+  assert(localScreeningDelay({result:{backend:'local'},poll_after_seconds:10})===10000,
+    'Local polling ignored server advice');
+  // An in-flight old poll must not overwrite a new method's visible job.
+  let releaseOld;
+  api=async()=>new Promise(resolve=>{releaseOld=resolve;});
+  const oldPoll=pollScreening('stale-ncbi','run-1','genomic','old',0,1,'ncbi');
+  $('screening-backend').value='local';
+  state.screeningJobs.genomic={backend:'local',status:'running',id:'new-local'};
+  releaseOld({id:'stale-ncbi',scope:'genomic',status:'complete',result:old.result});
+  assert(await oldPoll==='changed-backend','An old poll followed an engine switch');
+  assert(state.screeningJobs.genomic.id==='new-local','Old poll overwrote local job');
+
 })()`,context).then(()=>console.log('PASS')).catch(e=>{console.error(e);process.exitCode=1;});
 '''
     source = Path("src/sarna/app/static/offtarget.js").resolve()

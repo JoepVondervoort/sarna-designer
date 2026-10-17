@@ -271,7 +271,8 @@ class RunStore:
 
 
     def reserve_screening(
-        self, run_id: str, scope: str, candidates: list[str],
+        self, run_id: str, scope: str, candidates: list[str], backend: str = "ncbi",
+        reference_release: str | None = None,
     ) -> tuple[str, bool]:
         """Atomically reuse an identical active search, otherwise reserve a new queue slot."""
         self.status(run_id)
@@ -284,10 +285,15 @@ class RunStore:
             ).fetchall()
             for row in rows:
                 pending = json.loads(zlib.decompress(row["result"])) if row["result"] else {}
-                if sorted(pending.get("candidates_searched", [])) == wanted:
+                if (sorted(pending.get("candidates_searched", [])) == wanted
+                        and pending.get("backend", "ncbi") == backend
+                        and pending.get("reference_release") == reference_release):
                     return row["id"], True
             screening_id = uuid4().hex
-            pending = zlib.compress(json.dumps({"candidates_searched": candidates}).encode())
+            pending = zlib.compress(json.dumps(
+                {"candidates_searched": candidates, "backend": backend,
+                 "reference_release": reference_release}
+            ).encode())
             connection.execute(
                 "INSERT INTO screenings(id,run_id,scope,created,status,stage,result) "
                 "VALUES(?,?,?,?,?,?,?)",
@@ -428,12 +434,14 @@ class RunStore:
                 "SELECT * FROM screenings WHERE id=?", (screening_id,)).fetchone()
         if row is None:
             raise KeyError(f"No screening {screening_id!r} in this local store.")
+        result = json.loads(zlib.decompress(row["result"])) if row["result"] else None
+        local = result is not None and result.get("backend") == "local"
         record = {
             "id": row["id"], "run_id": row["run_id"], "scope": row["scope"],
             "created": row["created"], "status": row["status"], "stage": row["stage"],
             "request_id": row["request_id"], "error": row["error"],
             "progress": json.loads(row["progress"]) if row["progress"] else None,
-            "poll_after_seconds": 5 if row["status"] == "running" else 60,
+            "poll_after_seconds": (1 if local else 5) if row["status"] == "running" else 60,
         }
         if row["result"] is not None:
             record["result"] = json.loads(zlib.decompress(row["result"]))

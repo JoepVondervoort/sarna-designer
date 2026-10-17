@@ -25,7 +25,15 @@ Sources:
 - [NCBI usage guidelines](https://blast.ncbi.nlm.nih.gov/doc/blast-help/developerinfo.html)
 - [NCBI Common URL API](https://blast.ncbi.nlm.nih.gov/doc/blast-help/urlapi.html)
 
-## Search integrity and recovery
+## Local primary search
+
+The website now defaults to a locally provisioned reference. See the [setup and local API
+contract](screening-api.md#implemented-local-setup-contract) for exact search coverage,
+versioned inputs, safety limits and validation. Setup is explicit and resumable; normal app
+updates retain the reference data. Remote BLAST remains an explicit cross-check. The sections
+below describe that remote backend and previously saved remote jobs.
+
+## Remote search integrity and recovery
 
 The client requests `XML2_S` (single-file XML2). `XML2` is the multiple-file format and
 can return a ZIP archive for multi-query searches; passing that archive to an XML parser

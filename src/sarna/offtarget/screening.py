@@ -308,7 +308,8 @@ def collect_screening(
         # Round-robin strongest hits per candidate so one repetitive query cannot consume
         # every annotation slot. Raw alignments are preserved independently of this budget.
         groups = {name: sorted((h for h in hits if h.candidate_id == name),
-                              key=lambda h: h.bit_score, reverse=True) for name in searched}
+                              key=lambda h: h.bit_score or 0.0,
+                              reverse=True) for name in searched}
         ordered = [group[index] for index in range(max(map(len, groups.values()), default=0))
                    for group in groups.values() if index < len(group)]
         to_place, rest = ordered[:MAX_PLACEMENTS], ordered[MAX_PLACEMENTS:]

@@ -42,8 +42,8 @@ class OffTargetHit:
     subject_start: int
     subject_end: int
     subject_strand: str
-    evalue: float
-    bit_score: float
+    evalue: float | None
+    bit_score: float | None
     mismatch_positions: tuple[int, ...] = ()
     """Which bases of the *query* did not match, 1-based, within the aligned span.
 
@@ -187,8 +187,8 @@ class SearchParameters:
     reward: int | None = 1
     penalty: int | None = -3
     gap_costs: str | None = "5 2"
-    word_size: int = 7
-    expect: float = 1000.0
+    word_size: int | None = 7
+    expect: float | None = 1000.0
     filter_low_complexity: bool = False
     max_hits: int = 100
     """``HITLIST_SIZE``: database sequences kept **per query**, which is NCBI's own unit.

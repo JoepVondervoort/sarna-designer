@@ -35,9 +35,11 @@ from sarna.genome.ensembl import (
 )
 from sarna.genome.promoter import Promoter
 from sarna.genome.tss import TssPosition
+from sarna.offtarget.local import run_local_screening
 from sarna.offtarget.models import GENOMIC_SCOPE, SearchParameters
 from sarna.offtarget.ncbi import BlastClient, BlastReportError, parameters_for
 from sarna.offtarget.proximity import BlockedTranscripts
+from sarna.offtarget.references import ReferenceManager
 from sarna.offtarget.screening import (
     DEFAULT_CANDIDATES,
     SearchStillAtNcbi,
@@ -112,6 +114,7 @@ class DesignService:
         that on every run.
         """
         self.store = RunStore(data_dir / "runs.sqlite3")
+        self.references = ReferenceManager(data_dir / "references")
         self.client_factory = client_factory or (
             lambda offline: EnsemblClient(cache_dir=settings.cache_dir("ensembl"),
                                           offline=None if settings.is_offline() else offline,
@@ -145,6 +148,8 @@ class DesignService:
         limit: int = DEFAULT_CANDIDATES,
         blast_client: BlastClient | None = None,
         sleep: Callable[[float], None] | None = None,
+        backend: str = "ncbi",
+        reference_release: str | None = None,
     ) -> None:
         """Run an off-target screening for a finished design run, in the background.
 
@@ -152,6 +157,8 @@ class DesignService:
         and their record untouched. The reason is stored for the researcher to read.
 
         Args:
+            reference_release: Local release captured when the request was accepted.
+            backend: Explicit local or NCBI search; local never falls back to the network.
             screening_id: The record to write progress and results into.
             run_id: The finished design run being screened.
             scope: ``transcript`` or ``genomic``.
@@ -165,7 +172,7 @@ class DesignService:
                 path relies on for the same reason it relies on ``blast_factory``: a caller
                 that cannot pass arguments must still be able to avoid a real wait.
         """
-        client = blast_client or self.blast_factory()
+        client = (blast_client or self.blast_factory()) if backend == "ncbi" else None
 
         def reporter(stage: str, detail: Mapping[str, Any] | None = None) -> None:
             """Write both the sentence and the numbers behind it, for the progress bar."""
@@ -177,6 +184,16 @@ class DesignService:
             snapshot = self.store.snapshot(run_id)
             candidates = snapshot["candidates"]
             core = len(candidates[0]["target_site_dna"]) if candidates else 19
+            if backend == "local":
+                result = run_local_screening(
+                    self.references, run_id, candidates, scope, core, reporter,
+                    only=only, limit=limit, window=self._run_window(snapshot),
+                    reference_release=reference_release,
+                )
+                self.store.finish_screening(screening_id, result)
+                return
+            if client is None:
+                raise ValueError("Unknown screening backend.")
             record = run_screening(
                 run_id=run_id,
                 candidates=candidates,
@@ -210,7 +227,7 @@ class DesignService:
             LOGGER.warning("screening %s failed: %s", screening_id, error)
             self.store.fail_screening(screening_id, str(error))
         finally:
-            if blast_client is None:
+            if blast_client is None and client is not None:
                 client.close()
 
     def resume(
@@ -332,6 +349,8 @@ class DesignService:
         if set(accessions) - hits.keys():
             raise ValueError("An accession does not belong to this screening.")
         cached = result.get("gene_annotations", {})
+        if result.get("backend") == "local":
+            return {a: cached.get(a, {"status": "unavailable"}) for a in accessions}
         client = self.client_factory(False)
         annotations: dict[str, Any] = {}
         symbols: dict[str, dict[str, Any]] = {}

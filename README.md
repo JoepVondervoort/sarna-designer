@@ -9,7 +9,7 @@ ranked, annotated, exportable duplex candidates.
 > on either strand and explains every verdict, the promoter is annotated with CpG islands,
 > regulatory features and TF motif predictions, and the whole run renders as one self-contained
 > interactive HTML page. The local app adds gene lookup, browser-editable rules, Python reruns,
-> saved runs, an off-target screen against NCBI, and exports including a spreadsheet of every
+> saved runs, local off-target screening with optional NCBI cross-checks, and exports including a spreadsheet of every
 > candidate with its values.
 >
 > The engine is now validated against measured activity for the first time, against 125 assayed
@@ -533,6 +533,11 @@ Bundled data keep their own terms, listed in [`NOTICE`](NOTICE):
 | Chapter 4 screening dataset | From a publicly defended thesis; redistributed here under Apache-2.0 |
 | Promoter anchors, cell-line registry | Compiled for this project; Apache-2.0 |
 
-Ensembl and NCBI BLAST are queried at runtime and redistribute nothing; cite Ensembl in work
+Ensembl and optional NCBI BLAST are queried at runtime; local screening references are downloaded explicitly from NCBI and native Bowtie tools from their official releases; cite Ensembl in work
 that relies on its annotation. [ADR 0018](docs/adr/0018-apache-2-and-bundled-data-licensing.md)
 records why Apache-2.0 rather than MIT, and how the JASPAR mislabelling was found and corrected.
+
+
+Local off-target screening is provisioned separately through **Local off-target screening ·
+reference setup** in the app. Download and prepare the pinned human reference once, then reuse
+it across app updates. See [one-time setup and its search limits](docs/install-via-github.md#set-up-fast-local-off-target-screening-once-per-computer).

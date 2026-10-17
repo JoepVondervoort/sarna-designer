@@ -484,6 +484,122 @@ class StubBlast:
                 + "</BlastOutput_iterations></BlastOutput>").encode()
 
 
+def check_local_reference_setup(browser: Browser, screenshots: Path | None) -> None:
+    """Exercise setup, pause/resume and ready states without downloading a genome in Chromium."""
+    browser.wait("REFERENCE_STATUS !== null")
+    assert browser.evaluate("document.getElementById('screening-backend').value") == "local"
+    assert browser.evaluate("document.getElementById('screen-transcript').disabled") is True
+    browser.evaluate("""(() => {
+      window.referenceTestOriginal = {fetch:window.fetch, status:REFERENCE_STATUS, scroll:scrollY};
+      window.referenceTestCalls = [];
+      window.referenceTestState = {...REFERENCE_STATUS};
+      window.fetch = async (url, init={}) => {
+        if (!String(url).startsWith('/api/references'))
+          return referenceTestOriginal.fetch(url, init);
+        referenceTestCalls.push({url, method:init.method || 'GET', body:init.body,
+          type:new Headers(init.headers).get('Content-Type')});
+        if (url.endsWith('/setup')) referenceTestState = {...referenceTestState,
+          status:'running', message:'Downloading reference data', downloaded:50, total:100};
+        if (url.endsWith('/pause')) referenceTestState = {...referenceTestState,
+          status:'paused', message:'Setup paused. Verified downloads are kept.'};
+        return new Response(JSON.stringify(referenceTestState),
+          {status:200, headers:{'Content-Type':'application/json'}});
+      };
+      document.getElementById('local-reference-panel').open = true;
+      document.getElementById('reference-install').click();
+    })()""")
+    browser.wait("!document.getElementById('reference-progress').hidden")
+    assert browser.evaluate("document.getElementById('reference-install').disabled") is True
+    assert browser.evaluate("document.getElementById('reference-progress').value") == 50
+    browser.evaluate("document.getElementById('reference-pause').click()")
+    browser.wait("document.getElementById('reference-install').textContent.includes('Resume')")
+    assert browser.evaluate("document.getElementById('reference-progress').hidden") is True
+    browser.evaluate("document.getElementById('reference-install').click()")
+    browser.wait("REFERENCE_STATUS.status === 'running'")
+    browser.evaluate("""(() => {
+      clearTimeout(REFERENCE_POLL);
+      referenceTestState = {...referenceTestState, status:'ready', ready:true,
+        installed:{release:'GRCh38.p14-RefSeq110-v1',bowtie_version:'1.3.1'},
+        message:'Local human references are ready.'};
+      loadReferenceStatus();
+    })()""")
+    browser.wait("REFERENCE_STATUS.ready && !document.getElementById('screen-transcript').disabled")
+    calls = cast(list[dict[str, Any]], browser.evaluate("referenceTestCalls"))
+    actions = [call for call in calls if call["method"] == "POST"]
+    assert len(actions) == 3 and all(call["type"] == "application/json" for call in actions)
+    assert all(call["body"] == "{}" for call in actions)
+    if screenshots:
+        browser.evaluate("document.getElementById('local-reference-panel').scrollIntoView()")
+        browser.screenshot(screenshots / "local-reference-ready.png")
+    browser.evaluate("""(() => {
+      clearTimeout(REFERENCE_POLL);
+      window.fetch = referenceTestOriginal.fetch;
+      REFERENCE_STATUS = referenceTestOriginal.status;
+      renderReferenceStatus();
+      document.getElementById('local-reference-panel').open = false;
+      window.scrollTo(0,referenceTestOriginal.scroll);
+    })()""")
+    print("    local references: explicit setup, progress, pause/resume and ready search controls")
+
+
+def check_local_result_display(browser: Browser, screenshots: Path | None) -> None:
+    """Keep complete local counts, bounded details and mixed historical methods distinguishable."""
+    browser.evaluate("""(() => {
+      window.localResultBefore = {screenings:state.screenings,scope:state.screeningScope,
+        open:state.screeningOpen,scroll:scrollY};
+      const held = state.screenings.transcript;
+      const id = Object.keys(held.byCandidate)[0];
+      const candidate = state.result.candidates.find(c=>c.id===id);
+      const query = candidate.target_site_dna;
+      const subject = query.slice(0,7) + (query[7]==='A'?'C':'A') + query.slice(8);
+      const search = {id:'local-display-control',backend:'local',
+        searched_at:new Date().toISOString(),
+        parameters:{database:'GRCh38.p14-RefSeq110-v1',program:'bowtie',species_restriction:'database'},
+        reference:{release:'GRCh38.p14-RefSeq110-v1',bowtie_version:'1.3.1'},notes:[],
+        annotations:{'NM_000001.1':{status:'available',chromosome:'10',
+          source:'NCBI RefSeq 110 GFF transcript mapping'}}};
+      const entry = {search,placements:[],row:{candidate:id,hit_count:1200,perfect_hits:0,
+        wang_homology_hits:1200,strong_threshold:16,near_perfect_hits:1200,
+        distinct_sequences:1,named_genes:1,unnamed_alignments:0,promiscuous:true,
+        enumeration_complete:true,details_retained:1,alignments_capped:false},
+        hits:[{candidate:id,accession:'NM_000001.1',title:'Example (GENE1), mRNA',
+          identities:18,alignment_length:19,gaps:0,query_start:1,query_end:19,
+          subject_start:1,subject_end:19,subject_strand:'plus',evalue:null,bit_score:null,
+          mismatch_positions:[8],has_alignment_detail:true,query_sequence:query,
+          subject_sequence:subject}]};
+      window.localResultControl = {id,entry,held};
+      state.screenings = {...state.screenings,transcript:{...held,
+        searches:[...held.searches,search],byCandidate:{[id]:entry}}};
+      state.screeningScope='transcript';state.screeningOpen=id;
+      renderOffTarget('transcript');document.querySelector('.ot-methods').open=true;
+    })()""")
+    text = str(browser.evaluate("document.getElementById('offtarget-results').innerText"))
+    assert "Local Bowtie search" in text and "Remote BLAST counts" not in text, text
+    assert "All 1200 alignments were counted" in text, text
+    assert "not applicable (local alignment)" in text and "NaN" not in text, text
+    assert "lower bounds" not in text and "list may be incomplete" not in text, text
+    assert "annotated" in text and "cell-specific" in text
+    if screenshots:
+        browser.evaluate("document.getElementById('offtarget-card').scrollIntoView()")
+        browser.screenshot(screenshots / "local-offtarget.png")
+    browser.evaluate("""(() => {
+      const {id,entry,held}=localResultControl;
+      const other=Object.keys(held.byCandidate).find(candidate=>candidate!==id);
+      state.screenings.transcript.byCandidate[other]=held.byCandidate[other];
+      renderOffTarget('transcript');document.querySelector('.ot-methods').open=true;
+    })()""")
+    mixed = str(browser.evaluate("document.getElementById('offtarget-results').innerText"))
+    assert "Mixed search methods" in mixed and "Remote BLAST counts" in mixed, mixed
+    assert "Local Bowtie search" in mixed and "Local · Bowtie" in mixed, mixed
+    browser.evaluate("""(() => {
+      Object.assign(state,{screenings:localResultBefore.screenings,
+        screeningScope:localResultBefore.scope,screeningOpen:localResultBefore.open});
+      renderOffTarget(state.screeningScope);renderScreeningStatus();
+      window.scrollTo(0,localResultBefore.scroll);
+    })()""")
+    print("    local results: full counts, retained details, null statistics and mixed methods")
+
+
 def check_offtarget(browser: Browser, blast: StubBlast, screenshots: Path | None) -> None:
     """Check the off-target panel: batches, the summary, where a hit lands, and the limits.
 
@@ -492,6 +608,7 @@ def check_offtarget(browser: Browser, blast: StubBlast, screenshots: Path | None
     is that the alignments reach the screen, that a candidate screened clean is distinguishable
     from one never screened, and that the own-locus removal is stated rather than silent.
     """
+    check_local_reference_setup(browser, screenshots)
     candidates = cast(list[dict[str, Any]], browser.evaluate("state.result.candidates") or [])
     blast.loci = {
         c["id"]: (c["genomic"]["contig"], c["genomic"]["start"], c["genomic"]["end"])
@@ -502,6 +619,10 @@ def check_offtarget(browser: Browser, blast: StubBlast, screenshots: Path | None
         "state.result.candidates.filter(c=>c.rank!==null).length")
     assert isinstance(pool, int) and pool > 0
 
+    # The scripted BLAST fixture is an explicit remote cross-check; production defaults local.
+    browser.evaluate("document.getElementById('screening-backend').value='ncbi';"
+                     "document.getElementById('screening-backend')"
+                     ".dispatchEvent(new Event('change'))")
     # A batch of 5, not the whole run. The default used to be a fixed 50, which is what made a
     # genomic search time out after half an hour and come back with nothing.
     browser.evaluate("document.querySelector('[data-batch=\"5\"]').click();"
@@ -635,6 +756,7 @@ def check_offtarget(browser: Browser, blast: StubBlast, screenshots: Path | None
     print("    result display: threshold filter separates weaker matches, findings unchanged")
     check_progress_bar(browser)
     check_human_only(browser)
+    check_local_result_display(browser, screenshots)
     if screenshots:
         browser.evaluate("document.querySelector('.ot-methods').open=false")
         browser.evaluate("document.querySelector('[data-scope-tab=\"genomic\"]')?.click();"

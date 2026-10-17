@@ -137,6 +137,7 @@ class AppRouter:
 
     def close(self) -> None:
         """Finish workers when the application or a test shuts down."""
+        self.service.references.close()
         self.workers.shutdown(wait=True, cancel_futures=True)
         # Queued screenings are dropped and a running one is *not* waited for. A screening sits
         # in NCBI's queue for minutes and may sit for thirty, so waiting would make closing the
@@ -241,6 +242,16 @@ class AppRouter:
                 "detail": "This shortlist changed in another window. Reload saved notes "
                           "before replacing them.", "code": "shortlist-conflict",
             }))
+        if method == "GET" and parts == ["api", "references"]:
+            return self._json(200, self.service.references.status())
+        if method == "POST" and parts == ["api", "references", "setup"]:
+            if settings.is_offline():
+                raise ValueError("Reference downloads are disabled in offline mode.")
+            self.service.references.start()
+            return self._json(202, self.service.references.status())
+        if method == "POST" and parts == ["api", "references", "pause"]:
+            self.service.references.pause()
+            return self._json(202, self.service.references.status())
         if method == "GET" and len(parts) == 3 and parts[:2] == ["api", "screenings"]:
             return self._json(200, self.service.store.screening(parts[2]))
         if (method == "POST" and len(parts) == 4
@@ -378,6 +389,13 @@ class AppRouter:
         if len(body) > MAX_BODY:
             raise ValueError("Request is too large.")
         requested = json.loads(body) if body.strip() else {}
+        backend = requested.get("backend", "ncbi")
+        if backend not in ("local", "ncbi"):
+            raise ValueError("Choose local or ncbi as the screening backend.")
+        reference_release = None
+        if backend == "local":
+            _, manifest = self.service.references.active()
+            reference_release = manifest["release"]
         scope = requested.get("scope", TRANSCRIPT_SCOPE)
         if scope not in (TRANSCRIPT_SCOPE, GENOMIC_SCOPE):
             raise ValueError(
@@ -392,11 +410,16 @@ class AppRouter:
             )
         only = self._requested_candidates(requested, passing)
         limit = self._requested_limit(requested)
+        if only is not None:
+            limit = len(only)
         chosen = list(candidate_sequences(snapshot["candidates"], limit=limit, only=only))
-        screening_id, reused = self.service.store.reserve_screening(run_id, scope, chosen)
+        screening_id, reused = self.service.store.reserve_screening(
+            run_id, scope, chosen, backend=backend, reference_release=reference_release
+        )
         if not reused:
             self.screeners.submit(
-                self.service.screen, screening_id, run_id, scope, only, limit
+                self.service.screen, screening_id, run_id, scope, only, limit, backend=backend,
+                reference_release=reference_release
             )
         return self._json(202, {
             "id": screening_id,

@@ -176,7 +176,7 @@ def measure_specificity(
     return CandidateSpecificity(
         candidate_id=candidate_id,
         hit_count=len(hits),
-        best_evalue=min((h.evalue for h in hits), default=None),
+        best_evalue=min((h.evalue for h in hits if h.evalue is not None), default=None),
         near_perfect_hits=sum(1 for h in hits if h.identities >= NEAR_PERFECT_IDENTITIES),
         perfect_hits=sum(1 for h in hits if h.is_perfect(core_length)),
         longest_complementary_stretch=max((h.identities for h in hits), default=0),

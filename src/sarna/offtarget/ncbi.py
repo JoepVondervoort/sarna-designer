@@ -552,7 +552,7 @@ def parse_report(
                 # Per candidate, so a promiscuous query cannot consume a later query's budget.
                 seen += 1
                 held = best[candidate]
-                heapq.heappush(held, (parsed.bit_score, -seen, parsed))
+                heapq.heappush(held, (parsed.bit_score or 0.0, -seen, parsed))
                 if len(held) > per_candidate:
                     heapq.heappop(held)
                     capped.add(candidate)
