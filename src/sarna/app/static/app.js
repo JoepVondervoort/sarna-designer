@@ -23,10 +23,17 @@ function loading(id, active, message) {
 
 async function api(path, options) {
   const response = await fetch(path, options);
-  const data = await response.json();
+  let data;
+  try { data = JSON.parse(await response.text()); }
+  catch {
+    throw Object.assign(new Error(`Local API returned HTTP ${response.status} `
+      + `(${response.statusText || "unexpected response"}) without a readable JSON response.`),
+      {status:response.status, code:"invalid-api-response"});
+  }
   if (!response.ok) {
     const detail = Array.isArray(data.detail) ? data.detail.map(e => `${e.loc.join(".")}: ${e.msg}`).join("; ") : data.detail;
-    throw Object.assign(new Error(detail || `Request failed (${response.status})`), {code:data.code});
+    throw Object.assign(new Error(detail || `Request failed (${response.status})`),
+      {code:data.code, status:response.status});
   }
   return data;
 }

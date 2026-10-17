@@ -736,6 +736,23 @@ class AppRouter:
 def make_server(router: AppRouter, port: int) -> ThreadingHTTPServer:
     """Create a same-origin server bound only to this machine's loopback interface."""
     class Handler(BaseHTTPRequestHandler):
+        def send_error(
+            self, code: int, message: str | None = None, explain: str | None = None,
+        ) -> None:
+            """Keep API transport errors machine-readable, including pre-router rejections."""
+            if not urlsplit(self.path).path.startswith("/api/"):
+                super().send_error(code, message, explain)
+                return
+            detail = message or self.responses.get(code, ("Request rejected", ""))[0]
+            payload = json.dumps({"detail": detail, "code": f"http-{code}"}).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            self.wfile.write(payload)
+
         def do_GET(self) -> None:
             """Serve a resource or read a saved run."""
             self.respond("GET")
@@ -771,6 +788,11 @@ def make_server(router: AppRouter, port: int) -> ThreadingHTTPServer:
             self.send_header("Content-Length", str(len(payload)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
+            if status == 202 and "/screenings" in urlsplit(self.path).path:
+                accepted = json.loads(payload)
+                if accepted.get("id"):
+                    self.send_header("Location", f"/api/screenings/{accepted['id']}")
+                    self.send_header("Retry-After", "5")
             self.end_headers()
             self.wfile.write(payload)
 

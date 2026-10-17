@@ -30,6 +30,7 @@ from sarna.genome.coordinates import GenomicInterval
 from sarna.offtarget.models import GENOMIC_SCOPE
 from sarna.offtarget.ncbi import (
     BlastClient,
+    BlastStillRunning,
     SubmittedSearch,
     parameters_for,
     parse_report,
@@ -399,16 +400,22 @@ class StubBlast:
         self.loci: dict[str, tuple[str, int, int]] = {}
         self.submitted: dict[str, str] = {}
         self.scope = ""
+        self.waiting = False
+        self.submission_count = 0
 
     def submit(self, sequences: dict[str, str], scope: str) -> Any:  # noqa: ANN401
         """Record the job exactly as the real client would send it."""
+        self.submission_count += 1
         self.submitted = dict(sequences)
         self.scope = scope
-        return SubmittedSearch(request_id="STUB-RID-1", estimated_seconds=0,
+        return SubmittedSearch(request_id="STUB-RID-1",
+                               estimated_seconds=36000 if self.waiting else 0,
                                parameters=parameters_for(scope))
 
     def fetch(self, request_id: str, parameters: Any) -> Any:  # noqa: ANN401
         """Return a scripted report for whatever was submitted."""
+        if self.waiting:
+            raise BlastStillRunning(request_id)
         return parse_report(self._xml(),
                             per_candidate=parameters.max_alignments_per_candidate)
 
@@ -607,6 +614,7 @@ def check_offtarget(browser: Browser, blast: StubBlast, screenshots: Path | None
         assert "No off-target screening has been performed" not in text, (
             f"{where} still reports that no screening was performed after one ran"
         )
+    check_automatic_http_collection(browser, blast)
     check_progress_bar(browser)
     check_human_only(browser)
     if screenshots:
@@ -660,6 +668,45 @@ def check_offtarget(browser: Browser, blast: StubBlast, screenshots: Path | None
                      deviceScaleFactor=1, mobile=False)
     print(f"    off-target: {screened} of {pool} screened in the first batch, alignments named "
           f"and placed, own-locus handling stated")
+
+
+def check_automatic_http_collection(browser: Browser, blast: StubBlast) -> None:
+    """Run the real browser resume request through the real HTTP media-type guard."""
+    blast.waiting = True
+    try:
+        screening_id = browser.evaluate("""(async()=>{
+          const candidate=screenablePool()[0];
+          const started=await api(`/api/runs/${state.result.app.run_id}/screenings`,{
+            method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({scope:'transcript',candidates:[candidate]})
+          });
+          window.originalScreeningTimer=window.setTimeout;
+          window.setTimeout=(callback,delay,...args)=>{
+            if(delay===60000){
+              window.fireScreeningCheck=callback;
+              window.testScreeningTimer=window.originalScreeningTimer(()=>{},delay);
+              return window.testScreeningTimer;
+            }
+            return window.originalScreeningTimer(callback,delay,...args);
+          };
+          await pollScreening(started.id,state.result.app.run_id,'transcript','HTTP check',0,1);
+          window.setTimeout=window.originalScreeningTimer;
+          return started.id;
+        })()""")
+        assert browser.evaluate("state.screeningJobs.transcript.status") == "waiting"
+        submitted = blast.submission_count
+        blast.waiting = False
+        browser.evaluate("window.fireScreeningCheck();clearTimeout(window.testScreeningTimer)")
+        browser.wait("state.screeningJobs.transcript.status==='complete'")
+        assert blast.submission_count == submitted, "Automatic collection resubmitted sequences"
+        result = browser.evaluate(
+            f"api('/api/screenings/{screening_id}').then(record=>record.status)")
+        assert result == "complete", result
+        print("    automatic collection: real browser POST passes HTTP guard, same saved job")
+    finally:
+        blast.waiting = False
+        browser.evaluate("if(window.originalScreeningTimer)"
+                         "window.setTimeout=window.originalScreeningTimer")
 
 
 def check_progress_bar(browser: Browser) -> None:

@@ -186,7 +186,7 @@ function pollScreening(screeningId, runId, scope, label, index, total) {
             done:index, total, progress:record.progress || null, id:screeningId,
           };
           renderScreeningStatus();
-          setTimeout(tick, 2000);
+          setTimeout(tick, Math.max(5000, Number(record.poll_after_seconds || 5) * 1000));
           return;
         }
         if (record.status === "waiting") {
@@ -230,7 +230,9 @@ async function resumeScreening(scope) {
   state.screeningJobs[scope] = {...job, status:"running", stage:"Checking NCBI again"};
   renderScreeningStatus();
   try {
-    await api(`/api/screenings/${job.id}/resume`, {method:"POST"});
+    await api(`/api/screenings/${job.id}/resume`, {
+      method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({}),
+    });
     if (state.result?.app.run_id !== runId) return;
     await pollScreening(job.id, runId, scope, "collecting", 0, 1);
   } catch (e) {
@@ -395,7 +397,16 @@ function renderScreeningStatus() {
           : "");
     }
     const button = $(SCOPE_BUTTON[scope]);
-    if (button) button.disabled = ["running", "waiting"].includes(job?.status);
+    if (button) {
+      const remaining = screenablePool().filter(id => !alreadyScreened(scope).has(id)).length;
+      const amount = Math.min(batchChoice(scope), remaining);
+      const name = scope === "transcript" ? "transcript" : "genomic";
+      if (button.firstChild) button.firstChild.textContent = ["running", "waiting"].includes(job?.status)
+        ? `${scope === "transcript" ? "Transcript" : "Genomic"} search pending `
+        : amount ? `Search next ${amount} ${name} candidate${amount === 1 ? "" : "s"} `
+        : `All ${name} candidates searched `;
+      button.disabled = ["running", "waiting"].includes(job?.status) || !remaining;
+    }
   }
   renderBatchControls();
   if (state.result && typeof renderExportNote === "function") renderExportNote();
@@ -426,13 +437,13 @@ function renderBatchControls() {
     + `<button type="button" data-batch-mode="all" class="secondary"${disabled}`
     + ` ${otTip("Screen every candidate that passed the gates. Submitted in sequential jobs of "
         + "25, each its own dated record, so NCBI is never asked for all of them at once.")}>`
-    + `All ${pool.length}</button>`
+    + `${done.size ? "Re-screen all" : "Search all"} ${pool.length}</button>`
     + (done.size && remaining > 0
         ? `<button type="button" data-batch-mode="rest" class="secondary"${disabled}>`
-          + `The rest (${remaining})</button>` : "")
+          + `Search remaining ${remaining}</button>` : "")
     + (ticked
         ? `<button type="button" data-batch-mode="selection" class="secondary"${disabled}>`
-          + `Ticked (${ticked})</button>` : "")
+          + `Search selected (${ticked})</button>` : "")
     + `</div>`
     + (SCOPE_WARNING[scope] ? `<p class="hint">${escapeHTML(SCOPE_WARNING[scope])}</p>` : "")
     + `<p class="hint">${busy
@@ -869,7 +880,7 @@ document.addEventListener("click", (event) => {
   if (batch) {
     state.screenBatch = state.screenBatch || {};
     state.screenBatch[state.screeningScope || "transcript"] = Number(batch.dataset.batch);
-    renderBatchControls();
+    renderScreeningStatus();
     return;
   }
   const mode = event.target.closest("[data-batch-mode]");

@@ -433,6 +433,7 @@ class RunStore:
             "created": row["created"], "status": row["status"], "stage": row["stage"],
             "request_id": row["request_id"], "error": row["error"],
             "progress": json.loads(row["progress"]) if row["progress"] else None,
+            "poll_after_seconds": 5 if row["status"] == "running" else 60,
         }
         if row["result"] is not None:
             record["result"] = json.loads(zlib.decompress(row["result"]))

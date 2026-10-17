@@ -34,6 +34,8 @@ vm.runInContext(`
   reset();let posts=0;
   api=async(path,options)=>{
     if(options){assert(path==='/api/screenings/job-1/resume','Resubmitted a new search');posts++;
+      assert(options.headers['Content-Type']==='application/json','Missing JSON media type');
+      assert(options.body==='{}','Missing JSON request body');
       return {id:'job-1'};}
     return {id:'job-1',scope:'transcript',status:'complete',result:{specificity:[]}};
   };
