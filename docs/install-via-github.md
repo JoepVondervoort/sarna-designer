@@ -232,3 +232,27 @@ binding. All matching alignments are counted; up to 200 detail alignments per ca
 stored for display. Very repetitive batches that exceed the resource budget fail explicitly
 instead of producing a truncated “clean” result. NCBI BLAST remains an explicitly selected,
 remote cross-check with different search behavior and potentially long queues.
+
+### Build a shortlist after screening
+
+The setup panel opens automatically when references are missing. It lists the genome
+(972.9 MB), transcripts (132.9 MB), annotations (56.9 MB), chromosome map (79 kB) and the
+platform's search tools (31.3 MB on Windows; 52.4 MB on Linux). The total is about 1.2 GB.
+Downloading and building the indexes are separate steps; building can take an hour or more.
+
+After a design run, choose **Screen all locally · both scopes** in **Your screened shortlist**.
+The panel offers a top **10 or 15**, ordered by original design rank after screening exclusions.
+Both local searches must be complete using the same reference. Older reports may need a refresh;
+cached local alignments are reused. Missing evidence never counts as a negative finding.
+
+The initial project policy excludes any candidate with an 18/19 or 19/19 match in either scope,
+or five or more 17/19 matches. Genomic counts exclude the intended locus when its coordinates
+are known. Counts concern reference alignments, including isoforms and alternate records.
+**These are conservative project choices, not validated saRNA safety thresholds.** Read the
+selection rules and linked papers in the panel. The shortlist may contain fewer than ten,
+and is provisional while other passing candidates still lack evidence.
+
+**Select these for export** uses only eligible candidates. Later adverse findings remove them
+from that managed selection. Sequence exports cannot silently fall back to all designs when
+it becomes empty. **Download selection record** preserves every decision, source search,
+reference, counts and policy. Original scores and manual research notes remain available.

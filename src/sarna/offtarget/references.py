@@ -202,6 +202,10 @@ class ReferenceManager:
             "supported": supported,
             "download_bytes": sum(a[2] for a in ASSETS.values())
             + (TOOLS[platform.system()][3] if supported else 0),
+            "download_plan": [
+                {"key": key, "bytes": asset[2]}
+                for key, asset in ASSETS.items()
+            ] + ([{"key": "tools", "bytes": TOOLS[platform.system()][3]}] if supported else []),
             "required_free_bytes": 20 * 1024**3,
             "directory": str(self.root),
         }

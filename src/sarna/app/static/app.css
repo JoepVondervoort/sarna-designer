@@ -394,3 +394,48 @@ button.link{border:0;background:none;padding:0;color:var(--teal);font-size:11px;
 .screening-backend select { max-width: 100%; padding: 8px 12px; border: 1px solid #d3e0df; border-radius: 8px; background: white; }
 
 #reference-status { overflow-wrap: anywhere; line-height: 1.6; margin-top: 12px; }
+
+/* First-time reference preparation and the separate post-screening decision layer. */
+.reference-plan { margin: 1rem 0; padding: 1rem; border: 1px solid var(--line, #d9e5e2); border-radius: 12px; background: #f5f9f8; }
+.reference-plan-heading, .screened-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.reference-plan-heading > span { font-size: 1.25rem; font-weight: 700; color: #087e80; white-space: nowrap; }
+.reference-assets { display: grid; grid-template-columns: repeat(auto-fit,minmax(145px,1fr)); gap: .65rem; margin-top: 1rem; }
+.reference-assets > div { display: flex; flex-direction: column; gap: .3rem; padding: .7rem; background: white; border-radius: 8px; }
+.reference-assets span { font-size: .8rem; color: #526b75; }
+.reference-steps { display: grid; grid-template-columns: repeat(3,1fr); padding: 0; gap: 1rem; list-style: none; }
+.reference-steps li { display: flex; flex-direction: column; gap: .4rem; padding: .7rem; border-left: 3px solid #b9d6cf; }
+.reference-steps span { font-size: .8rem; color: #526b75; }
+.screened-shortlist { scroll-margin-top: 80px; margin: 1.5rem 0; border: 1px solid #c7dcd6; border-radius: 14px; background: #fff; overflow: hidden; }
+.screened-heading { padding: 1.25rem 1.5rem; background: linear-gradient(115deg,#edf6f2,#f8fbfa); }
+.screened-heading h3 { margin: .25rem 0 .4rem; font-size: 1.25rem; }
+.screened-heading .hint { margin: 0; }
+.screened-eyebrow { font-size: .65rem; letter-spacing: .12em; font-weight: 700; color: #327968; margin: 0; }
+.screened-heading label { display: flex; align-items: center; gap: .5rem; white-space: nowrap; font-size: .85rem; }
+.screened-metrics { display: grid; grid-template-columns: repeat(4,1fr); padding: 1.25rem 1.5rem; gap: 1rem; border-bottom: 1px solid #e4eeea; }
+.screened-metrics > div { display: flex; flex-direction: column; gap: .35rem; }
+.screened-metrics strong { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.screened-metrics small { color: #6d858c; font-size: .9rem; font-weight: 400; }
+.screened-metrics span { color: #526b75; font-size: .8rem; }
+.screened-policy, .screened-decisions { margin: 1rem 1.5rem; font-size: .85rem; line-height: 1.6; }
+.screened-policy summary, .screened-decisions summary { cursor: pointer; color: #087e80; }
+.screened-policy p { max-width: 95ch; }
+.screened-table-wrap { overflow-x: auto; }
+.screened-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.screened-table th, .screened-table td { padding: .85rem 1.1rem; text-align: left; border-bottom: 1px solid #e4eeea; }
+.screened-table th { background: #f5f9f8; font-size: .75rem; font-weight: 500; }
+.screened-table td small { display: block; margin-top: .25rem; color: #6d858c; }
+.screened-number { display: inline-grid; place-items: center; width: 1.8rem; height: 1.8rem; border-radius: 50%; background: #e4f1eb; color: #286453; font-weight: 700; }
+.screened-empty { padding: 1.5rem; background: #fafcfb; }
+.screened-empty p { max-width: 85ch; color: #526b75; font-size: .85rem; line-height: 1.6; }
+.screened-actions { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; padding: 1rem 1.5rem; }
+.screened-actions > span { flex: 1 1 250px; }
+.screened-decisions article { padding: .75rem 0; border-top: 1px solid #e4eeea; }
+.screened-decisions .tag { margin-left: .75rem; }
+.screened-decisions article p { margin: .3rem 0; color: #526b75; }
+@media (max-width: 650px) {
+  .reference-steps { grid-template-columns: 1fr; gap: .25rem; }
+  .screened-heading { align-items: flex-start; flex-direction: column; }
+  .screened-metrics { grid-template-columns: repeat(2,1fr); }
+  .screened-heading, .screened-metrics, .screened-actions { padding: 1rem; }
+  .screened-policy, .screened-decisions { margin: 1rem; }
+}

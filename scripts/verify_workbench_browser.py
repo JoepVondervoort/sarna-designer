@@ -489,6 +489,11 @@ def check_local_reference_setup(browser: Browser, screenshots: Path | None) -> N
     browser.wait("REFERENCE_STATUS !== null")
     assert browser.evaluate("document.getElementById('screening-backend').value") == "local"
     assert browser.evaluate("document.getElementById('screen-transcript').disabled") is True
+    plan = str(browser.evaluate("document.getElementById('reference-download-plan').innerText"))
+    assert "972.9 MB" in plan and "132.9 MB" in plan and "56.9 MB" in plan, plan
+    if screenshots:
+        browser.evaluate("document.getElementById('local-reference-panel').scrollIntoView()")
+        browser.screenshot(screenshots / "local-reference-first-install.png")
     browser.evaluate("""(() => {
       window.referenceTestOriginal = {fetch:window.fetch, status:REFERENCE_STATUS, scroll:scrollY};
       window.referenceTestCalls = [];
@@ -540,6 +545,84 @@ def check_local_reference_setup(browser: Browser, screenshots: Path | None) -> N
       window.scrollTo(0,referenceTestOriginal.scroll);
     })()""")
     print("    local references: explicit setup, progress, pause/resume and ready search controls")
+
+
+
+def check_screened_shortlist(browser: Browser, screenshots: Path | None) -> None:
+    """A candidate needs complete evidence in both scopes; later failures remove selection."""
+    from sarna.offtarget.selection import assess_counts
+
+    assessments = {name: assess_counts(counts, own_locus_known=True)
+                   for name, counts in {
+                       "eligible": {"19": 0, "18": 0, "17": 4, "16": 100},
+                       "excluded": {"19": 0, "18": 1, "17": 0, "16": 0},
+                   }.items()}
+    browser.evaluate("window.selectionTestAssessments=" + json.dumps(assessments))
+    browser.evaluate("""(() => {
+      window.selectionBefore={screenings:state.screenings, checked:state.checked,
+        candidates:state.result.candidates, managed:state.screenedManagedSelection,
+        managedRun:state.screenedManagedRun,
+        backend:document.getElementById('screening-backend').value,
+        limit:state.screenedShortlistLimit};
+      document.getElementById('screening-backend').value='local';
+      const key=selectedEvidenceKey();
+      const template=state.result.candidates.find(c=>c.rank!==null);
+      state.result.candidates=[...state.result.candidates,...Array.from({length:16},(_,i)=>({
+        ...template,id:'shortlist-fixture-'+i,rank:100+i}))];
+      const pool=state.result.candidates.filter(c=>c.rank!==null);
+      state.screenings={};
+      for (const scope of ['transcript','genomic']) {
+        const entries=Object.fromEntries(pool.map(c=>[c.id,
+          {search:{id:scope+'-fixture',reference:{release:key.slice(6)}},
+          row:{candidate:c.id, enumeration_complete:true, alignments_capped:false,
+          identity_counts:{'19':0,'18':0,'17':4,'16':100},
+          selection_assessment:selectionTestAssessments.eligible}}]));
+        // One exclusion, one never screened, one capped, one stale schema.
+        entries[pool[0].id].row.selection_assessment=selectionTestAssessments.excluded;
+        delete entries[pool[1].id];
+        entries[pool[2].id].row.alignments_capped=true;
+        delete entries[pool[3].id].row.selection_assessment;
+        state.screenings[scope]={byEvidence:{[key]:entries}};
+      }
+      renderScreenedShortlist();
+    })()""")
+    decisions = cast(list[dict[str, Any]], browser.evaluate(
+        "screenedDecisions().map(d=>({id:d.candidate.id,status:d.status}))"))
+    assert sum(d["status"] == "excluded" for d in decisions) == 1
+    assert sum(d["status"] == "pending" for d in decisions) == 3
+    browser.evaluate("document.getElementById('screened-use').click()")
+    selected = cast(list[str], browser.evaluate("[...state.checked]"))
+    assert selected and len(selected) <= 10
+    assert all(d["status"] == "eligible" for d in decisions if d["id"] in selected), (
+        selected, decisions, browser.exceptions)
+    browser.evaluate("""(() => {
+      const select=document.getElementById('screened-shortlist-limit');select.value='15';
+      select.dispatchEvent(new Event('change',{bubbles:true}));
+    })()""")
+    assert browser.evaluate("state.screenedShortlistLimit") == 15
+    if screenshots:
+        browser.evaluate("document.getElementById('screened-shortlist').scrollIntoView()")
+        browser.screenshot(screenshots / "screened-shortlist.png")
+    browser.evaluate("""(() => {
+      const key=selectedEvidenceKey(), entries=state.screenings.genomic.byEvidence[key];
+      for (const entry of Object.values(entries))
+        entry.row.selection_assessment=selectionTestAssessments.excluded;
+      renderScreenedShortlist();
+    })()""")
+    assert browser.evaluate("document.getElementById('screened-use').disabled") is True
+    assert browser.evaluate("state.checked.size") == 0
+    assert browser.evaluate("""(()=>{try {validateScreenedExport();return false;}
+      catch(error){return error.message.includes('Choose eligible candidates');}})()""") is True
+    browser.evaluate("""(() => {
+      state.screenings=selectionBefore.screenings;state.checked=selectionBefore.checked;
+      state.result.candidates=selectionBefore.candidates;
+      state.screenedManagedSelection=selectionBefore.managed;
+      state.screenedManagedRun=selectionBefore.managedRun;
+      state.screenedShortlistLimit=selectionBefore.limit;
+      document.getElementById('screening-backend').value=selectionBefore.backend;
+      renderScreenedShortlist();renderTable();
+    })()""")
+    print("    screened shortlist: exclusion, pending evidence, capped reports and top 10/15")
 
 
 def check_local_result_display(browser: Browser, screenshots: Path | None) -> None:
@@ -609,6 +692,7 @@ def check_offtarget(browser: Browser, blast: StubBlast, screenshots: Path | None
     from one never screened, and that the own-locus removal is stated rather than silent.
     """
     check_local_reference_setup(browser, screenshots)
+    check_screened_shortlist(browser, screenshots)
     candidates = cast(list[dict[str, Any]], browser.evaluate("state.result.candidates") or [])
     blast.loci = {
         c["id"]: (c["genomic"]["contig"], c["genomic"]["start"], c["genomic"]["end"])

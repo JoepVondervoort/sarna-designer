@@ -31,6 +31,7 @@ from sarna.offtarget.ncbi import candidate_sequences
 from sarna.offtarget.ontarget import loci_from_candidates, split_on_target
 from sarna.offtarget.references import TSS_PROXY_FEATURES, ReferenceManager, reference_bases
 from sarna.offtarget.screening import ProgressReporter, specificity_table
+from sarna.offtarget.selection import assess_counts
 from sarna.reproducibility import software_identity
 
 CHROMOSOMES = frozenset(str(i) for i in range(1, 23)) | {"X", "Y", "MT"}
@@ -388,7 +389,18 @@ def run_local_screening(
                     f"Own-locus removal unavailable for {unlocated} candidate(s) without "
                     "genomic coordinates; their counts may include the intended target.",
                 )
+        identity_counts: dict[str, dict[str, int]] = {
+            candidate: {str(identity): 0 for identity in range(16, 20)}
+            for candidate in queries
+        }
+        for hit in off:
+            identity_counts[hit.candidate_id][str(hit.identities)] += 1
         for row in rows:
+            row["identity_counts"] = identity_counts[row["candidate"]]
+            row["selection_assessment"] = assess_counts(
+                identity_counts[row["candidate"]],
+                own_locus_known=scope != "genomic" or row["candidate"] in loci,
+            )
             row["details_retained"] = counts[row["candidate"]]
             row["enumeration_complete"] = True
             row["alignment_cache_hit"] = queries[row["candidate"]] in reused

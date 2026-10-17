@@ -58,6 +58,8 @@ def test_status_is_read_only_and_never_downloads(tmp_path: Path):
     assert not status["ready"]
     assert status["catalog_release"] == references.RELEASE
     assert not root.exists()
+    assert sum(a["bytes"] for a in status["download_plan"]) == status["download_bytes"]
+    assert next(a for a in status["download_plan"] if a["key"] == "genomic")["bytes"] == 972898531
 
 
 def test_only_one_process_can_prepare_references(tmp_path: Path):
@@ -335,6 +337,10 @@ def test_display_limit_does_not_limit_search_counts(
     )
     assert result["specificity"][0]["hit_count"] == 6
     assert result["specificity"][0]["details_retained"] == 2
+    row = result["specificity"][0]
+    assert sum(row["identity_counts"].values()) == 6
+    assert row["identity_counts"]["19"] == 3
+    assert row["selection_assessment"]["status"] == "excluded"
     assert len(result["hits"]) == 2
     assert not result["specificity"][0]["alignments_capped"]
 

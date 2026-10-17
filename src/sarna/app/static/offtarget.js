@@ -1,7 +1,8 @@
 /* Off-target screening: the panel, its batches, and where each alignment lands.
  *
  * Display only. Every threshold shown here is computed in Python and arrives in the record;
- * nothing in this file decides what counts as a strong match (ADR 0019, ADR 0023).
+ * nothing in this file decides what counts as a strong match. Selection assessments come
+ * from the separate, explicitly unvalidated Python project policy.
  *
  * The panel merges several screening records per scope, because screening now runs in batches
  * and a run can hold a first fifteen, a next fifteen and a re-screen months later. Each row
@@ -438,6 +439,7 @@ function progressBar(job) {
 }
 
 function renderScreeningStatus() {
+  renderScreenedShortlist();
   const jobs = Object.fromEntries(Object.keys(SCOPE_BUTTON).map(scope=>[scope,currentScreeningJob(scope)]).filter(([,job])=>job));
   const states = Object.values(jobs).map(j => j.status);
   const done = Object.keys(screenings()).length;
@@ -1100,6 +1102,18 @@ function renderReferenceStatus() {
   const info = REFERENCE_STATUS;
   if (!info || !$("reference-status")) return;
   const busy = info.status === "running";
+  const plan = $("reference-download-plan");
+  if (plan) {
+    const names = {genomic:"Human genome", transcript:"RefSeq transcripts", annotation:"Gene annotations", assembly:"Chromosome map", tools:"Search tools"};
+    const size = bytes => bytes >= 1e9 ? `${(bytes/1e9).toFixed(2)} GB` : bytes >= 1e6 ? `${(bytes/1e6).toFixed(1)} MB` : `${(bytes/1e3).toFixed(0)} kB`;
+    plan.innerHTML = `<div class="reference-plan-heading"><strong>${info.ready ? "Installed · no download needed" : "One-time reference download"}</strong><span>${size(info.download_bytes || 0)} total</span></div>`
+      + `<div class="reference-assets">${(info.download_plan || []).map(asset=>`<div><span>${escapeHTML(names[asset.key] || asset.key)}</span><strong>${size(asset.bytes)}</strong></div>`).join("")}</div>`
+      + `<p class="hint">Allow ${(info.required_free_bytes/1024**3).toFixed(0)} GiB free for preparation. Download time depends on your connection; building indexes happens afterwards and can take an hour or more. Keep the app running. This is a one-time setup per reference release.</p>`;
+  }
+  if (!info.ready && !state.referenceSetupShown) {
+    $("local-reference-panel").open = true;
+    state.referenceSetupShown = true;
+  }
   $("reference-summary").textContent = "Local off-target screening · " + (busy ? "preparing references…" : info.ready ? "references ready" : info.status === "error" ? "setup needs retry" : "reference setup");
   const label = info.installed ? `${info.installed.release} · Bowtie ${info.installed.bowtie_version}` : "No local reference installed";
   $("reference-status").textContent = `${label}. ${info.message || ""}` + (info.file ? ` · ${info.file}` : "")
@@ -1171,4 +1185,86 @@ if (state.result) {
   for (const record of (frozen?.screenings || [])) mergeScreening(record);
   renderOffTarget(frozen?.screenings?.[0]?.scope || "transcript");
   renderScreeningStatus();
+}
+
+/* The screened shortlist filters on Python verdicts, then retains the original design rank.
+ * It never treats a missing or capped report as a negative finding, and never fills vacancies
+ * with an excluded candidate. Manual research notes and the original design record remain.
+ */
+function screenedDecisions() {
+  const candidates = (state.result?.candidates || []).filter(c=>c.rank !== null);
+  let key = `local:${REFERENCE_STATUS?.installed?.release || REFERENCE_STATUS?.catalog_release || ""}`;
+  if (frozen) {
+    const shared = Object.keys(screenings().genomic?.byEvidence || {}).filter(k=>k.startsWith("local:") && screenings().transcript?.byEvidence?.[k]);
+    key = shared.at(-1) || "local:";
+  }
+  return candidates.map(candidate => {
+    const evidence = Object.keys(SCOPE_BUTTON).map(scope=>({scope, entry:screenings()[scope]?.byEvidence?.[key]?.[candidate.id]}));
+    const reasons = [], pending = [];
+    for (const {scope,entry} of evidence) {
+      const assessment = entry?.row.selection_assessment;
+      if (!entry) pending.push(`${scope}: not screened with this local reference`);
+      else if (!assessment || assessment.policy?.id !== "conservative-full-length-v1" || !entry.row.enumeration_complete || entry.row.alignments_capped) pending.push(`${scope}: refresh screening to obtain complete selection evidence; local cached searches are reused`);
+      else if (assessment.status === "excluded") reasons.push(...assessment.reasons.map(reason=>`${scope}: ${reason}`));
+      else if (assessment.status !== "eligible") pending.push(...assessment.reasons.map(reason=>`${scope}: ${reason}`));
+    }
+    return {candidate, evidence, reasons:[...reasons,...pending], status:reasons.length ? "excluded" : pending.length ? "pending" : "eligible"};
+  }).sort((a,b)=>a.candidate.rank-b.candidate.rank);
+}
+function renderScreenedShortlist() {
+  const host = $("screened-shortlist");
+  if (!host || !state.result) return;
+  const decisions = screenedDecisions(), limit = state.screenedShortlistLimit || 10;
+  const eligible = decisions.filter(d=>d.status === "eligible"), chosen = eligible.slice(0,limit);
+  const excluded = decisions.filter(d=>d.status === "excluded"), pending = decisions.filter(d=>d.status === "pending");
+  if (state.screenedManagedRun === state.result.app.run_id) {
+    const eligibleIds = new Set(eligible.map(d=>d.candidate.id));
+    let changed = false;
+    for (const id of state.screenedManagedSelection || []) {
+      if (!eligibleIds.has(id) && state.checked.delete(id)) changed = true;
+    }
+    if (changed) renderTable();
+  }
+  const counts = entry => {
+    const c = entry?.row.identity_counts;
+    return c ? `${c["19"]} / ${c["18"]} / ${c["17"]}` : "n/a";
+  };
+  screeningHTML(host, `<div class="screened-heading"><div><p class="screened-eyebrow">AFTER SCREENING</p><h3>Your screened shortlist</h3><p class="hint">Passing designs that meet the project’s sequence-screening rules, ordered by their original design rank.</p></div><label>Show top <select id="screened-shortlist-limit" aria-label="Screened shortlist size"><option value="10" ${limit===10?"selected":""}>10</option><option value="15" ${limit===15?"selected":""}>15</option></select></label></div>`
+    + `<div class="screened-metrics"><div><strong>${chosen.length}<small> / ${limit}</small></strong><span>in this shortlist</span></div><div><strong>${eligible.length}</strong><span>meet project rules</span></div><div><strong>${excluded.length}</strong><span>excluded by screening</span></div><div><strong>${pending.length}</strong><span>need evidence</span></div></div>`
+    + `<details class="screened-policy"><summary>Selection rules · project defaults, not validated safety cutoffs</summary><p>Both local searches must be complete against the same selected reference. Exclude if either scope has any full-length 18/19 or 19/19 match, or at least five 17/19 matches. Genomic screening must know the intended locus so its own hits can be removed. Counts are reference alignments, including transcript isoforms and alternate genome records; they are not counts of independent genes. Transcript matches are retained even for the intended gene because possible RNA silencing matters.</p><p>The original design score and rank determine the order after exclusion. These numeric cutoffs are conservative project choices, not experimentally validated saRNA thresholds. There is no validated combined efficacy/specificity score here. A shorter list stays shorter.</p><p>Evidence supports sequence-dependent RNA activation and potential off-target silencing, but does not establish these cutoffs: <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC4379447/" target="_blank" rel="noopener">Wang et al., 2015</a>; <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC4797303/" target="_blank" rel="noopener">Meng et al., 2016</a>; <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC1484447/" target="_blank" rel="noopener">Jackson et al., 2006 (siRNA)</a>. Seed effects, gaps, variants and cell-specific activity remain unassessed. Meeting these rules does not establish biological specificity.</p></details>`
+    + (chosen.length ? `<div class="screened-table-wrap"><table class="screened-table"><thead><tr><th>Shortlist</th><th>Candidate</th><th>Design score</th><th>Transcript<br><small>19 / 18 / 17-base matches</small></th><th>Genome<br><small>19 / 18 / 17-base matches</small></th><th></th></tr></thead><tbody>${chosen.map((d,i)=>`<tr><td><span class="screened-number">${i+1}</span></td><td><strong>${escapeHTML(d.candidate.id)}</strong><small>Design rank ${d.candidate.rank}</small></td><td>${d.candidate.rating?.met ?? "n/a"} / ${d.candidate.rating?.evaluated ?? "n/a"}</td><td>${counts(d.evidence.find(e=>e.scope==="transcript").entry)}</td><td>${counts(d.evidence.find(e=>e.scope==="genomic").entry)}</td><td><button class="secondary" type="button" data-screened-inspect="${escapeHTML(d.candidate.id)}">Inspect</button></td></tr>`).join("")}</tbody></table></div>` : `<div class="screened-empty"><strong>${pending.length ? "Complete both local searches to build your shortlist" : "No candidates meet these project rules"}</strong><p>${pending.length ? "Screen all passing candidates in both scopes for a complete top 10 or 15. Older reports may need a refresh; local alignment caches avoid repeating the search." : "Review the exclusions below or design additional candidates. Excluded candidates are never used to fill the list."}</p></div>`)
+    + `<div class="screened-actions">${pending.length && !frozen ? `<button id="screened-screen-all" class="secondary" type="button" ${!REFERENCE_STATUS?.ready || screeningBackend() !== "local" || Object.keys(SCOPE_BUTTON).some(scope=>["running","waiting"].includes(currentScreeningJob(scope)?.status)) ? "disabled" : ""}>Screen all locally · both scopes</button>` : ""}<button id="screened-use" class="secondary" type="button" ${chosen.length ? "" : "disabled"}>Select these ${chosen.length} for export</button><button id="screened-audit" class="secondary" type="button">Download selection record</button><span class="hint">${pending.length ? "Provisional order: unscreened candidates may still qualify ahead of this list." : "All passing candidates have a screening decision."} Research selection; experimental validation remains necessary.</span></div>`
+    + `<details class="screened-decisions"><summary>Review ${excluded.length} exclusions and ${pending.length} pending candidates</summary>${[...excluded,...pending].map(d=>`<article><strong>${escapeHTML(d.candidate.id)}</strong><span class="tag">${d.status === "excluded" ? "EXCLUDED" : "NEEDS EVIDENCE"}</span><p>${d.reasons.map(escapeHTML).join(" · ")}</p></article>`).join("") || '<p class="hint">Every passing candidate meets the project rules.</p>'}</details>`);
+}
+$("screened-shortlist")?.addEventListener("change", event=>{
+  if (event.target.id !== "screened-shortlist-limit") return;
+  state.screenedShortlistLimit = Number(event.target.value) === 15 ? 15 : 10;
+  renderScreenedShortlist();
+});
+$("screened-shortlist")?.addEventListener("click", event=>{
+  if (event.target.id === "screened-screen-all") {
+    if (screeningBackend() === "local") Promise.all([startScreening("transcript","all"),startScreening("genomic","all")]);
+    return;
+  }
+  const inspect = event.target.closest("[data-screened-inspect]");
+  if (inspect) { selectCandidate(inspect.dataset.screenedInspect); $("candidate-layout").scrollIntoView({block:"start"}); }
+  if (event.target.id === "screened-use") {
+    state.checked = new Set(screenedDecisions().filter(d=>d.status === "eligible").slice(0,state.screenedShortlistLimit || 10).map(d=>d.candidate.id));
+    state.screenedManagedSelection = new Set(state.checked);
+    state.screenedManagedRun = state.result.app.run_id;
+    renderTable();
+    event.target.textContent = `${state.checked.size} selected for export`;
+  }
+  if (event.target.id === "screened-audit") {
+    const decisions = screenedDecisions().map(d=>({candidate:d.candidate.id, original_rank:d.candidate.rank, design_score:d.candidate.rating, status:d.status, reasons:d.reasons, evidence:d.evidence.map(e=>({scope:e.scope, search_id:e.entry?.search.id, searched_at:e.entry?.search.searched_at, reference:e.entry?.search.reference?.release, counts:e.entry?.row.identity_counts, assessment:e.entry?.row.selection_assessment}))}));
+    downloadBlob(new Blob([JSON.stringify({run_id:state.result.app.run_id, generated_at:new Date().toISOString(), limit:state.screenedShortlistLimit || 10, order:"Original design rank after project-rule exclusions", decisions},null,2)],{type:"application/json"}),"screened-selection.json");
+  }
+});
+
+function validateScreenedExport() {
+  if (state.screenedManagedRun !== state.result?.app.run_id) return;
+  const allowed = new Set(screenedDecisions().filter(d=>d.status === "eligible").map(d=>d.candidate.id));
+  if (!state.checked.size || [...state.checked].some(id=>!allowed.has(id))) {
+    throw new Error("Choose eligible candidates from the screened shortlist before exporting selected sequences. Excluded or pending candidates cannot be included in this selection. Whole-run JSON and HTML remain available for review.");
+  }
 }

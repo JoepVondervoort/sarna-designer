@@ -926,7 +926,7 @@ function renderTable() {
 function renderExportNote() {
   const screened = Object.keys(state.screenings || {});
   $("export-note").textContent =
-    `${state.checked.size ? `${state.checked.size} selected candidates`
+    `${state.screenedManagedRun === state.result?.app.run_id ? `${state.checked.size} screened shortlist candidates selected` : state.checked.size ? `${state.checked.size} selected candidates`
                           : "All passing candidates"}. `
     + `Excel carries every candidate with its values, plus the run and its rules on their own `
     + `sheets. Order CSV gives the 21-mers to synthesise; core CSV gives the 19 nt cores alone. `
@@ -1608,6 +1608,7 @@ function orderCsvText(result) {
 }
 async function exportOrder() {
   try {
+    if (typeof validateScreenedExport === "function") validateScreenedExport();
     const r=state.result, name=`${r.gene?.symbol || "promoter"}-${r.app.run_id.slice(0,8)}-order.csv`;
     if (frozen) { downloadBlob(new Blob([orderCsvText(r)],{type:"text/csv"}),name); return; }
     const response=await fetch(`/api/runs/${r.app.run_id}/export.order.csv${state.checked.size?`?ids=${encodeURIComponent([...state.checked].join(","))}`:""}`);
@@ -1617,6 +1618,7 @@ async function exportOrder() {
 }
 async function exportRun(type) {
   try {
+    if ((type === "csv" || type === "xlsx") && typeof validateScreenedExport === "function") validateScreenedExport();
     if (typeof flushWorkspace === "function") await flushWorkspace(state.result.app.run_id);
     const r=state.result, name=`${r.gene?.symbol || "promoter"}-${r.app.run_id.slice(0,8)}.${type}`;
     if (frozen) { downloadBlob(new Blob([type==="csv"?csvText(r):JSON.stringify(r,null,2)],{type:type==="csv"?"text/csv":"application/json"}),name); return; }
