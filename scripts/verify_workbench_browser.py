@@ -511,7 +511,7 @@ def check_offtarget(browser: Browser, blast: StubBlast, screenshots: Path | None
     assert screened == min(5, pool), f"asked for 5, screened {screened}"
 
     summary = str(browser.evaluate("document.querySelector('.ot-summary').innerText"))
-    assert "biological specificity remain untested" in summary, summary
+    assert "specificity remain untested" in summary, summary
     browser.evaluate("document.querySelector('.ot-methods').open=true")
     methods = str(browser.evaluate("document.querySelector('.ot-methods').innerText"))
     assert "not a validated saRNA risk cutoff" in methods, methods
@@ -615,9 +615,28 @@ def check_offtarget(browser: Browser, blast: StubBlast, screenshots: Path | None
             f"{where} still reports that no screening was performed after one ran"
         )
     check_automatic_http_collection(browser, blast)
+    filtering = browser.evaluate("""(()=>{
+      const entry=Object.values(state.screenings.transcript.byCandidate)
+        .find(e=>e.row.perfect_hits>0 && e.row.hit_count>e.row.wang_homology_hits);
+      if(!entry) throw Error('No fixture covers both threshold and weaker matches');
+      state.screeningOpen=entry.row.candidate;state.screeningMatchFilter='all';
+      renderOffTarget('transcript');
+      const before=JSON.stringify(entry.hits);
+      document.querySelector('[data-match-filter="threshold"]').click();
+      const filtered=document.querySelectorAll('.ot-hit').length;
+      document.querySelector('[data-match-filter="all"]').click();
+      const all=document.querySelectorAll('.ot-hit').length;
+      return {filtered,all,unchanged:before===JSON.stringify(entry.hits),
+              threshold:entry.row.wang_homology_hits};
+    })()""")
+    assert isinstance(filtering, dict), filtering
+    assert filtering["filtered"] < filtering["all"], filtering
+    assert filtering["unchanged"], "Display filtering changed stored findings"
+    print("    result display: threshold filter separates weaker matches, findings unchanged")
     check_progress_bar(browser)
     check_human_only(browser)
     if screenshots:
+        browser.evaluate("document.querySelector('.ot-methods').open=false")
         browser.evaluate("document.querySelector('[data-scope-tab=\"genomic\"]')?.click();"
                          "document.getElementById('offtarget-card')"
                          ".scrollIntoView({block:'start'})")

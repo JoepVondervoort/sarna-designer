@@ -104,3 +104,23 @@ cannot trigger a stale collection. Closing the run pauses browser-driven checkin
 restores it. Unreadable reports require an explicit retry instead of an endless automatic loop.
 If another tab is already collecting the same search, this tab follows its local status.
 The count in each scope explicitly means candidates with completed results, not zero hits.
+
+## Clear result units and lower UI overhead
+
+The main result summary distinguishes saRNA candidates searched, returned alignments, and
+returned alignments reaching the recorded matching-base threshold. Expanded rows repeat this
+relationship for one candidate and explicitly explain weaker matches. The display can show
+all returned alignments or only those reaching the reporting threshold. This filter changes
+neither stored findings, counts, ranks nor the search policy. Exact-match counts remain
+available independently. Warnings name the sequence/HSP limit when the saved parameters and
+retained records establish it; historical records without those details stay explicitly
+uncertain. Reaching a limit suggests possible incompleteness, not confirmed additional hits.
+
+Local status reads use five seconds during active processing, at least fifteen seconds while
+waiting at NCBI, and at least thirty seconds when the browser tab is hidden. This does not
+change the external NCBI scheduler or speed up its queue. Concurrent observers of the same
+local job share one polling loop, and stale timers stop before making another local request.
+Identical status/control HTML is not replaced, preserving expanded search details. Candidate
+hit groups and genomic placement lookups are cached per immutable result entry. Gene-context
+requests are deduplicated while in flight, use saved annotations, fetch only displayed cards,
+and stop queued batches after a row closes or the user navigates away.
