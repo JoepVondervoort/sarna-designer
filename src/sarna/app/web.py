@@ -413,9 +413,15 @@ class AppRouter:
         """
         held = self.service.store.screening(screening_id)
         if held["status"] == "complete":
-            return self._json(409, {"detail": "This screening has already finished."})
+            return self._json(409, {
+                "detail": "This screening has already finished.",
+                "code": "screening-already-complete",
+            })
         if held["status"] == "running":
-            return self._json(409, {"detail": "This screening is already being collected."})
+            return self._json(409, {
+                "detail": "This screening is already being collected.",
+                "code": "screening-already-collecting",
+            })
         if held["status"] != "waiting" or not held.get("request_id"):
             raise ValueError(
                 "This screening has no NCBI request id to collect, so it has to be run again "
@@ -424,7 +430,10 @@ class AppRouter:
         # Back to 'running' before the worker starts, or the interface offers to collect the
         # same search again while it is already being collected.
         if not self.service.store.resume_screening(screening_id):
-            return self._json(409, {"detail": "This screening is already being collected."})
+            return self._json(409, {
+                "detail": "This screening is already being collected.",
+                "code": "screening-already-collecting",
+            })
         self.screeners.submit(self.service.resume, screening_id)
         return self._json(202, {"id": screening_id, "request_id": held["request_id"]})
 

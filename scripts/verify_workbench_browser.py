@@ -624,6 +624,25 @@ def check_offtarget(browser: Browser, blast: StubBlast, screenshots: Path | None
                          ".scrollIntoView({block:'start'})")
         time.sleep(0.4)
         browser.screenshot(screenshots / "offtarget-panel.png")
+        browser.evaluate("""(()=>{
+          window.savedScreeningView={jobs:state.screeningJobs,results:state.screenings,
+                                    scope:state.screeningScope};
+          state.screenings={};
+          state.screeningJobs={
+            transcript:{status:'waiting',id:'VISUAL-TX',stage:'NCBI has not finished this search.'},
+            genomic:{status:'waiting',id:'VISUAL-GENOME',stage:'NCBI estimated 76 minutes.'}
+          };
+          renderOffTarget('genomic');renderScreeningStatus();
+          document.getElementById('offtarget-card').scrollIntoView({block:'start'});
+        })()""")
+        browser.screenshot(screenshots / "offtarget-waiting.png")
+        browser.evaluate("""(()=>{
+          cancelScreeningCheck('transcript');cancelScreeningCheck('genomic');
+          state.screeningJobs=window.savedScreeningView.jobs;
+          state.screenings=window.savedScreeningView.results;
+          renderOffTarget(window.savedScreeningView.scope);renderScreeningStatus();
+          delete window.savedScreeningView;
+        })()""")
         browser.call("Emulation.setDeviceMetricsOverride", width=390, height=844,
                      deviceScaleFactor=1, mobile=True)
         browser.evaluate("document.getElementById('offtarget-card').scrollIntoView({block:'start'})")

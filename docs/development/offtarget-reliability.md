@@ -93,3 +93,14 @@ For a deployment benchmark, record submission, first READY, report retrieval, an
 completion separately. Remote queue time must not be attributed to parser performance.
 A pinned local reference/backend is a future deployment option for predictable throughput;
 it is not installed or silently substituted here.
+
+## Automatic collection while a run is open
+
+An unfinished remote job is checked again automatically after a one-minute pause while its
+run remains open. The browser calls the resume endpoint for the existing screening ID; it
+never submits the sequences again. The server's shared scheduler still enforces NCBI pacing.
+Timers are deduplicated and guard both run and screening IDs, so navigating to a different run
+cannot trigger a stale collection. Closing the run pauses browser-driven checking; reopening
+restores it. Unreadable reports require an explicit retry instead of an endless automatic loop.
+If another tab is already collecting the same search, this tab follows its local status.
+The count in each scope explicitly means candidates with completed results, not zero hits.

@@ -912,6 +912,11 @@ function renderTable() {
   $("page-previous").disabled = state.page===0; $("page-next").disabled = state.page>=pages-1;
   $("select-page").checked = page.length>0 && page.every(c=>state.checked.has(c.id));
   $("select-page").indeterminate = page.some(c=>state.checked.has(c.id)) && !$("select-page").checked;
+  renderExportNote();
+  // The ticked selection is one of the batch choices, so the button's count follows the table.
+  if (typeof renderBatchControls === "function") renderBatchControls();
+}
+function renderExportNote() {
   const screened = Object.keys(state.screenings || {});
   $("export-note").textContent =
     `${state.checked.size ? `${state.checked.size} selected candidates`
@@ -919,10 +924,9 @@ function renderTable() {
     + `Excel carries every candidate with its values, plus the run and its rules on their own `
     + `sheets. Order CSV gives the 21-mers to synthesise; core CSV gives the 19 nt cores alone. `
     + `${screened.length ? `Off-target screening (${screened.join(", ")}) travels with them.`
-                         : "No off-target screening has been performed."}`;
-  // The ticked selection is one of the batch choices, so the button's count follows the table.
-  if (typeof renderBatchControls === "function") renderBatchControls();
+                         : screeningSentence()}`;
 }
+
 /** What this run can honestly say about off-target screening, for whichever candidate.
  *
  * Three outcomes, as everywhere else: none run, run and quiet, run and found something. The
@@ -931,7 +935,11 @@ function renderTable() {
  */
 function screeningSentence(candidateId = null) {
   const held = Object.values(state.screenings || {});
-  if (!held.length) return "No off-target screening has been performed.";
+  if (!held.length) {
+    return Object.values(state.screeningJobs || {}).some(job => ["running", "waiting"].includes(job.status))
+      ? "Off-target searches are pending; no completed findings are available yet."
+      : "No off-target screening has been performed.";
+  }
   const scopes = held.map(h => h.scope === "genomic" ? "promoters" : "transcripts").join(" and ");
   if (!candidateId) return `Off-target screening has been run against ${scopes}; see the panel below.`;
   const rows = held.map(h => h.byCandidate[candidateId]).filter(Boolean);

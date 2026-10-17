@@ -69,6 +69,37 @@ function alreadyScreened(scope) {
   return new Set(Object.keys(screenings()[scope]?.byCandidate || {}));
 }
 
+/* A paused worker is not a paused NCBI job. Check the saved RID while this run is open,
+ * without creating another search or letting stale timers follow the user to a new run. */
+const AUTO_SCREEN_CHECKS = new Map();
+const AUTO_SCREEN_CHECK_MS = 60000;
+
+function scheduleScreeningCheck(scope) {
+  const job = state.screeningJobs?.[scope], runId = state.result?.app.run_id;
+  if (frozen || !runId || !job?.id || job.status !== "waiting" || job.retrievalIssue) return;
+  const key = `${runId}:${scope}:${job.id}`;
+  if (AUTO_SCREEN_CHECKS.has(key)) return;
+  const due = Date.now() + AUTO_SCREEN_CHECK_MS;
+  const timer = setTimeout(() => {
+    AUTO_SCREEN_CHECKS.delete(key);
+    const current = state.screeningJobs?.[scope];
+    if (state.result?.app.run_id !== runId || current?.id !== job.id
+        || current.status !== "waiting" || current.retrievalIssue) return;
+    resumeScreening(scope);
+  }, AUTO_SCREEN_CHECK_MS);
+  // Node-based state tests must not wait a real minute for a browser-only timer.
+  if (typeof timer?.unref === "function") timer.unref();
+  AUTO_SCREEN_CHECKS.set(key, {timer, due});
+}
+
+function cancelScreeningCheck(scope) {
+  const job = state.screeningJobs?.[scope], runId = state.result?.app.run_id;
+  const key = `${runId}:${scope}:${job?.id}`;
+  const pending = AUTO_SCREEN_CHECKS.get(key);
+  if (pending) clearTimeout(pending.timer);
+  AUTO_SCREEN_CHECKS.delete(key);
+}
+
 /* ---------------------------------------------------------------- starting a search */
 
 /** Passing candidates in rank order: the pool every batch is drawn from. */
@@ -164,6 +195,7 @@ function pollScreening(screeningId, runId, scope, label, index, total) {
           state.screeningJobs[scope] = {
             status:"waiting", stage:record.error || "Still running at NCBI.",
             done:index, total, id:screeningId, progress:record.progress || null,
+            retrievalIssue:record.stage === "Report retrieval needs retry",
           };
           renderScreeningStatus();
           resolve("waiting");
@@ -193,7 +225,8 @@ function pollScreening(screeningId, runId, scope, label, index, total) {
 async function resumeScreening(scope) {
   const job = state.screeningJobs?.[scope];
   const runId = state.result?.app.run_id;
-  if (!job?.id) return;
+  if (!job?.id || job.status !== "waiting") return;
+  cancelScreeningCheck(scope);
   state.screeningJobs[scope] = {...job, status:"running", stage:"Checking NCBI again"};
   renderScreeningStatus();
   try {
@@ -202,8 +235,19 @@ async function resumeScreening(scope) {
     await pollScreening(job.id, runId, scope, "collecting", 0, 1);
   } catch (e) {
     if (state.result?.app.run_id !== runId) return;
-    error(e.message);
-    state.screeningJobs[scope] = {...job, status:"error", stage:e.message};
+    if (["screening-already-collecting", "screening-already-complete"].includes(e.code)) {
+      // Another browser tab claimed the same RID. Follow its worker instead of submitting
+      // or falsely labelling the search failed.
+      try {
+        await pollScreening(job.id, runId, scope, "collecting", 0, 1);
+      } catch (pollError) {
+        if (state.result?.app.run_id !== runId) return;
+        state.screeningJobs[scope] = {...job, status:"error", stage:pollError.message};
+      }
+    } else {
+      error(e.message);
+      state.screeningJobs[scope] = {...job, status:"error", stage:e.message};
+    }
   }
   renderScreeningStatus();
 }
@@ -228,6 +272,7 @@ async function loadSavedScreenings(runId) {
       if (state.screeningJobs[entry.scope]) continue;
       state.screeningJobs[entry.scope] = {
         status:entry.status, id:entry.id, stage:entry.error || entry.stage,
+        retrievalIssue:entry.stage === "Report retrieval needs retry",
       };
       if (entry.status === "running") {
         pollScreening(entry.id, runId, entry.scope, "restored search", 0, 1).catch(e => {
@@ -237,7 +282,7 @@ async function loadSavedScreenings(runId) {
         });
       }
     }
-    if (any) renderOffTarget(any);
+    renderOffTarget(any || state.screeningScope || "transcript");
     renderScreeningStatus();
   } catch (e) {
     if (!current()) return;
@@ -313,7 +358,8 @@ function renderScreeningStatus() {
       : job?.status === "waiting" ? "waiting at NCBI"
       : job?.status === "error" ? "search failed" : count ? "results available" : "not started";
     return `<div class="coverage-item"><span>${scope === "transcript" ? "Transcript" : "Genomic"} search</span>`
-      + `<strong>${count} / ${pool.length}</strong><span>${escapeHTML(status)}</span></div>`;
+      + `<strong aria-label="${count} of ${pool.length} candidates have completed results">${count} / ${pool.length}</strong>`
+      + `<span>Completed results · ${escapeHTML(status)}</span></div>`;
   });
   const coverageHost = $("screening-coverage");
   if (coverageHost) coverageHost.innerHTML = coverage.join("");
@@ -327,23 +373,32 @@ function renderScreeningStatus() {
   for (const scope of Object.keys(SCOPE_BUTTON)) {
     const lane = $(`screen-state-${scope}`), job = jobs[scope];
     if (lane) {
-      lane.textContent = job ? (job.stage || job.status) : "";
+      lane.textContent = job?.status === "waiting"
+        ? (job.retrievalIssue ? "Report retrieval needs retry" : "Waiting for NCBI results")
+        : job ? (job.stage || job.status) : "";
       lane.className = "screen-state " + (job ? job.status : "");
     }
     const bar = $(`screen-bar-${scope}`);
     if (bar) {
+      if (job?.status === "waiting") scheduleScreeningCheck(scope);
       bar.innerHTML = progressBar(job)
         + (job?.status === "waiting"
-            ? `<p class="hint warn">${escapeHTML(job.stage || "")} `
-              + `You can close this page and come back: NCBI keeps the search for about a `
-              + `day. <button type="button" class="link" data-resume="${scope}">`
-              + `Check NCBI again</button></p>`
-            : "");
+          ? `<div class="screen-wait-note" role="status"><p>${job.retrievalIssue
+              ? "The downloaded report could not be read. Retry collection of the saved search."
+              : "NCBI has not finished this search. The app will check again automatically in about a minute while this run is open."}</p>`
+            + `<p class="hint">${job.retrievalIssue
+              ? "Your saved request ID is retained; this retries retrieval rather than submitting a new search."
+              : "You can keep working. If you close this run, checking resumes when you reopen it."} `
+            + `<button type="button" class="link" data-resume="${scope}">Check NCBI again</button></p>`
+            + `<details><summary>Search details</summary><p>${escapeHTML(job.stage || "")}</p>`
+            + `<p>NCBI keeps request IDs for about a day; an expired search must be submitted again.</p></details></div>`
+          : "");
     }
     const button = $(SCOPE_BUTTON[scope]);
     if (button) button.disabled = ["running", "waiting"].includes(job?.status);
   }
   renderBatchControls();
+  if (state.result && typeof renderExportNote === "function") renderExportNote();
 }
 
 const SCOPE_WARNING = {
@@ -379,8 +434,10 @@ function renderBatchControls() {
         ? `<button type="button" data-batch-mode="selection" class="secondary"${disabled}>`
           + `Ticked (${ticked})</button>` : "")
     + `</div>`
-    + (SCOPE_WARNING[scope] ? `<p class="hint warn">${escapeHTML(SCOPE_WARNING[scope])}</p>` : "")
-    + `<p class="hint">${!done.size
+    + (SCOPE_WARNING[scope] ? `<p class="hint">${escapeHTML(SCOPE_WARNING[scope])}</p>` : "")
+    + `<p class="hint">${busy
+        ? "A submitted search is pending. No new search is needed; completed results will appear here."
+        : !done.size
         ? `Nothing screened yet in this scope. Start with the candidates you plan to review. `
           + `NCBI queue time varies; a smaller batch does not guarantee a faster result.`
         : remaining > 0
@@ -439,7 +496,10 @@ function renderOffTarget(scope) {
   const host = $("offtarget-results");
   if (!host) return;
   if (!held) {
-    host.innerHTML = scopeTabs() + `<p class="ot-empty hint">No results recorded in this scope yet.</p>`;
+    const pending = ["running", "waiting"].includes(state.screeningJobs?.[state.screeningScope]?.status);
+    host.innerHTML = scopeTabs() + `<p class="ot-empty hint">${pending
+      ? "Search submitted. Results will appear here when collection finishes; there are no findings to interpret yet."
+      : "No results recorded in this scope yet."}</p>`;
     renderBatchControls(); return;
   }
   const core = state.result?.candidates?.[0]?.target_site_dna?.length || 19;
