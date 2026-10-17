@@ -25,9 +25,12 @@ otherwise exhaust memory.
 """
 
 import heapq
+import os
 import re
+import threading
+import time
 import xml.etree.ElementTree as ElementTree
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -65,7 +68,7 @@ This is the name NCBI's own blastn page submits for "Human genomic plus transcri
 transcript half, which this project searches separately as its other scope (ADR 0024).
 """
 
-MINIMUM_POLL_SECONDS = 15.0
+MINIMUM_POLL_SECONDS = 60.0
 """NCBI asks callers not to poll more often than this. Polling faster risks an IP block."""
 
 MAX_RESPONSE_BYTES = 64 * 1024 * 1024
@@ -104,6 +107,10 @@ class BlastError(RuntimeError):
     """A BLAST search could not be run or its result could not be read."""
 
 
+class BlastReportError(BlastError):
+    """A submitted search exists but its downloaded report could not be interpreted."""
+
+
 class BlastStillRunning(Exception):
     """The search has not finished. Not an error: poll again later."""
 
@@ -114,6 +121,8 @@ class ParsedReport:
 
     hits: tuple[OffTargetHit, ...]
     capped: frozenset[str]
+    queries: frozenset[str] | None = None
+    """Query IDs actually present; None only for an explicit READY/no-hits reply."""
     """Candidates whose alignment list reached the per-candidate limit."""
 
 
@@ -174,6 +183,42 @@ def as_fasta(sequences: Mapping[str, str]) -> str:
     return "\n".join(f">{name}\n{bases}" for name, bases in sequences.items())
 
 
+
+class RequestScheduler:
+    """Pace all clients in this process, including resumed RIDs and concurrent scopes."""
+
+    def __init__(
+        self, now: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        """Allow a virtual clock in network-free tests."""
+        self.now, self.sleep = now, sleep
+        self.lock = threading.Lock()
+        self.last: float | None = None
+        self.rids: dict[str, float] = {}
+
+    def wait(self, payload: Mapping[str, str]) -> None:
+        """Reserve one request slot; status polls also respect the per-RID minute."""
+        with self.lock:
+            current = self.now()
+            due = current if self.last is None else self.last + 10.0
+            rid = payload.get("RID", "")
+            polling = payload.get("FORMAT_OBJECT") == "SearchInfo"
+            if polling and rid in self.rids:
+                due = max(due, self.rids[rid] + MINIMUM_POLL_SECONDS)
+            if due > current:
+                self.sleep(due - current)
+            self.last = self.now()
+            if polling:
+                self.rids[rid] = self.last
+            # RIDs expire; bound process memory independently of server lifetime.
+            if len(self.rids) > 10000:
+                self.rids = {key: at for key, at in self.rids.items()
+                             if self.last - at < 86400}
+
+
+_SCHEDULER = RequestScheduler()
+
 class BlastClient:
     """Submits and retrieves NCBI BLAST searches over the URL API."""
 
@@ -218,7 +263,14 @@ class BlastClient:
             "FILTER": "F" if not parameters.filter_low_complexity else "T",
             "HITLIST_SIZE": str(parameters.max_hits),
             "QUERY": as_fasta(sequences),
+            "NUCL_REWARD": str(parameters.reward),
+            "NUCL_PENALTY": str(parameters.penalty),
+            "GAPCOSTS": str(parameters.gap_costs),
+            "tool": "sarna-designer",
         }
+        email = os.environ.get("SARNA_NCBI_EMAIL", "").strip()
+        if email:
+            payload["email"] = email
         if parameters.organism:
             # This project designs against the human genome only, so a hit in another species
             # is noise that would swamp every measure.
@@ -254,6 +306,12 @@ class BlastClient:
                 f"{text.strip()[:200]!r}"
             )
         hits = _THERE_ARE_HITS.search(text)
+        if found.group(1).upper() == "READY" and (
+            hits is None or hits.group(1).lower() not in ("yes", "no")
+        ):
+            raise BlastError(
+                "NCBI reported READY without an explicit hit status; no findings recorded."
+            )
         return found.group(1).upper(), bool(hits and hits.group(1).lower() == "yes")
 
     def fetch(self, request_id: str, parameters: SearchParameters) -> ParsedReport:
@@ -276,10 +334,20 @@ class BlastClient:
             raise BlastError(f"NCBI reported search {request_id} as {state}.")
         if not there_are_hits:
             return ParsedReport(hits=(), capped=frozenset())
-        raw = self._request_bytes(
-            {"CMD": "Get", "RID": request_id, "FORMAT_TYPE": "XML"}
-        )
-        return parse_report(raw, per_candidate=parameters.max_alignments_per_candidate)
+        # XML2 is the multiple-file format: NCBI returns a ZIP for multi-query jobs.
+        # XML2_S returns every query in one XML document. Retrying downloads uses the
+        # existing RID, never Put, and the shared scheduler paces both attempts.
+        for attempt in range(2):
+            raw = self._request_bytes(
+                {"CMD": "Get", "RID": request_id, "FORMAT_TYPE": "XML2_S"}
+            )
+            try:
+                return parse_report(raw, per_candidate=parameters.max_alignments_per_candidate,
+                                    max_sequences=parameters.max_hits)
+            except BlastReportError:
+                if attempt:
+                    raise
+        raise BlastReportError("NCBI's report could not be retrieved.")
 
     def _request(self, payload: Mapping[str, str]) -> str:
         """Return a reply as text."""
@@ -291,26 +359,42 @@ class BlastClient:
         Raises:
             BlastError: On a transport failure, an error status, or an oversized body.
         """
-        try:
-            response = self._client.post(self.base_url, data=dict(payload), timeout=self.timeout)
-        except httpx.HTTPError as error:
-            raise BlastError(
-                f"could not reach NCBI BLAST ({type(error).__name__}: {error}). Off-target "
-                f"screening needs internet access; the designs themselves are unaffected."
-            ) from error
-        if response.status_code >= 400:
-            raise BlastError(
-                f"NCBI BLAST returned HTTP {response.status_code}. If this persists, the usage "
-                f"policy may have been exceeded: searches are limited in rate and large jobs "
-                f"are asked to run outside US business hours."
-            )
-        body = response.content
-        if len(body) > MAX_RESPONSE_BYTES:
-            raise BlastError(
-                f"NCBI returned {len(body):,} bytes, over the {MAX_RESPONSE_BYTES:,} byte limit "
-                f"this client will parse."
-            )
-        return body
+        # Retry only retrievals: an interrupted submission may already have been accepted,
+        # and retrying Put would create a duplicate search with an unknown RID.
+        attempts = 3 if payload.get("CMD") == "Get" else 1
+        for attempt in range(attempts):
+            _SCHEDULER.wait(payload)
+            try:
+                with self._client.stream("POST", self.base_url, data=dict(payload),
+                                         timeout=self.timeout) as response:
+                    if response.status_code in (429, 502, 503, 504) and attempt < attempts - 1:
+                        # Scheduling spaces retries as well. Honour a bounded Retry-After.
+                        try:
+                            retry_after = float(response.headers.get("Retry-After", "10"))
+                        except ValueError:
+                            retry_after = 10.0
+                        _SCHEDULER.sleep(min(max(retry_after, 10), 120))
+                        continue
+                    if response.status_code >= 400:
+                        raise BlastError(
+                            f"NCBI BLAST returned HTTP {response.status_code}. The usage policy "
+                            "may have been exceeded or the service may be unavailable. "
+                            "The designs themselves are unaffected."
+                        )
+                    body = bytearray()
+                    for chunk in response.iter_bytes():
+                        if len(body) + len(chunk) > MAX_RESPONSE_BYTES:
+                            raise BlastError("NCBI returned a report over the response size limit.")
+                        body.extend(chunk)
+                    return bytes(body)
+            except httpx.HTTPError as error:
+                if attempt < attempts - 1:
+                    continue
+                raise BlastError(
+                    f"could not reach NCBI BLAST ({type(error).__name__}: {error}). Off-target "
+                    "screening needs internet access; the designs themselves are unaffected."
+                ) from error
+        raise BlastError("NCBI retrieval could not be completed.")
 
 
 def parse_hits(
@@ -324,14 +408,45 @@ def parse_hits(
     return parse_report(raw, per_candidate=max_hits).hits
 
 
+def _normalise_xml2(root: ElementTree.Element) -> ElementTree.Element:
+    """Read the documented XML2 format while retaining support for recorded classic XML."""
+    for element in root.iter():
+        element.tag = element.tag.rsplit("}", 1)[-1]
+    if root.tag not in ("BlastXML2", "BlastOutput2"):
+        return root
+    converted = ElementTree.Element("BlastOutput")
+    iterations = ElementTree.SubElement(converted, "BlastOutput_iterations")
+    for search in root.iter("Search"):
+        iteration = ElementTree.SubElement(iterations, "Iteration")
+        ElementTree.SubElement(iteration, "Iteration_query-def").text = _text(search, "query-title")
+        hit_list = ElementTree.SubElement(iteration, "Iteration_hits")
+        for source in search.findall("./hits/Hit"):
+            hit = ElementTree.SubElement(hit_list, "Hit")
+            description = source.find("./description/HitDescr")
+            if description is None:
+                raise BlastReportError("XML2 hit omitted its sequence description.")
+            for name, tag in (("accession", "Hit_accession"), ("title", "Hit_def"),
+                              ("id", "Hit_id")):
+                ElementTree.SubElement(hit, tag).text = _text(description, name)
+            hsps = ElementTree.SubElement(hit, "Hit_hsps")
+            for source_hsp in source.findall("./hsps/Hsp"):
+                hsp = ElementTree.SubElement(hsps, "Hsp")
+                for field in source_hsp:
+                    # Preserve whitespace in midline: a leading space is a mismatch.
+                    ElementTree.SubElement(hsp, "Hsp_" + field.tag).text = field.text
+    return converted
+
+
 def parse_report(
-    raw: bytes, per_candidate: int = MAX_ALIGNMENTS_PER_CANDIDATE
+    raw: bytes, per_candidate: int = MAX_ALIGNMENTS_PER_CANDIDATE,
+    max_sequences: int | None = None,
 ) -> ParsedReport:
     """Parse BLAST XML into hits, attributing each to the candidate that produced it.
 
     Args:
         raw: The XML body, treated as untrusted input. A DOCTYPE is accepted (every
             genuine NCBI report has one) but an entity declaration is not.
+        max_sequences: Server sequence limit; reaching it marks counts as potentially capped.
         per_candidate: Alignments kept for each query. A budget shared across the whole report
             lets one promiscuous query starve every later one, which is the defect ADR 0023
             was written for; see :data:`MAX_ALIGNMENTS_PER_CANDIDATE`.
@@ -345,21 +460,35 @@ def parse_report(
             expands internal entities, so a crafted reply could otherwise exhaust memory.
         ValueError: If the per-candidate budget is not positive.
     """
+    if raw.startswith(b"PK"):
+        raise BlastReportError(
+            "NCBI returned a ZIP archive instead of single-file XML. "
+            "The existing search can be retrieved again using XML2_S."
+        )
     if per_candidate <= 0:
         raise ValueError(
             f"the per-candidate alignment budget must be positive, got {per_candidate}; "
             f"zero would report every candidate as having no alignments"
         )
     if _ENTITY_DECLARATION.search(raw):
-        raise BlastError(
+        raise BlastReportError(
             "the BLAST reply declares XML entities, which this client refuses to parse because "
             "expanding them can exhaust memory"
         )
     try:
         root = ElementTree.fromstring(raw)
     except ElementTree.ParseError as error:
-        raise BlastError(f"could not parse NCBI's XML reply: {error}") from error
+        raise BlastReportError(f"could not parse NCBI's XML reply: {error}") from error
 
+    root = _normalise_xml2(root)
+    if root.tag != "BlastOutput" or root.find("BlastOutput_iterations") is None:
+        raise BlastReportError(
+            "NCBI returned an unexpected BLAST report format; no findings recorded."
+        )
+    iterations = list(root.iter("Iteration"))
+    if not iterations:
+        raise BlastReportError("NCBI's report contains no query results; no findings recorded.")
+    queries: set[str] = set()
     # A bounded best-of per candidate rather than the first N encountered. BLAST orders a
     # report by database sequence, and on a chromosome-level database one sequence carries
     # thousands of alignments, so taking them in document order fills the budget with
@@ -369,21 +498,28 @@ def parse_report(
     order: list[str] = []
     capped: set[str] = set()
     seen = 0
-    for iteration in root.iter("Iteration"):
+    for iteration in iterations:
         candidate = _text(iteration, "Iteration_query-def") or ""
         # BLAST keeps only the first token of a FASTA header as the id in some views.
         candidate = candidate.split()[0] if candidate.split() else candidate
+        if not candidate or candidate in queries:
+            raise BlastReportError("NCBI returned a missing or duplicate query identifier.")
+        queries.add(candidate)
         if candidate not in best:
             best[candidate] = []
             order.append(candidate)
-        for hit in iteration.iter("Hit"):
+        sequence_hits = list(iteration.iter("Hit"))
+        if max_sequences is not None and len(sequence_hits) >= max_sequences:
+            capped.add(candidate)
+        for hit in sequence_hits:
             accession = _text(hit, "Hit_accession") or _text(hit, "Hit_id") or "unknown"
             title = _text(hit, "Hit_def") or ""
             for hsp in hit.iter("Hsp"):
                 frame = _int(hsp, "Hsp_hit-frame", 1)
                 query_from = _int(hsp, "Hsp_query-from", 0)
                 aligned = _text(hsp, "Hsp_qseq")
-                midline = _text(hsp, "Hsp_midline")
+                midline_node = hsp.find("Hsp_midline")
+                midline = midline_node.text if midline_node is not None else None
                 detailed = bool(aligned and midline)
                 parsed = (
                     OffTargetHit(
@@ -397,7 +533,11 @@ def parse_report(
                         query_end=_int(hsp, "Hsp_query-to", 0),
                         subject_start=_int(hsp, "Hsp_hit-from", 0),
                         subject_end=_int(hsp, "Hsp_hit-to", 0),
-                        subject_strand="minus" if frame < 0 else "plus",
+                        subject_strand=(
+                            "minus" if frame < 0
+                            or (_text(hsp, "Hsp_hit-strand") or "").lower() == "minus"
+                            else "plus"
+                        ),
                         evalue=_float(hsp, "Hsp_evalue", float("inf")),
                         bit_score=_float(hsp, "Hsp_bit-score", 0.0),
                         mismatch_positions=(
@@ -405,6 +545,8 @@ def parse_report(
                             if detailed else ()
                         ),
                         has_alignment_detail=detailed,
+                        query_sequence=aligned or "",
+                        subject_sequence=_text(hsp, "Hsp_hseq") or "",
                     )
                 )
                 # Per candidate, so a promiscuous query cannot consume a later query's budget.
@@ -421,7 +563,7 @@ def parse_report(
         hits.extend(
             parsed for _score, _tie, parsed in sorted(best[candidate], reverse=True)
         )
-    return ParsedReport(hits=tuple(hits), capped=frozenset(capped))
+    return ParsedReport(hits=tuple(hits), capped=frozenset(capped), queries=frozenset(queries))
 
 
 def mismatch_positions(query: str, midline: str, query_start: int) -> tuple[int, ...]:

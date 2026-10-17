@@ -425,7 +425,8 @@ class StubBlast:
         midline = "".join(
             " " if index + 1 in spread else "|" for index in range(19))
         subject = "".join(
-            "T" if index + 1 in spread else base for index, base in enumerate(query))
+            ("A" if base != "A" else "C") if index + 1 in spread else base
+            for index, base in enumerate(query))
         return (f"<Hit><Hit_accession>{accession}</Hit_accession><Hit_def>{title}</Hit_def>"
                 f"<Hit_hsps><Hsp><Hsp_identity>{identities}</Hsp_identity>"
                 f"<Hsp_align-len>19</Hsp_align-len><Hsp_gaps>0</Hsp_gaps>"
@@ -468,8 +469,6 @@ class StubBlast:
                                    17 if n % 2 else 16, 90_000 + 4000 * n) for n in range(7)]
             elif index == 2:
                 hits += [self._hit(*named(14, "POX"), 14, 300_900)]
-            if not hits:
-                continue
             iterations.append(
                 f"<Iteration><Iteration_query-def>{name}</Iteration_query-def>"
                 f"<Iteration_hits>{''.join(hits)}</Iteration_hits></Iteration>")
@@ -505,11 +504,12 @@ def check_offtarget(browser: Browser, blast: StubBlast, screenshots: Path | None
     assert screened == min(5, pool), f"asked for 5, screened {screened}"
 
     summary = str(browser.evaluate("document.querySelector('.ot-summary').innerText"))
-    assert "Wang 2015's 80%" in summary, summary
-    assert "not measured binding" in summary, summary
-    if pool >= 2:
-        assert "occurring in many places" in summary, summary
+    assert "biological specificity remain untested" in summary, summary
+    browser.evaluate("document.querySelector('.ot-methods').open=true")
+    methods = str(browser.evaluate("document.querySelector('.ot-methods').innerText"))
+    assert "not a validated saRNA risk cutoff" in methods, methods
     if screened < pool:
+        browser.evaluate("document.querySelector('.ot-record-notes').open=true")
         note = str(browser.evaluate("document.getElementById('offtarget-results').innerText"))
         assert "not the same as having been searched clean" in note, (
             "the unscreened candidates are not distinguished from the clean ones"
@@ -522,14 +522,12 @@ def check_offtarget(browser: Browser, blast: StubBlast, screenshots: Path | None
     detail = browser.evaluate(r"""(()=>{
       const row=document.querySelector('.ot-detail');
       return {text:row.innerText,
-              footprints:row.querySelectorAll('svg.footprint').length,
-              shaded:[...row.querySelectorAll('svg.footprint rect')]
-                .filter(r=>r.getAttribute('fill')!=='#e8eeeb').length,
-              mismatched:[...row.querySelectorAll('svg.footprint rect')]
-                .filter(r=>r.getAttribute('fill')==='#c08a2e').length,
-              shapes:new Set([...row.querySelectorAll('svg.footprint')]
-                .map(s=>[...s.querySelectorAll('rect')]
-                  .map(r=>r.getAttribute('fill')).join(''))).size,
+              footprints:row.querySelectorAll('.footprint').length,
+              shaded:row.querySelectorAll('.fp-base.match').length,
+              mismatched:row.querySelectorAll('.fp-base.mismatch').length,
+              shapes:new Set([...row.querySelectorAll('.footprint')]
+                .map(s=>[...s.querySelectorAll('.fp-base')]
+                  .map(r=>r.className).join(''))).size,
               seed:row.innerText.toLowerCase().includes('seed region')};
     })()""")
     assert isinstance(detail, dict), detail
@@ -582,6 +580,7 @@ def check_offtarget(browser: Browser, blast: StubBlast, screenshots: Path | None
     browser.evaluate("document.getElementById('screen-genomic').click()")
     browser.wait("state.screenings.genomic!==undefined")
     browser.evaluate("document.querySelector('[data-scope-tab=\"genomic\"]')?.click()")
+    browser.evaluate("document.querySelector('.ot-record-notes').open=true")
     genomic = str(browser.evaluate("document.getElementById('offtarget-results').innerText"))
     if blast.loci:
         assert "own target loci" in genomic, (
@@ -625,6 +624,21 @@ def check_offtarget(browser: Browser, blast: StubBlast, screenshots: Path | None
                          ".scrollIntoView({block:'start'})")
         time.sleep(0.4)
         browser.screenshot(screenshots / "offtarget-panel.png")
+        browser.call("Emulation.setDeviceMetricsOverride", width=390, height=844,
+                     deviceScaleFactor=1, mobile=True)
+        browser.evaluate("document.getElementById('offtarget-card').scrollIntoView({block:'start'})")
+        browser.screenshot(screenshots / "offtarget-mobile.png")
+        assert browser.evaluate("document.documentElement.scrollWidth<=innerWidth"), (
+            "Screening cards force the mobile page wider than the viewport"
+        )
+        browser.evaluate("document.querySelector('.ot-hit')?.scrollIntoView({block:'center'})")
+        browser.screenshot(screenshots / "offtarget-footprint-mobile.png")
+        widths = browser.evaluate(
+            "[...document.querySelectorAll('.ot-hit-info')]"
+            ".map(n=>n.getBoundingClientRect().width)")
+        assert widths and min(widths) > 200, f"Mobile hit content is squeezed: {widths}"
+        browser.call("Emulation.setDeviceMetricsOverride", width=1440, height=1100,
+                     deviceScaleFactor=1, mobile=False)
     print(f"    off-target: {screened} of {pool} screened in the first batch, alignments named "
           f"and placed, own-locus handling stated")
 
@@ -662,11 +676,11 @@ def check_progress_bar(browser: Browser) -> None:
     })()""")
     assert isinstance(states, dict), states
     early, nearly, over = states["early"], states["nearly"], states["over"]
-    assert early["width"] == 10, early
-    assert "estimated by NCBI" in early["text"], early["text"]
+    assert early["indeterminate"], early
+    assert "no percentage to show" in early["text"], early["text"]
     # Never past nine tenths on an estimate. A bar that reaches the end and then keeps going
     # reads as a stall, and this one can legitimately run for half an hour.
-    assert nearly["width"] is not None and nearly["width"] <= 90, nearly
+    assert nearly["indeterminate"], nearly
     assert over["indeterminate"], "an overrun still shows a filling bar"
     assert "longer than" in over["text"], over["text"]
     assert states["noEstimate"]["indeterminate"], states["noEstimate"]
@@ -700,7 +714,7 @@ def check_progress_bar(browser: Browser) -> None:
         f"a search still running at NCBI is labelled {waiting['tag']!r}, which reads as "
         f"finished or failed when it is neither"
     )
-    print("    progress bar: estimate capped at 90%, overrun says so, placing is a real "
+    print("    progress bar: estimates are not percentages, overrun says so, placing is a real "
           "fraction, a search left at NCBI can be collected")
 
 
@@ -713,13 +727,15 @@ def check_human_only(browser: Browser) -> None:
     """
     card = str(browser.evaluate(
         "document.getElementById('offtarget-card').innerText"))
-    assert "human sequence only" in card, card[:200]
-    for scope, expected in (("transcript", "Entrez query"), ("genomic", "one species")):
+    assert "establish biological specificity" in card, card[:300]
+    for scope, expected in (("transcript", "not independently verified"),
+                            ("genomic", "human GRCh38")):
         browser.evaluate(
             f"document.querySelector('[data-scope-tab=\"{scope}\"]')?.click()")
+        browser.evaluate("document.querySelector('.ot-methods').open=true")
         text = str(browser.evaluate(
             "document.getElementById('offtarget-results').innerText"))
-        assert "HUMAN ONLY" in text, f"{scope}: no human marker in the results"
+        assert "HUMAN ONLY" not in text, f"{scope}: unconditional species claim"
         assert expected in text, (
             f"{scope}: the summary does not say how the search was confined to human, so the "
             f"two scopes read as the same guarantee. Got: {text[:300]}"
@@ -1472,6 +1488,12 @@ def main() -> None:
         service._transcript_lookup = (  # type: ignore[method-assign]
             lambda: BlockedTranscripts(nearby)
         )
+        def annotations(screening_id: str, accessions: Any) -> dict[str, Any]:  # noqa: ANN401
+            return {accession: {"status": "available", "chromosome": "17",
+                    "source": "Scripted Ensembl gene-symbol lookup", "retrieved_at": "2026-10-16"}
+                    for accession in accessions}
+
+        service.screening_annotations = annotations  # type: ignore[method-assign]
         router = AppRouter(service)
         server = make_server(router, 0)
         thread = Thread(target=server.serve_forever, daemon=True)

@@ -211,7 +211,7 @@ def summarise(measured: CandidateSpecificity) -> str:
     if measured.is_promiscuous:
         parts.append(
             f"{measured.wang_homology_hits} of them matching at least "
-            f"{measured.strong_threshold} bases, so this sequence occurs in many places"
+            f"{measured.strong_threshold} bases, across the reported alignments"
         )
     elif measured.perfect_hits:
         parts.append(
@@ -220,7 +220,7 @@ def summarise(measured: CandidateSpecificity) -> str:
     elif measured.wang_homology_hits:
         parts.append(
             f"{measured.wang_homology_hits} matching at least "
-            f"{measured.strong_threshold} bases, Wang 2015's 80%"
+            f"{measured.strong_threshold} bases at the reporting threshold"
         )
     else:
         parts.append(

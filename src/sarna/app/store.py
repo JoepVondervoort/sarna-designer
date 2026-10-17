@@ -97,6 +97,16 @@ class RunStore:
             )
             connection.execute("PRAGMA user_version=6")
             connection.execute(
+                "UPDATE screenings SET status='waiting', stage='Report retrieval needs retry' "
+                "WHERE status='error' AND request_id IS NOT NULL AND result IS NOT NULL "
+                "AND error LIKE 'could not parse NCBI''s XML reply:%'"
+            )
+            connection.execute(
+                "UPDATE screenings SET status='waiting', stage='Ready to check NCBI again', "
+                "error='The app restarted. The submitted search can still be collected.' "
+                "WHERE status='running' AND request_id IS NOT NULL AND result IS NOT NULL"
+            )
+            connection.execute(
                 # Only 'running' is interrupted by a restart. A 'waiting' screening is not
                 # running here at all: it is queued at NCBI under a request id that outlives
                 # this process, so it stays collectable (ADR 0024).
@@ -260,6 +270,32 @@ class RunStore:
         return result
 
 
+    def reserve_screening(
+        self, run_id: str, scope: str, candidates: list[str],
+    ) -> tuple[str, bool]:
+        """Atomically reuse an identical active search, otherwise reserve a new queue slot."""
+        self.status(run_id)
+        wanted = sorted(candidates)
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            rows = connection.execute(
+                "SELECT id,result FROM screenings WHERE run_id=? AND scope=? "
+                "AND status IN ('running','waiting')", (run_id, scope),
+            ).fetchall()
+            for row in rows:
+                pending = json.loads(zlib.decompress(row["result"])) if row["result"] else {}
+                if sorted(pending.get("candidates_searched", [])) == wanted:
+                    return row["id"], True
+            screening_id = uuid4().hex
+            pending = zlib.compress(json.dumps({"candidates_searched": candidates}).encode())
+            connection.execute(
+                "INSERT INTO screenings(id,run_id,scope,created,status,stage,result) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (screening_id, run_id, scope, datetime.now(UTC).isoformat(),
+                 "running", "Queued locally", pending),
+            )
+        return screening_id, False
+
     def start_screening(self, run_id: str, scope: str) -> str:
         """Record that a screening has begun and return its id.
 
@@ -273,7 +309,7 @@ class RunStore:
                 "INSERT INTO screenings(id,run_id,scope,created,status,stage) "
                 "VALUES(?,?,?,?,?,?)",
                 (screening_id, run_id, scope, datetime.now(UTC).isoformat(),
-                 "running", "Submitting to NCBI"),
+                 "running", "Queued locally"),
             )
         return screening_id
 
@@ -292,12 +328,21 @@ class RunStore:
         """
         fields = ["stage=?"]
         values: list[Any] = [stage]
+        request_id = request_id or (progress or {}).get("request_id")
         if request_id is not None:
             fields.append("request_id=?")
             values.append(request_id)
         if progress is not None:
             fields.append("progress=?")
             values.append(json.dumps(progress, separators=(",", ":")))
+        if progress and progress.get("candidates_searched"):
+            fields.append("result=?")
+            values.append(zlib.compress(json.dumps({
+                "candidates_searched": progress["candidates_searched"],
+                "parameters": progress.get("parameters"),
+                "request_id": request_id,
+                "submitted_at": datetime.now(UTC).isoformat(),
+            }).encode()))
         values.append(screening_id)
         with self.connect() as connection:
             connection.execute(
@@ -307,8 +352,10 @@ class RunStore:
         """Store a completed screening."""
         with self.connect() as connection:
             connection.execute(
-                "UPDATE screenings SET status='complete', stage='Complete', result=? WHERE id=?",
-                (zlib.compress(json.dumps(result, separators=(",", ":")).encode(), level=6),
+                "UPDATE screenings SET status='complete', stage='Complete', error=NULL, "
+                "request_id=?, result=? WHERE id=?",
+                (result.get("request_id"),
+                 zlib.compress(json.dumps(result, separators=(",", ":")).encode(), level=6),
                  screening_id),
             )
 
@@ -320,6 +367,7 @@ class RunStore:
         searched: list[str],
         waited_seconds: float = 0.0,
         estimate_seconds: int = 0,
+        stage: str = "Still running at NCBI",
     ) -> None:
         """Record that a search is still running at NCBI and can be collected later.
 
@@ -328,7 +376,10 @@ class RunStore:
         finish it (ADR 0024). What is stored is only enough to resume, never a partial result,
         which would be a finding nobody made.
         """
+        held = self.screening(screening_id).get("result") or {}
         waiting = {
+            "parameters": held.get("parameters"),
+            "submitted_at": held.get("submitted_at"),
             "candidates_searched": searched,
             "waited_seconds": waited_seconds,
             "estimate_seconds": estimate_seconds,
@@ -336,14 +387,14 @@ class RunStore:
         }
         with self.connect() as connection:
             connection.execute(
-                "UPDATE screenings SET status='waiting', stage='Still running at NCBI', "
+                "UPDATE screenings SET status='waiting', stage=?, "
                 "request_id=?, error=?, result=? WHERE id=?",
-                (request_id, reason,
+                (stage, request_id, reason,
                  zlib.compress(json.dumps(waiting, separators=(",", ":")).encode(), level=6),
                  screening_id),
             )
 
-    def resume_screening(self, screening_id: str) -> None:
+    def resume_screening(self, screening_id: str) -> bool:
         """Mark a waiting screening as being collected again.
 
         Without this the record stays ``waiting`` while a worker is already collecting it, so
@@ -351,11 +402,12 @@ class RunStore:
         work twice over.
         """
         with self.connect() as connection:
-            connection.execute(
+            updated = connection.execute(
                 "UPDATE screenings SET status='running', stage='Checking NCBI again', "
                 "error=NULL WHERE id=? AND status='waiting'",
                 (screening_id,),
             )
+            return updated.rowcount == 1
 
     def fail_screening(self, screening_id: str, reason: str) -> None:
         """Record that a screening failed, keeping the reason for the researcher."""
@@ -385,6 +437,22 @@ class RunStore:
         if row["result"] is not None:
             record["result"] = json.loads(zlib.decompress(row["result"]))
         return record
+
+    def save_screening_annotations(
+        self, screening_id: str, annotations: dict[str, Any],
+    ) -> None:
+        """Merge optional gene mappings without replacing the original search provenance."""
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute("SELECT result FROM screenings WHERE id=? AND "
+                                     "status='complete'", (screening_id,)).fetchone()
+            if row is None:
+                raise ValueError("Annotations require a completed screening.")
+            result = json.loads(zlib.decompress(row["result"]))
+            result["gene_annotations"] = {**result.get("gene_annotations", {}), **annotations}
+            connection.execute("UPDATE screenings SET result=? WHERE id=?", (
+                zlib.compress(json.dumps(result).encode()), screening_id,
+            ))
 
     def screenings_for(self, run_id: str) -> list[dict[str, Any]]:
         """Return every screening of one run, newest first, without their full results.

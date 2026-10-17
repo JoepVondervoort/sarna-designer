@@ -203,7 +203,7 @@ class TestPromiscuityIsADisplayStateAndSaysSo:
     def test_five_matches_at_wangs_threshold_is_called_promiscuous(self) -> None:
         measured = measure_specificity("a", tuple(hit(identities=16) for _ in range(5)), CORE)
         assert measured.is_promiscuous
-        assert "many places" in summarise(measured)
+        assert "reported alignments" in summarise(measured)
 
     def test_four_is_not(self) -> None:
         measured = measure_specificity("a", tuple(hit(identities=16) for _ in range(4)), CORE)

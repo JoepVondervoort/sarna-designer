@@ -60,6 +60,10 @@ class OffTargetHit:
     turning a missing field into a finding.
     """
 
+    query_sequence: str = ""
+    subject_sequence: str = ""
+    """Aligned strings from BLAST, including gaps; DNA alphabet, oriented as reported."""
+
     def is_perfect(self, core_length: int) -> bool:
         """Return whether the whole core matched with no gaps and no mismatches."""
         return (
@@ -86,6 +90,8 @@ class OffTargetHit:
             "bit_score": self.bit_score,
             "mismatch_positions": list(self.mismatch_positions),
             "has_alignment_detail": self.has_alignment_detail,
+            "query_sequence": self.query_sequence,
+            "subject_sequence": self.subject_sequence,
         }
 
 
@@ -117,6 +123,9 @@ class PromoterProximity:
     first is a limit of the lookup, the second is a finding about the locus.
     """
 
+    annotation_status: str = "available"
+    """available, unavailable, or unmapped; an unavailable lookup is never a negative finding."""
+
     def to_dict(self) -> dict[str, Any]:
         """Export the placement."""
         return {
@@ -128,6 +137,7 @@ class PromoterProximity:
             "distance_to_tss": self.distance_to_tss,
             "inside_run_window": self.inside_run_window,
             "on_chromosome": self.on_chromosome,
+            "annotation_status": self.annotation_status,
         }
 
 
@@ -173,7 +183,10 @@ class SearchParameters:
     """
 
     program: str = "blastn"
-    task: str = "blastn-short"
+    task: str = "explicit-short-query"
+    reward: int | None = 1
+    penalty: int | None = -3
+    gap_costs: str | None = "5 2"
     word_size: int = 7
     expect: float = 1000.0
     filter_low_complexity: bool = False
@@ -202,6 +215,9 @@ class SearchParameters:
             "species_restriction": self.species_restriction,
             "program": self.program,
             "task": self.task,
+            "reward": self.reward,
+            "penalty": self.penalty,
+            "gap_costs": self.gap_costs,
             "word_size": self.word_size,
             "expect": self.expect,
             "filter_low_complexity": self.filter_low_complexity,

@@ -1,6 +1,7 @@
 """Gene lookup and run assembly over the existing engine, with explicit evidence gaps."""
 
 import logging
+import re
 import time
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
@@ -34,8 +35,8 @@ from sarna.genome.ensembl import (
 )
 from sarna.genome.promoter import Promoter
 from sarna.genome.tss import TssPosition
-from sarna.offtarget.models import GENOMIC_SCOPE
-from sarna.offtarget.ncbi import BlastClient
+from sarna.offtarget.models import GENOMIC_SCOPE, SearchParameters
+from sarna.offtarget.ncbi import BlastClient, BlastReportError, parameters_for
 from sarna.offtarget.proximity import BlockedTranscripts
 from sarna.offtarget.screening import (
     DEFAULT_CANDIDATES,
@@ -188,6 +189,7 @@ class DesignService:
                 sleep=sleep if sleep is not None else self.poll_sleep,
                 only=only,
                 limit=limit,
+                max_wait=180.0 if scope == GENOMIC_SCOPE else 600.0,
             )
             self.store.finish_screening(screening_id, {
                 **record.to_dict(),
@@ -202,6 +204,8 @@ class DesignService:
                 waited_seconds=pending.waited,
                 estimate_seconds=pending.estimate_seconds,
             )
+        except BlastReportError as error:
+            self._retain_report_for_retry(screening_id, error)
         except Exception as error:
             LOGGER.warning("screening %s failed: %s", screening_id, error)
             self.store.fail_screening(screening_id, str(error))
@@ -247,6 +251,20 @@ class DesignService:
             candidates = snapshot["candidates"]
             core = len(candidates[0]["target_site_dna"]) if candidates else 19
             scope = held["scope"]
+            original = pending.get("parameters")
+            if original:
+                original = {**original, **{key: original.get(key)
+                                          for key in ("reward", "penalty", "gap_costs")}}
+            else:
+                original = {**parameters_for(scope).to_dict(), "task": "legacy-defaults-unrecorded",
+                            "reward": None, "penalty": None, "gap_costs": None}
+            waited = float(pending.get("waited_seconds") or 0)
+            if pending.get("submitted_at"):
+                try:
+                    submitted_at = datetime.fromisoformat(pending["submitted_at"])
+                    waited = max(waited, (datetime.now(UTC) - submitted_at).total_seconds())
+                except (TypeError, ValueError):
+                    pass
             record = collect_screening(
                 run_id=held["run_id"],
                 candidates=candidates,
@@ -259,7 +277,9 @@ class DesignService:
                 transcripts=self._transcript_lookup() if scope == GENOMIC_SCOPE else None,
                 window=self._run_window(snapshot),
                 sleep=sleep if sleep is not None else self.poll_sleep,
-                waited_already=float(pending.get("waited_seconds") or 0),
+                waited_already=waited,
+                parameters=SearchParameters(**original),
+                max_wait=180.0 if scope == GENOMIC_SCOPE else 600.0,
             )
             self.store.finish_screening(screening_id, {
                 **record.to_dict(),
@@ -270,12 +290,79 @@ class DesignService:
                 screening_id, still.request_id, str(still), list(still.searched),
                 waited_seconds=still.waited, estimate_seconds=still.estimate_seconds,
             )
+        except BlastReportError as error:
+            self._retain_report_for_retry(screening_id, error)
         except Exception as error:
             LOGGER.warning("resuming screening %s failed: %s", screening_id, error)
             self.store.fail_screening(screening_id, str(error))
         finally:
             if blast_client is None:
                 client.close()
+
+    def _retain_report_for_retry(self, screening_id: str, error: BlastReportError) -> None:
+        """Keep a completed remote search collectable when its report is unreadable."""
+        held = self.store.screening(screening_id)
+        pending = held.get("result") or {}
+        searched = pending.get("candidates_searched") or []
+        request_id = held.get("request_id")
+        if not request_id or not searched:
+            self.store.fail_screening(screening_id, str(error))
+            return
+        self.store.pause_screening(
+            screening_id, request_id,
+            "NCBI's result could not be read. The search ID is preserved; check NCBI again "
+            f"to retry retrieval without resubmitting sequences. Details: {error}",
+            searched, waited_seconds=float(pending.get("waited_seconds") or 0),
+            stage="Report retrieval needs retry",
+        )
+
+    def screening_annotations(
+        self, screening_id: str, accessions: Sequence[str],
+    ) -> dict[str, Any]:
+        """Resolve chromosome context for displayed transcript hits, with explicit provenance.
+
+        A gene-symbol lookup is gene context, never a mapping of BLAST transcript coordinates
+        to the genome. Only requested hits are resolved, avoiding hundreds of eager lookups.
+        """
+        held = self.store.screening(screening_id)
+        if held["status"] != "complete":
+            raise ValueError("Wait for the screening to finish before loading gene context.")
+        result = held["result"]
+        hits = {hit["accession"]: hit for hit in result.get("hits", [])}
+        if set(accessions) - hits.keys():
+            raise ValueError("An accession does not belong to this screening.")
+        cached = result.get("gene_annotations", {})
+        client = self.client_factory(False)
+        annotations: dict[str, Any] = {}
+        symbols: dict[str, dict[str, Any]] = {}
+        for accession in dict.fromkeys(accessions):
+            if cached.get(accession, {}).get("status") == "available":
+                annotations[accession] = cached[accession]
+                continue
+            match = re.search(r"\(([A-Za-z0-9_.-]{1,80})\),", hits[accession].get("title", ""))
+            if not match:
+                annotations[accession] = {
+                    "status": "unavailable",
+                    "reason": "No unambiguous gene symbol in the transcript description.",
+                }
+                continue
+            symbol = match.group(1)
+            if symbol not in symbols:
+                try:
+                    gene = client.gene(symbol)
+                    symbols[symbol] = {
+                        "status": "available", "symbol": gene.symbol,
+                        "chromosome": gene.contig, "assembly": str(gene.interval.assembly),
+                        "description": gene.description, "source": "Ensembl gene-symbol lookup",
+                        "retrieved_at": datetime.now(UTC).isoformat(),
+                    }
+                except Exception as error:
+                    LOGGER.warning("Could not resolve off-target gene %s: %s", symbol, error)
+                    symbols[symbol] = {"status": "unavailable", "symbol": symbol,
+                                       "reason": "Gene chromosome lookup unavailable."}
+            annotations[accession] = symbols[symbol]
+        self.store.save_screening_annotations(screening_id, annotations)
+        return annotations
 
     def _transcript_lookup(self) -> BlockedTranscripts:
         """Return a lookup placing genomic hits against Ensembl's annotated transcripts.
@@ -285,13 +372,18 @@ class DesignService:
         change of answer -- it filters each block back to the interval that was asked for.
         """
         client = self.client_factory(False)
+        failures = 0
 
         def lookup(interval: GenomicInterval) -> list[dict[str, Any]]:
+            nonlocal failures
+            if failures >= 3:
+                raise RuntimeError("TSS annotation stopped after three failed lookups.")
             try:
                 return [dict(t) for t in client.overlap(interval, "transcript")]
             except Exception as error:
+                failures += 1
                 LOGGER.warning("could not place a genomic hit: %s", error)
-                return []
+                raise
 
         return BlockedTranscripts(lookup)
 

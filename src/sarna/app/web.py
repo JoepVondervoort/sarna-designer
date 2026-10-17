@@ -35,6 +35,7 @@ from sarna.genome.ensembl import (
     GeneNotFoundError,
 )
 from sarna.offtarget.models import GENOMIC_SCOPE, TRANSCRIPT_SCOPE
+from sarna.offtarget.ncbi import candidate_sequences
 from sarna.offtarget.screening import DEFAULT_CANDIDATES, MAX_CANDIDATES
 from sarna.regulatory.evidence import CELL_TYPES
 from sarna.rules.catalog import CATALOGUE
@@ -243,6 +244,16 @@ class AppRouter:
         if method == "GET" and len(parts) == 3 and parts[:2] == ["api", "screenings"]:
             return self._json(200, self.service.store.screening(parts[2]))
         if (method == "POST" and len(parts) == 4
+                and parts[:2] == ["api", "screenings"] and parts[3] == "annotations"):
+            if len(body) > MAX_BODY:
+                raise ValueError("Request is too large.")
+            requested = json.loads(body)
+            accessions = requested.get("accessions")
+            if (not isinstance(accessions, list) or not 1 <= len(accessions) <= 25
+                    or not all(isinstance(a, str) for a in accessions)):
+                raise ValueError("Request between 1 and 25 hit accessions.")
+            return self._json(200, self.service.screening_annotations(parts[2], accessions))
+        if (method == "POST" and len(parts) == 4
                 and parts[:2] == ["api", "screenings"] and parts[3] == "resume"):
             return self._resume_screening(parts[2])
         if (method == "POST" and len(parts) == 4
@@ -381,12 +392,15 @@ class AppRouter:
             )
         only = self._requested_candidates(requested, passing)
         limit = self._requested_limit(requested)
-        screening_id = self.service.store.start_screening(run_id, scope)
-        self.screeners.submit(
-            self.service.screen, screening_id, run_id, scope, only, limit
-        )
+        chosen = list(candidate_sequences(snapshot["candidates"], limit=limit, only=only))
+        screening_id, reused = self.service.store.reserve_screening(run_id, scope, chosen)
+        if not reused:
+            self.screeners.submit(
+                self.service.screen, screening_id, run_id, scope, only, limit
+            )
         return self._json(202, {
             "id": screening_id,
+            "reused": reused,
             "scope": scope,
             "candidates": len(only) if only is not None else min(limit, len(passing)),
         })
@@ -409,7 +423,8 @@ class AppRouter:
             )
         # Back to 'running' before the worker starts, or the interface offers to collect the
         # same search again while it is already being collected.
-        self.service.store.resume_screening(screening_id)
+        if not self.service.store.resume_screening(screening_id):
+            return self._json(409, {"detail": "This screening is already being collected."})
         self.screeners.submit(self.service.resume, screening_id)
         return self._json(202, {"id": screening_id, "request_id": held["request_id"]})
 

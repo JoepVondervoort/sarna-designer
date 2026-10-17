@@ -8,6 +8,7 @@ spinning.
 Sleeping is injected rather than imported so tests do not wait fifteen real seconds per poll.
 """
 
+import re
 import time
 from collections.abc import Callable, Collection, Mapping, Sequence
 from typing import Any
@@ -16,10 +17,12 @@ from sarna.offtarget.models import (
     GENOMIC_SCOPE,
     PromoterProximity,
     ScreeningRecord,
+    SearchParameters,
 )
 from sarna.offtarget.ncbi import (
     MINIMUM_POLL_SECONDS,
     BlastClient,
+    BlastError,
     BlastStillRunning,
     SubmittedSearch,
     candidate_sequences,
@@ -54,6 +57,9 @@ Not "give up": NCBI holds a request id for about a day, so a search that overrun
 still there to be collected. :exc:`SearchStillAtNcbi` carries the id out so the interface can
 offer to come back for it, which is the difference between a slow answer and no answer.
 """
+
+MAX_ANNOTATION_SECONDS = 60.0
+"""Soft budget for optional TSS annotation, checked between remote lookups."""
 
 MAX_PLACEMENTS = 300
 """Most genomic hits placed against annotated start sites in one screening.
@@ -149,7 +155,7 @@ def run_screening(
         sleep: Injected so tests need not wait.
         now: Monotonic clock, injected for the same reason.
         poll_seconds: Never below NCBI's requested minimum.
-        max_wait: Give up after this long.
+        max_wait: Stop local collection after this long; the RID can be resumed.
         only: Screen exactly these candidates rather than the best ``limit`` of them.
         limit: Most candidates in this one job, never above :data:`MAX_CANDIDATES`.
 
@@ -182,7 +188,8 @@ def run_screening(
     say(f"NCBI accepted the search (id {submitted.request_id})",
         {"phase": "waiting", "request_id": submitted.request_id,
          "estimate_seconds": submitted.estimated_seconds, "elapsed_seconds": 0,
-         "candidates": len(sequences)})
+         "candidates": len(sequences), "candidates_searched": list(sequences),
+         "parameters": submitted.parameters.to_dict()})
     return collect_screening(
         run_id=run_id, candidates=candidates, scope=scope, core_length=core_length,
         client=client, request_id=submitted.request_id, searched=tuple(sequences),
@@ -209,6 +216,7 @@ def collect_screening(
     poll_seconds: float = MINIMUM_POLL_SECONDS,
     max_wait: float = MAX_WAIT_SECONDS,
     waited_already: float = 0.0,
+    parameters: SearchParameters | None = None,
 ) -> ScreeningRecord:
     """Wait for a submitted search, read it, place it, and build the dated record.
 
@@ -231,6 +239,7 @@ def collect_screening(
         now: Monotonic clock, injected for the same reason.
         poll_seconds: Never below NCBI's requested minimum.
         max_wait: Stop waiting after this long.
+        parameters: Original submitted parameters when resuming; defaults to current settings.
         waited_already: Seconds an earlier attempt spent waiting, so the interface can show
             the total rather than restarting the clock.
 
@@ -239,7 +248,7 @@ def collect_screening(
         BlastError: If the search failed or its request id has expired.
     """
     say = progress or _silent
-    parameters = parameters_for(scope)
+    parameters = parameters or parameters_for(scope)
     sequences = {name: "" for name in searched}
 
     deadline = now() + max_wait
@@ -247,31 +256,16 @@ def collect_screening(
     submitted = SubmittedSearch(
         request_id=request_id, estimated_seconds=estimate_seconds, parameters=parameters,
     )
-    # NCBI answers every submission with RTOE, its own estimate of how long the search will
-    # take, and the search cannot be ready before then. Waiting it out costs no latency and
-    # removes every poll that could only have returned WAITING: at the fifteen-second floor a
-    # seven-minute search made twenty-eight requests against a shared service ADR 0019 notes
-    # can block the whole institution's address. Capped at half the budget so a wild estimate
-    # cannot turn an early finish into a wait for the deadline, and floored at the rate limit.
-    # NCBI's own estimate is the one forecast available, and when it dwarfs the wait budget
-    # there is nothing to be gained by polling for half an hour: measured, a 19-mer against
-    # the human assembly is estimated at about eight hours, because NCBI serves the genome
-    # databases from a queue rather than from its interactive path (ADR 0024).
-    #
-    # One look first, at the rate limit, because an estimate is not a measurement and a job
-    # that is already done should be collected rather than handed back. After that, stop
-    # waiting and return the request id.
+    # RTOE is a forecast, not a lower bound. Check at the policy interval even when
+    # the estimate is large, so an early result does not wait fifteen unnecessary minutes.
     beyond_budget = submitted.estimated_seconds > max_wait
-    wait_next = (
-        interval if beyond_budget
-        else min(max(float(submitted.estimated_seconds), interval), max_wait / 2)
-    )
+    wait_next = interval
+    started = now()
     waited = waited_already
     while True:
         sleep(wait_next)
-        waited += wait_next
-        # Only the first wait follows the estimate. Afterwards return to the floor, so a job
-        # that overruns is still collected within one poll of finishing rather than backing off.
+        waited = waited_already + max(now() - started, waited - waited_already + wait_next)
+        # Continue at the policy interval regardless of the forecast.
         wait_next = interval
         try:
             report = client.fetch(submitted.request_id, parameters)
@@ -289,6 +283,13 @@ def collect_screening(
                     estimate_seconds=submitted.estimated_seconds,
                 ) from None
 
+    if report.queries is not None and set(searched) != set(report.queries):
+        missing = set(searched) - set(report.queries)
+        unexpected = set(report.queries) - set(searched)
+        raise BlastError(
+            f"BLAST query coverage mismatch: missing {sorted(missing)}, unexpected "
+            f"{sorted(unexpected)}. No zero-hit findings were inferred."
+        )
     say(f"Reading {len(report.hits)} alignments",
         {"phase": "reading", "alignments": len(report.hits),
          "candidates": len(sequences)})
@@ -304,11 +305,20 @@ def collect_screening(
     if scope == GENOMIC_SCOPE and transcripts is not None:
         # Strongest first, and bounded: placement costs an Ensembl request per uncached block,
         # and the weakest alignments are the ones nobody will open.
-        ordered = sorted(hits, key=lambda h: h.bit_score, reverse=True)
+        # Round-robin strongest hits per candidate so one repetitive query cannot consume
+        # every annotation slot. Raw alignments are preserved independently of this budget.
+        groups = {name: sorted((h for h in hits if h.candidate_id == name),
+                              key=lambda h: h.bit_score, reverse=True) for name in searched}
+        ordered = [group[index] for index in range(max(map(len, groups.values()), default=0))
+                   for group in groups.values() if index < len(group)]
         to_place, rest = ordered[:MAX_PLACEMENTS], ordered[MAX_PLACEMENTS:]
         unplaced = len(rest)
         placed: list[PromoterProximity] = []
+        annotation_deadline = now() + MAX_ANNOTATION_SECONDS
         for index, hit in enumerate(to_place, start=1):
+            if now() >= annotation_deadline:
+                unplaced += len(to_place) - len(placed)
+                break
             if index == 1 or index % 20 == 0 or index == len(to_place):
                 say(
                     f"Placing hits against annotated start sites ({index} of "
@@ -330,8 +340,10 @@ def collect_screening(
     if report.capped:
         notes.append(
             f"{len(report.capped)} candidate"
-            f"{'s' if len(report.capped) != 1 else ''} returned more alignments than were kept "
-            f"({parameters.max_alignments_per_candidate} each), so those counts are floors."
+            f"{'s' if len(report.capped) != 1 else ''} reached a reporting limit "
+            f"({parameters.max_hits} database sequences or "
+            f"{parameters.max_alignments_per_candidate} retained alignments each); "
+            "counts may be floors rather than totals."
         )
     if own:
         notes.append(
@@ -344,11 +356,17 @@ def collect_screening(
             "This run has no genomic coordinates, so a hit at a candidate's own target site "
             "could not be told apart from one elsewhere and none were removed."
         )
+    unavailable = sum(p.annotation_status == "unavailable" for p in proximities)
+    if unavailable:
+        notes.append(f"Transcript annotation was unavailable for {unavailable} alignments; "
+                     "their TSS context is unknown, not absent.")
     if unplaced:
         notes.append(
-            f"The {MAX_PLACEMENTS} strongest alignments were placed against annotated start "
+            f"Up to {MAX_PLACEMENTS} alignments, strongest first per candidate, "
+            "were placed against annotated start "
             f"sites; {unplaced} weaker ones were not, so they carry no distance. They are "
-            f"still counted and still listed."
+            f"still counted and still listed. Annotation has a {MAX_ANNOTATION_SECONDS:g}s "
+            "soft time budget, checked between lookups, as well as a count limit."
         )
     return ScreeningRecord(
         run_id=run_id,
@@ -389,5 +407,23 @@ def specificity_table(
             for p in record.proximities
             if p.hit.candidate_id == candidate_id and p.inside_run_window
         )
+        hits = record.hits_for(candidate_id)
+        placements = [p for p in record.proximities if p.hit.candidate_id == candidate_id]
+        complete = len(placements) == len(hits) and all(
+            p.annotation_status == "available" and p.on_chromosome for p in placements
+        )
+        row["annotation_complete"] = complete if record.scope == GENOMIC_SCOPE else None
+        row["annotation_unknown_hits"] = len(hits) - sum(
+            p.annotation_status == "available" and p.on_chromosome for p in placements
+        ) if record.scope == GENOMIC_SCOPE else None
+        if record.scope == GENOMIC_SCOPE and not complete:
+            row["in_run_window_hits"] = None
+        names = [re.search(r"\(([A-Za-z0-9_.-]{1,80})\),", hit.title) for hit in hits]
+        row["named_genes"] = len({match.group(1) for match in names if match})
+        row["unnamed_alignments"] = sum(match is None for match in names)
+        row["distinct_sequences"] = len({h.accession.split(".")[0] for h in hits})
+        row["distinct_loci"] = (len({(h.accession, min(h.subject_start, h.subject_end),
+                                      max(h.subject_start, h.subject_end), h.subject_strand)
+                                     for h in hits}) if record.scope == GENOMIC_SCOPE else None)
         rows.append(row)
     return rows

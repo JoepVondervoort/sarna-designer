@@ -10,15 +10,15 @@
 "use strict";
 
 const SCOPE_BUTTON = {transcript:"screen-transcript", genomic:"screen-genomic"};
-const SCOPE_NAME = {transcript:"Human transcripts (RefSeq RNA)",
-                    genomic:"Human promoters (GRCh38 assembly)"};
+const SCOPE_NAME = {transcript:"Transcript matches (RefSeq RNA)",
+                    genomic:"Genomic matches (GRCh38)"};
 const BATCH_SIZES = [1, 5, 10, 15, 25];
 
 // One hue, darker is closer, per ADR 0022. Green to red would read as good to bad, and an
 // alignment is neither: it is a measurement the researcher judges.
 const BANDS = [
   {key:"exact", label:"exact", fill:"#1d5c52"},
-  {key:"strong", label:"at Wang's 80%", fill:"#3f8d7d"},
+  {key:"strong", label:"at the reporting threshold", fill:"#3f8d7d"},
   {key:"partial", label:"partial", fill:"#9cc6ba"},
   {key:"weak", label:"weak", fill:"#dde9e4"},
 ];
@@ -45,6 +45,7 @@ function mergeScreening(record) {
     notes: result.notes || [],
     request_id: result.request_id,
     window: result.window || null,
+    annotations: result.gene_annotations || {},
   };
   held.searches = [...held.searches, search];
   const hits = {}, placements = {};
@@ -53,6 +54,8 @@ function mergeScreening(record) {
     (placements[p.hit.candidate] = placements[p.hit.candidate] || []).push(p);
   }
   for (const row of result.specificity || []) {
+    const previous = held.byCandidate[row.candidate];
+    if (previous && new Date(previous.search.searched_at) > new Date(search.searched_at)) continue;
     held.byCandidate = {...held.byCandidate, [row.candidate]: {
       row, search, hits: hits[row.candidate] || [], placements: placements[row.candidate] || [],
     }};
@@ -101,7 +104,9 @@ async function startScreening(scope, mode = "batch") {
   const run = state.result;
   if (!run || frozen) { error("Screening needs a live run."); return; }
   state.screeningJobs = state.screeningJobs || {};
-  if (state.screeningJobs[scope]?.status === "running") return;
+  if (["running", "waiting"].includes(state.screeningJobs[scope]?.status)) return;
+  state.screeningScope = scope;
+  renderOffTarget(scope);
   const {ids, why} = resolveBatch(scope, mode);
   if (!ids.length) {
     error(mode === "selection"
@@ -122,8 +127,10 @@ async function startScreening(scope, mode = "batch") {
          body:JSON.stringify({scope, candidates:chunk})});
       if (!started.id) throw new Error("The server did not return a screening id.");
       const label = chunks.length > 1 ? `batch ${index + 1} of ${chunks.length}` : why;
-      await pollScreening(started.id, run.app.run_id, scope, label, index, chunks.length);
+      const outcome = await pollScreening(started.id, run.app.run_id, scope, label, index, chunks.length);
+      if (outcome !== "complete") return;
     } catch (e) {
+      if (state.result?.app.run_id !== run.app.run_id) return;
       error(e.message);
       state.screeningJobs[scope] = {status:"error", stage:e.message};
       renderScreeningStatus();
@@ -141,7 +148,7 @@ function pollScreening(screeningId, runId, scope, label, index, total) {
     const tick = async () => {
       try {
         const record = await api(`/api/screenings/${screeningId}`);
-        if (state.result?.app.run_id !== runId) { resolve(); return; }
+        if (state.result?.app.run_id !== runId) { resolve("changed-run"); return; }
         if (record.status === "running") {
           state.screeningJobs[scope] = {
             status:"running", stage:`${label}: ${record.stage || "working"}`,
@@ -159,20 +166,23 @@ function pollScreening(screeningId, runId, scope, label, index, total) {
             done:index, total, id:screeningId, progress:record.progress || null,
           };
           renderScreeningStatus();
-          resolve();
+          resolve("waiting");
           return;
         }
         if (record.status === "error") {
           reject(new Error(record.error || "The screening failed."));
           return;
         }
+        if (record.status !== "complete") throw new Error("Unexpected screening status; results were not interpreted.");
         mergeScreening(record);
+        state.screeningJobs[scope] = {status:"complete", stage:"Search finished"};
         renderOffTarget(scope);
+        renderScreeningStatus();
         // The three other places that state what has been screened are rendered elsewhere, so
         // refresh them here rather than let them go on saying none was performed.
         if (typeof renderTopResult === "function") renderTopResult(state.result);
         if (state.selected && typeof selectCandidate === "function") selectCandidate(state.selected);
-        resolve();
+        resolve("complete");
       } catch (e) { reject(e); }
     };
     tick();
@@ -182,13 +192,16 @@ function pollScreening(screeningId, runId, scope, label, index, total) {
 /** Go back to NCBI for a search that outran its wait, by the request id it already has. */
 async function resumeScreening(scope) {
   const job = state.screeningJobs?.[scope];
+  const runId = state.result?.app.run_id;
   if (!job?.id) return;
   state.screeningJobs[scope] = {...job, status:"running", stage:"Checking NCBI again"};
   renderScreeningStatus();
   try {
     await api(`/api/screenings/${job.id}/resume`, {method:"POST"});
-    await pollScreening(job.id, state.result.app.run_id, scope, "collecting", 0, 1);
+    if (state.result?.app.run_id !== runId) return;
+    await pollScreening(job.id, runId, scope, "collecting", 0, 1);
   } catch (e) {
+    if (state.result?.app.run_id !== runId) return;
     error(e.message);
     state.screeningJobs[scope] = {...job, status:"error", stage:e.message};
   }
@@ -197,26 +210,40 @@ async function resumeScreening(scope) {
 
 /** Rebuild the merged panel for a saved run, so screenings survive a reload. */
 async function loadSavedScreenings(runId) {
+  const current = () => state.result?.app.run_id === runId;
   try {
     const listed = await api(`/api/runs/${runId}/screenings`);
+    if (!current()) return;
     let any = null;
     for (const entry of listed.filter(s => s.status === "complete").reverse()) {
-      mergeScreening(await api(`/api/screenings/${entry.id}`));
+      const record = await api(`/api/screenings/${entry.id}`);
+      if (!current()) return;
+      mergeScreening(record);
       any = entry.scope;
     }
-    // A search left running at NCBI outlives this page, so a reopened run offers to collect
-    // it rather than looking as though nothing was ever started.
     state.screeningJobs = state.screeningJobs || {};
-    for (const entry of listed.filter(s => s.status === "waiting")) {
+    const active = listed.filter(s => ["running", "waiting"].includes(s.status));
+    for (const entry of [...active, ...listed]) {
+      if (!current()) return;
       if (state.screeningJobs[entry.scope]) continue;
       state.screeningJobs[entry.scope] = {
-        status:"waiting", id:entry.id,
-        stage:entry.error || "Still running at NCBI from an earlier search.",
+        status:entry.status, id:entry.id, stage:entry.error || entry.stage,
       };
+      if (entry.status === "running") {
+        pollScreening(entry.id, runId, entry.scope, "restored search", 0, 1).catch(e => {
+          if (!current()) return;
+          state.screeningJobs[entry.scope] = {status:"error", id:entry.id, stage:e.message};
+          renderScreeningStatus();
+        });
+      }
     }
     if (any) renderOffTarget(any);
     renderScreeningStatus();
-  } catch { /* A run with no screenings is the ordinary case, not an error worth showing. */ }
+  } catch (e) {
+    if (!current()) return;
+    $("offtarget-progress").textContent = `Saved screening history could not be loaded: ${e.message}`;
+    $("offtarget-status").textContent = "HISTORY UNAVAILABLE";
+  }
 }
 
 /* ---------------------------------------------------------------- the controls */
@@ -243,12 +270,6 @@ function phaseFraction(progress) {
   if (progress.phase === "waiting") {
     const elapsed = Number(progress.elapsed_seconds || 0);
     const estimate = Number(progress.estimate_seconds || 0);
-    if (estimate > 0 && elapsed < estimate) {
-      // Nine tenths at most: the estimate is NCBI's, not a measurement, and a full bar that
-      // then keeps going reads as a stall rather than as an overrun.
-      return {fraction: Math.min(0.9, elapsed / estimate),
-              note: `${elapsed}s of about ${estimate}s estimated by NCBI`};
-    }
     return {fraction: null,
             note: estimate > 0
               ? `${elapsed}s, longer than the ${estimate}s NCBI estimated`
@@ -284,10 +305,22 @@ function renderScreeningStatus() {
   const jobs = state.screeningJobs || {};
   const states = Object.values(jobs).map(j => j.status);
   const done = Object.keys(screenings()).length;
+  const pool = screenablePool();
+  const coverage = Object.keys(SCOPE_BUTTON).map(scope => {
+    const count = alreadyScreened(scope).size;
+    const job = jobs[scope];
+    const status = job?.status === "running" ? "search running"
+      : job?.status === "waiting" ? "waiting at NCBI"
+      : job?.status === "error" ? "search failed" : count ? "results available" : "not started";
+    return `<div class="coverage-item"><span>${scope === "transcript" ? "Transcript" : "Genomic"} search</span>`
+      + `<strong>${count} / ${pool.length}</strong><span>${escapeHTML(status)}</span></div>`;
+  });
+  const coverageHost = $("screening-coverage");
+  if (coverageHost) coverageHost.innerHTML = coverage.join("");
   $("offtarget-status").textContent = states.includes("running") ? "RUNNING"
     : states.includes("waiting") ? "AT NCBI"
     : states.includes("error") ? (done ? "PARTIAL" : "FAILED")
-    : done ? "COMPLETE" : "NOT RUN";
+    : done ? "RESULTS AVAILABLE" : "NOT RUN";
   $("offtarget-progress").textContent = states.includes("running")
     ? "Searches run at NCBI and report here when they finish. You can keep working meanwhile."
     : "";
@@ -308,21 +341,14 @@ function renderScreeningStatus() {
             : "");
     }
     const button = $(SCOPE_BUTTON[scope]);
-    if (button) button.disabled = job?.status === "running";
+    if (button) button.disabled = ["running", "waiting"].includes(job?.status);
   }
   renderBatchControls();
 }
 
-/* Measured on 11 October 2026 by reading NCBI's own RTOE at submission: a single 19-mer
- * against the human assembly is estimated at about eight hours, while the same query against
- * refseq_rna is estimated at thirty seconds. Word size and E-value change neither. NCBI
- * serves the genome databases from a queue, not from its interactive path (ADR 0024), so the
- * promoter search is an errand to come back to rather than something to sit in front of. */
 const SCOPE_WARNING = {
-  genomic:
-    "NCBI runs genome searches on a queue: it usually estimates hours, not minutes, whatever "
-    + "the search asks for. Start it, carry on working, and collect it when it is done. The "
-    + "request is kept at NCBI for about a day.",
+  genomic: "Genomic searches can take substantially longer than transcript searches. NCBI controls "
+    + "the queue; its estimate is not a completion time. You can return to this saved run later.",
 };
 
 function renderBatchControls() {
@@ -333,28 +359,30 @@ function renderBatchControls() {
   const scope = state.screeningScope || "transcript";
   const done = alreadyScreened(scope), remaining = pool.length - done.size;
   const size = batchChoice(scope);
+  const busy = ["running", "waiting"].includes(state.screeningJobs?.[scope]?.status);
+  const disabled = busy ? " disabled" : "";
   const ticked = pool.filter(id => state.checked.has(id)).length;
   host.innerHTML =
-    `<div class="batch-row"><span class="batch-label">How many at a time</span>`
+    `<div class="batch-row"><span class="batch-label">${scope === "genomic" ? "Genomic" : "Transcript"} batch size</span>`
     + `<span class="segmented">`
     + BATCH_SIZES.map(n => `<button type="button" data-batch="${n}"`
         + `${n === size ? ' class="active"' : ""}>${n}</button>`).join("")
     + `</span>`
-    + `<button type="button" data-batch-mode="all" class="secondary"`
+    + `<button type="button" data-batch-mode="all" class="secondary"${disabled}`
     + ` ${otTip("Screen every candidate that passed the gates. Submitted in sequential jobs of "
         + "25, each its own dated record, so NCBI is never asked for all of them at once.")}>`
     + `All ${pool.length}</button>`
     + (done.size && remaining > 0
-        ? `<button type="button" data-batch-mode="rest" class="secondary">`
+        ? `<button type="button" data-batch-mode="rest" class="secondary"${disabled}>`
           + `The rest (${remaining})</button>` : "")
     + (ticked
-        ? `<button type="button" data-batch-mode="selection" class="secondary">`
+        ? `<button type="button" data-batch-mode="selection" class="secondary"${disabled}>`
           + `Ticked (${ticked})</button>` : "")
     + `</div>`
     + (SCOPE_WARNING[scope] ? `<p class="hint warn">${escapeHTML(SCOPE_WARNING[scope])}</p>` : "")
     + `<p class="hint">${!done.size
-        ? `Nothing screened yet in this scope. Fewer candidates finish sooner: a genomic `
-          + `search of fifty can take longer than NCBI will hold it.`
+        ? `Nothing screened yet in this scope. Start with the candidates you plan to review. `
+          + `NCBI queue time varies; a smaller batch does not guarantee a faster result.`
         : remaining > 0
         ? `${done.size} of ${pool.length} screened in this scope. The next search covers `
           + `${Math.min(size, remaining)} more unless you choose otherwise.`
@@ -410,7 +438,10 @@ function renderOffTarget(scope) {
   const held = screenings()[state.screeningScope];
   const host = $("offtarget-results");
   if (!host) return;
-  if (!held) { host.innerHTML = ""; renderBatchControls(); return; }
+  if (!held) {
+    host.innerHTML = scopeTabs() + `<p class="ot-empty hint">No results recorded in this scope yet.</p>`;
+    renderBatchControls(); return;
+  }
   const core = state.result?.candidates?.[0]?.target_site_dna?.length || 19;
   const entries = Object.values(held.byCandidate);
   const genomic = state.screeningScope === "genomic";
@@ -424,8 +455,7 @@ function renderOffTarget(scope) {
 }
 
 function scopeTabs() {
-  const present = Object.keys(screenings());
-  if (present.length < 2) return "";
+  const present = Object.keys(SCOPE_BUTTON);
   return `<div class="segmented scope-tabs">` + present.map(s =>
     `<button type="button" data-scope-tab="${s}"`
     + `${s === state.screeningScope ? ' class="active"' : ""}>`
@@ -433,57 +463,57 @@ function scopeTabs() {
 }
 
 function summaryLine(held, entries, core, genomic) {
-  const strong = entries.filter(e => e.row.wang_homology_hits > 0).length;
   const exact = entries.filter(e => e.row.perfect_hits > 0).length;
   const quiet = entries.filter(e => e.row.hit_count === 0).length;
-  const promiscuous = entries.filter(e => e.row.promiscuous).length;
   const threshold = entries[0]?.row.strong_threshold || Math.ceil(core * 0.8);
-  const inWindow = genomic
-    ? entries.filter(e => (e.row.in_run_window_hits || 0) > 0).length : 0;
-  const dates = held.searches.map(s => new Date(s.searched_at));
-  const when = dates.length
-    ? new Date(Math.max(...dates)).toLocaleDateString() : "an unknown date";
+  const capped = entries.filter(e => e.row.alignments_capped).length;
+  const dates = held.searches.map(s => new Date(s.searched_at)).filter(d => !isNaN(d));
+  const when = dates.length ? new Date(Math.max(...dates)).toLocaleDateString() : "date unavailable";
   const databases = [...new Set(held.searches.map(s => s.parameters.database))].join(", ");
-  // The two scopes are human in different ways, and saying so alike would overstate one of
-  // them: the assembly holds one species, RefSeq RNA holds every species and is narrowed by
-  // a parameter NCBI does not document (ADR 0024).
-  const byDatabase = held.searches.some(s => s.parameters.species_restriction === "database");
-  const humanNote = byDatabase
-    ? "Human only: the database searched is the GRCh38 reference assembly, which contains "
-      + "one species, so nothing of another organism could be returned."
-    : "Human only: RefSeq RNA spans every species NCBI holds, and this search was narrowed to "
-      + "human by an Entrez query (txid9606). That is a filter applied to the search, not a "
-      + "property of the database.";
-  const findings = [
-    exact ? `<b>${exact}</b> with a full-length exact match elsewhere` : "",
-    strong ? `<b>${strong}</b> matching at least ${threshold} of ${core} bases, Wang 2015's 80%` : "",
-    promiscuous ? `<b>${promiscuous}</b> occurring in many places` : "",
-    inWindow ? `<b>${inWindow}</b> with a hit near another gene's start site, inside this run's own window` : "",
-    quiet ? `<b>${quiet}</b> with no alignments at all` : "",
-  ].filter(Boolean);
-  return `<div class="ot-summary"><p><b>${escapeHTML(SCOPE_NAME[state.screeningScope])}</b> `
-    + `<span class="chip">HUMAN ONLY</span> · `
-    + `${entries.length} candidate${entries.length === 1 ? "" : "s"} screened across `
-    + `${held.searches.length} search${held.searches.length === 1 ? "" : "es"}, latest `
-    + `${escapeHTML(when)} · ${escapeHTML(databases)}</p>`
-    + `<p class="hint">${escapeHTML(humanNote)}</p>`
-    + `<p>${findings.length ? findings.join(". ") + "." : "Nothing found."}</p>`
-    + `<p class="hint">Sequence similarity is not measured binding, and nothing here changes a `
-    + `rank. Wang 2015 applies 80% to control duplexes rather than to candidate off-targets, so `
-    + `that column is this project's reading of the paper's only stated threshold. The paper's `
-    + `own caveat stands: carefully selected saRNAs cannot avoid partial homology with other `
-    + `sequences, and putative off-target genes should be screened experimentally.</p></div>`;
+  const byDatabase = held.searches.every(s => s.parameters.species_restriction === "database");
+  return `<div class="ot-summary"><p><b>${escapeHTML(SCOPE_NAME[state.screeningScope])}</b> · `
+    + `${entries.length} candidates searched · latest ${escapeHTML(when)}</p>`
+    + `<div class="ot-finding-stats"><span><b>${exact}</b> candidates with exact matches</span>`
+    + `<span><b>${quiet}</b> with no reported alignments</span>`
+    + `${capped ? `<span class="limited"><b>${capped}</b> with reporting limits</span>` : ""}</div>`
+    + `<p class="hint">Sequence matches are screening findings. Binding, changes in gene expression, `
+    + `and biological specificity remain untested.</p>`
+    + `<details class="ot-methods"><summary>Methods, evidence and search limits</summary>`
+    + `<p>Database: ${escapeHTML(databases)}. ${byDatabase
+      ? "The genomic database contains human GRCh38 sequence."
+      : "Human filtering was requested using txid9606. The Entrez filter is not listed in the current supported URL API; species restriction is not independently verified."}</p>`
+    + `<p>The ≥${threshold}/${core} column counts matching bases, including partial or gapped alignments. `
+    + `It is a reporting threshold, not a validated saRNA risk cutoff. Applying 80% to candidate `
+    + `off-targets is a project interpretation; Wang 2015 discusses it for control duplexes. `
+    + `<a href="https://doi.org/10.14440/jbm.2015.39" target="_blank" rel="noopener">Wang et al., 2015</a>.</p>`
+    + `<p>Counts describe retained alignments, not affected genes. The server returns at most `
+    + `${held.searches[0]?.parameters.max_hits || 100} database sequences per query, and the client retains `
+    + `at most ${held.searches[0]?.parameters.max_alignments_per_candidate || 200} alignments. `
+    + `A limit reached means counts may be lower bounds. A negative result is not proof of specificity.</p>`
+    + `<p>This is a sequence-similarity search, not a comprehensive seed-risk screen. Seed-mediated `
+    + `off-target silencing has experimental evidence in siRNA; that evidence does not validate `
+    + `prediction of saRNA activation. <a href="https://doi.org/10.1261/rna.25706" target="_blank" `
+    + `rel="noopener">Jackson et al., 2006</a>. No biological risk score is assigned.</p>`
+    + `<p>Transcript chromosomes are optional Ensembl gene-symbol annotations, not mappings of `
+    + `transcript alignment coordinates to the genome. Descriptions are source annotations, `
+    + `including predicted functions, rather than functional validation.</p></details></div>`;
 }
 
 function notesFor(held) {
   const notes = [...new Set(held.searches.flatMap(s => s.notes))];
-  return notes.map(n => `<p class="hint warn">${escapeHTML(n)}</p>`).join("");
+  const important = notes.filter(n => /unavailable|not placed|weaker ones|floors/i.test(n));
+  const other = notes.filter(n => !important.includes(n));
+  return important.map(n => `<p class="hint warn">${escapeHTML(n)}</p>`).join("")
+    + (other.length ? `<details class="ot-record-notes"><summary>Search record notes</summary>`
+      + other.map(n => `<p class="hint">${escapeHTML(n)}</p>`).join("") + `</details>` : "");
 }
 
 function resultsTable(held, entries, core, genomic) {
   const sort = state.screeningSort || "wang_homology_hits";
   const value = (e) => {
-    const v = e.row[sort];
+    const v = sort === "distinct_loci" ? (e.row.distinct_loci ?? distinctLoci(e.hits))
+      : sort === "distinct_sequences" ? (e.row.distinct_sequences ?? new Set(e.hits.map(h=>h.accession.split(".")[0])).size)
+      : e.row[sort];
     return v === null || v === undefined ? (sort === "best_evalue" ? Infinity : -1) : v;
   };
   const ordered = [...entries].sort((a, b) =>
@@ -498,12 +528,12 @@ function resultsTable(held, entries, core, genomic) {
     + `<th>Candidate</th><th>Strongest match</th><th>Alignments by identity</th>`
     + header("perfect_hits", "Exact",
              `Full-length exact matches elsewhere, all ${core} bases with no gaps. One of these `
-             + `is a specific unintended target.`)
-    + header("wang_homology_hits", `Wang 80%`,
-             `Alignments matching at least ${threshold} of ${core} bases. 80% is the one `
-             + `homology threshold Wang 2015 states, where it rejects a control duplex.`)
-    + header("best_evalue", "Best E-value",
-             "Lowest E-value among the alignments. Smaller means less likely by chance.")
+             + `is a reported sequence match; biological targeting is untested.`)
+    + header("wang_homology_hits", `≥${threshold}/${core} bases`,
+             `Retained alignments matching at least ${threshold} of ${core} bases. A reporting `
+             + `threshold, not a validated biological risk cutoff.`)
+    + header(genomic ? "distinct_loci" : "distinct_sequences", genomic ? "Distinct loci" : "Transcripts",
+             "Distinct reported transcript accessions; genomic rows show distinct alignment loci. Not a count of affected genes.")
     + header("hit_count", "Alignments", "How many alignments were returned at all.")
     + (genomic ? header("in_run_window_hits", "In your window",
          "Hits inside the same window this run designed against, near another gene's start "
@@ -526,15 +556,15 @@ function candidateRow(entry, core, genomic) {
   const row = entry.row, counts = bandCounts(entry, core);
   const best = worstHit(entry);
   const placement = best
-    ? entry.placements.find(p => p.hit.accession === best.accession) : null;
+    ? entry.placements.find(p => p.hit.accession === best.accession && p.hit.subject_start === best.subject_start) : null;
   const open = state.screeningOpen === row.candidate;
-  const flag = (n) => n ? ' class="flagged"' : "";
+  const flag = (n) => n ? ' class="match-count"' : "";
   const main = `<tr data-screenrow="${escapeHTML(row.candidate)}"`
-    + `${open ? ' class="open"' : ""}>`
+    + ` tabindex="0" role="button" aria-expanded="${open}"${open ? ' class="open"' : ""}>`
     + `<td>${escapeHTML(row.candidate)}`
     + (row.alignments_capped ? `<p class="candidate-id" ${otTip(
-        "More alignments were returned than were kept, so every count in this row is a floor.")
-      }>list capped</p>` : "")
+        "A server or client reporting limit was reached. Counts may be lower bounds.")
+      }>reporting limit</p>` : "")
     + (row.on_target_hits ? `<p class="candidate-id" ${otTip(
         `${row.on_target_hits} alignment at this candidate's own target locus was removed from `
         + `these findings. A sequence matching the promoter it was designed against is the `
@@ -547,15 +577,15 @@ function candidateRow(entry, core, genomic) {
              ? `<p class="candidate-id">${signed(placement.distance_to_tss)} bp from its TSS</p>`
              : "")
         : `<span class="muted">none</span>`}</td>`
-    + `<td>${identityStrip(counts, row.hit_count)}`
-    + (row.promiscuous ? `<p class="candidate-id">occurs in many places</p>` : "")
+    + `<td class="ot-distribution">${identityStrip(counts, row.hit_count)}`
+    + (row.promiscuous ? `<p class="candidate-id">multiple reported alignments</p>` : "")
     + `</td>`
-    + `<td${flag(row.perfect_hits)}>${row.perfect_hits}</td>`
-    + `<td${flag(row.wang_homology_hits)}>${row.wang_homology_hits}</td>`
-    + `<td>${row.best_evalue === null || row.best_evalue === undefined
-        ? "n/a" : Number(row.best_evalue).toExponential(1)}</td>`
-    + `<td>${row.hit_count}</td>`
-    + (genomic ? `<td${flag(row.in_run_window_hits)}>${row.in_run_window_hits || 0}</td>` : "")
+    + `<td data-label="Exact matches"${flag(row.perfect_hits)}>${row.perfect_hits}</td>`
+    + `<td data-label="Reporting threshold"${flag(row.wang_homology_hits)}>${row.wang_homology_hits}</td>`
+    + `<td data-label="Distinct ${genomic ? "loci" : "transcripts"}">${genomic ? (row.distinct_loci ?? distinctLoci(entry.hits))
+        : (row.distinct_sequences ?? new Set(entry.hits.map(h => h.accession.split(".")[0])).size)}${!genomic && row.named_genes !== undefined ? `<p class="candidate-id">${row.named_genes} named genes${row.unnamed_alignments ? " + unnamed matches" : ""}</p>` : ""}</td>`
+    + `<td data-label="Alignments">${row.hit_count}</td>`
+    + (genomic ? `<td data-label="In your window"${flag(row.in_run_window_hits)}>${row.in_run_window_hits === null ? "Unknown" : row.in_run_window_hits ?? "Unknown"}</td>` : "")
     + `</tr>`;
   return main + (open ? alignmentDetail(entry, core, genomic) : "");
 }
@@ -568,7 +598,8 @@ function groupHits(entry) {
   for (const hit of entry.hits) {
     const placement = entry.placements.find(
       p => p.hit.accession === hit.accession && p.hit.subject_start === hit.subject_start);
-    const key = hit.accession;
+    const key = state.screeningScope === "genomic"
+      ? `${hit.accession}:${hit.subject_start}:${hit.subject_end}:${hit.subject_strand}` : hit.accession;
     const held = groups.get(key) || {accession:hit.accession, title:hit.title, hits:[], placement};
     held.hits = [...held.hits, hit];
     held.placement = held.placement || placement;
@@ -578,87 +609,118 @@ function groupHits(entry) {
     Math.max(...b.hits.map(h => h.identities)) - Math.max(...a.hits.map(h => h.identities)));
 }
 
-/** Draw which part of the core matched, and where the mismatches fall.
- *
- * No seed region is marked. Wang 2015 names none, and positions 2 to 8 are an siRNA
- * convention; drawing it here would put a borrowed mechanism on screen with this tool's
- * authority behind it (ADR 0023).
- */
+function distinctLoci(hits) {
+  return new Set(hits.map(h => `${h.accession}:${Math.min(h.subject_start,h.subject_end)}:`
+    + `${Math.max(h.subject_start,h.subject_end)}:${h.subject_strand}`)).size;
+}
+
+/** Show the actual aligned DNA, including insertions; never invent bases in old reports. */
 function footprint(hit, core) {
-  const width = 150, unit = width / core;
+  const candidate = state.result?.candidates?.find(c => c.id === hit.candidate);
+  const full = candidate?.target_site_dna || "";
   const from = Math.min(hit.query_start, hit.query_end) - 1;
   const to = Math.max(hit.query_start, hit.query_end);
-  const mismatched = new Set(hit.mismatch_positions || []);
-  const counted = Math.max(0, (to - from) - hit.identities);
-  const cells = [];
-  for (let i = 0; i < core; i += 1) {
-    const inside = i >= from && i < to;
-    // Three states, not two. Outside the alignment, matched, and mismatched: drawing the
-    // last two alike makes 16 of 19 and 19 of 19 identical pictures, which is what the
-    // first version of this panel did.
-    const fill = !inside ? "#e8eeeb" : mismatched.has(i + 1) ? "#c08a2e" : "#3f8d7d";
-    cells.push(`<rect x="${(i * unit).toFixed(2)}" y="0" width="${(unit - 0.6).toFixed(2)}" `
-      + `height="11" rx="1" fill="${fill}"/>`);
+  const rawQuery = hit.query_sequence || "", rawSubject = hit.subject_sequence || "";
+  const exactBases = rawQuery && rawSubject && rawQuery.length === rawSubject.length;
+  const columns = [];
+  for (let i=0; i<Math.max(0,from); i++) columns.push({q:full[i] || "?", s:"·", kind:"outside", pos:i+1});
+  let pos = from;
+  if (exactBases) {
+    for (let i=0; i<rawQuery.length; i++) {
+      const q = rawQuery[i].toUpperCase(), subject = rawSubject[i].toUpperCase();
+      if (q !== "-") pos++;
+      columns.push({q, s:subject, pos:q === "-" ? "+" : pos,
+        kind:q === "-" || subject === "-" ? "gap" : q === subject ? "match" : "mismatch"});
+    }
+  } else {
+    const mismatches = new Set(hit.mismatch_positions || []);
+    for(let i=Math.max(0,from); i<to; i++) columns.push({q:full[i] || "?", s:"?", pos:i+1,
+      kind:hit.has_alignment_detail ? (mismatches.has(i+1) ? "mismatch" : "match") : "unknown"});
   }
-  const where = hit.has_alignment_detail
-    ? (mismatched.size
-        ? `, mismatched at base${mismatched.size === 1 ? "" : "s"} `
-          + [...mismatched].join(", ") + " of the core"
-        : " with no mismatch in the aligned span")
-    : (counted
-        ? `, ${counted} mismatched somewhere in the aligned span; this report did not carry `
-          + `the aligned sequences, so which bases is not known`
-        : ", and this report did not carry the aligned sequences");
-  const label = `Query bases ${from + 1} to ${to} of ${core} aligned, `
-    + `${hit.identities} matching${where}. The ${hit.subject_strand} strand of the subject. `
-    + `No seed region is marked: Wang 2015 names none.`;
-  return `<svg class="footprint" viewBox="0 0 ${width} 11" width="${width}" height="11" `
-    + `role="img" ${otTip(label)}>${cells.join("")}</svg>`;
+  for(let i=Math.max(to,0); i<core; i++) columns.push({q:full[i] || "?", s:"·", kind:"outside", pos:i+1});
+  const cell = (c, value) => `<span class="fp-base ${c.kind}" title="${escapeHTML(`Position ${c.pos}: ${c.q} / ${c.s}; ${c.kind}`)}">${escapeHTML(String(value))}</span>`;
+  return `<div class="footprint-wrap"><div class="footprint" role="group" aria-label="DNA sequence alignment, query and subject in BLAST orientation">`
+    + `<div class="fp-row fp-position"><span>Position</span>${columns.map(c => cell(c,c.pos)).join("")}</div>`
+    + `<div class="fp-row"><span>Query 5′</span>${columns.map(c => cell(c,c.q)).join("")}<small>3′</small></div>`
+    + `<div class="fp-row"><span>Subject</span>${columns.map(c => cell(c,c.s)).join("")}</div></div>`
+    + `<p class="fp-note">DNA alphabet: T corresponds to U in RNA. Subject shown in BLAST alignment orientation `
+    + `(${escapeHTML(hit.subject_strand)} strand). ${exactBases ? "− gap · outside alignment." : "? aligned bases unavailable in this saved report; rerun to retrieve them."}</p></div>`;
+}
+
+async function loadHitAnnotations(entry, accessions) {
+  if (frozen) return;
+  const runId = state.result?.app.run_id;
+  const wanted = accessions.filter(a => !entry.search.annotations[a]);
+  if (!wanted.length) return;
+  for (let index=0; index<wanted.length; index+=5) {
+    try {
+      const annotations = await api(`/api/screenings/${entry.search.id}/annotations`, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({accessions:wanted.slice(index,index+5)}),
+      });
+      if (state.result?.app.run_id !== runId) return;
+      Object.assign(entry.search.annotations, annotations);
+    } catch (e) {
+      if (state.result?.app.run_id !== runId) return;
+      for (const accession of wanted.slice(index,index+5)) entry.search.annotations[accession] = {
+        status:"unavailable", reason:"Chromosome annotation could not be loaded.",
+      };
+    }
+    if (state.screeningOpen === entry.row.candidate) renderOffTarget();
+  }
+}
+
+function chromosomeLabel(group, entry, genomic) {
+  if (genomic) {
+    const p = group.placement;
+    const accession = group.accession.split(".")[0];
+    const number = /^NC_0000(\d{2})$/.exec(accession)?.[1];
+    const chromosome = number && Number(number) <= 24
+      ? (Number(number) === 23 ? "X" : Number(number) === 24 ? "Y" : String(Number(number))) : null;
+    return chromosome ? `Chr ${chromosome}` : (p?.on_chromosome ? `Chr ${escapeHTML(p.contig)}` : "Unmapped contig");
+  }
+  const annotation = entry.search.annotations[group.accession];
+  if (!annotation) return frozen ? "Not recorded" : "Loading…";
+  return annotation.status === "available"
+    ? `<span ${otTip(`${annotation.source}; gene context, not transcript-alignment coordinates. ${annotation.retrieved_at || ""}`)}>Chr ${escapeHTML(annotation.chromosome)}<small>gene annotation</small></span>`
+    : `<span class="muted" ${otTip(annotation.reason || "Annotation unavailable")}>Unavailable</span>`;
 }
 
 function alignmentDetail(entry, core, genomic) {
   const groups = groupHits(entry);
-  const shown = entry.row.promiscuous && !state.screeningExpandAll
-    ? groups.slice(0, 5) : groups;
+  const shown = !state.screeningExpandAll ? groups.slice(0, 5) : groups;
   const body = shown.map(group => {
     const strongest = group.hits.reduce((a, b) => a.identities >= b.identities ? a : b);
     const p = group.placement;
-    return `<tr><td><b>${escapeHTML(hitName(strongest, p))}</b>`
+    const context = !genomic ? "" : !p ? "TSS context not annotated"
+      : p.annotation_status === "unavailable" ? "TSS annotation unavailable"
+      : p.on_chromosome === false ? "Contig not mapped to an assembled chromosome"
+      : p.distance_to_tss === null ? "No annotated TSS within 10 kb"
+      : `${signed(p.distance_to_tss)} bp from ${p.nearest_gene || p.nearest_transcript || "nearest TSS"}`
+        + (p.inside_run_window ? " · inside this run’s window" : "");
+    return `<article class="ot-hit"><div class="ot-hit-info"><div class="ot-hit-heading">`
+      + `<b>${escapeHTML(hitName(strongest,p))}</b><span>${chromosomeLabel(group,entry,genomic)}</span></div>`
       + `<p class="candidate-id">${escapeHTML(group.accession)}`
-      + `${group.hits.length > 1 ? ` · ${group.hits.length} alignments` : ""}</p></td>`
-      + `<td class="ot-title">${escapeHTML((group.title || "").slice(0, 90))}</td>`
-      + `<td>${strongest.identities}/${core}</td>`
-      + `<td>${footprint(strongest, core)}</td>`
-      + `<td>${escapeHTML(strongest.subject_strand)}</td>`
-      + `<td>${Number(strongest.evalue).toExponential(1)}</td>`
-      + (genomic ? `<td>${p
-          ? `${escapeHTML(p.contig)}${p.on_chromosome === false ? "" : `:${fmt(p.position)}`}`
-            + (p.on_chromosome === false
-               ? `<p class="candidate-id">not an assembled chromosome, so it could not be `
-                 + `placed</p>`
-               : p.distance_to_tss === null
-               ? `<p class="candidate-id">no annotated transcript within 10 kb</p>`
-               : `<p class="candidate-id">${signed(p.distance_to_tss)} bp from `
-                 + `${escapeHTML(p.nearest_gene || p.nearest_transcript || "an unnamed transcript")}`
-                 + `${p.inside_run_window ? " · inside your window" : ""}</p>`)
-          : `<span class="muted">unplaced</span>`}</td>` : "")
-      + `</tr>`;
+      + `${group.hits.length > 1 ? ` · ${group.hits.length} alignments` : ""}</p>`
+      + `<p class="ot-description">${escapeHTML(group.title || "Description unavailable")}</p>`
+      + `<p class="ot-hit-metrics"><b>${strongest.identities}/${core}</b> bases matched · `
+      + `${escapeHTML(strongest.subject_strand)} subject strand · E-value ${Number(strongest.evalue).toExponential(1)}</p>`
+      + (genomic ? `<p class="hint">${p?.on_chromosome ? `Chr ${escapeHTML(p.contig)}:${fmt(p.position)} · ` : ""}${escapeHTML(context)}</p>` : "")
+      + `</div><div class="ot-hit-alignment">${footprint(strongest,core)}</div></article>`;
   }).join("");
+  const missingAnnotations = !genomic && Object.values(entry.search.annotations).some(a=>a.status === "unavailable");
   return `<tr class="ot-detail"><td colspan="${genomic ? 8 : 7}">`
-    + `<p class="hint">${escapeHTML(entry.row.summary || "")}</p>`
-    + `<div class="table-scroll"><table><thead><tr>`
-    + `<th>Where</th><th>What it is</th><th>Matched</th>`
-    + `<th ${otTip("Which part of the core aligned, base by base. Teal matched, gold did not, "
-        + "pale was outside the alignment. No seed region is marked: Wang 2015 names none, and "
-        + "positions 2 to 8 are an siRNA convention this tool does not import.")}>Footprint `
-      + `<span class="fp-key"><i style="background:#3f8d7d"></i>`
-      + `<i style="background:#c08a2e"></i><i style="background:#e8eeeb"></i></span></th>`
-    + `<th>Strand</th><th>E-value</th>${genomic ? "<th>Position</th>" : ""}`
-    + `</tr></thead><tbody>${body}</tbody></table></div>`
+    + `<p class="hint">${entry.row.hit_count} reported alignments; `
+    + `${entry.row.wang_homology_hits ?? 0} match at least ${entry.row.strong_threshold || Math.ceil(core*0.8)}/${core} bases. `
+    + `These are sequence findings, not validated biological targets.`
+    + `${entry.row.alignments_capped ? " A reporting limit was reached; counts may be lower bounds." : ""}</p>`
+    + `<p class="fp-legend"><span class="match">Match</span><span class="mismatch">Mismatch</span>`
+    + `<span class="gap">Gap</span><span class="outside">Outside alignment</span></p>`
+    + `<div class="ot-hit-list">${body}</div>`
     + (shown.length < groups.length
-        ? `<p class="hint">Showing the 5 strongest of ${groups.length} places this sequence `
-          + `aligns. <button type="button" class="link" data-expand-all="1">Show all</button></p>`
-        : "")
+      ? `<p class="hint">Showing the 5 strongest of ${groups.length} reported ${genomic ? "loci" : "sequences"}. `
+        + `<button type="button" class="link" data-expand-all="1">Show all</button></p>` : "")
+    + (missingAnnotations && !frozen ? `<p class="hint"><button type="button" class="link" data-retry-annotations="1">Retry unavailable chromosome annotations</button></p>` : "")
     + `</td></tr>`;
 }
 
@@ -734,7 +796,7 @@ function tssPlot(entries) {
     + `transcription start site">${parts.join("")}</svg>`
     + `<p class="hint">Distance is on a log scale either side of the start site, so near hits `
     + `stay separable from far ones. Vertical position is spacing only and carries no meaning. `
-    + `Darker marks reach Wang's 80%${window ? ", and the shaded band is the window this run "
+    + `Darker marks reach the reporting threshold${window ? ", and the shaded band is the window this run "
         + "designed against" : ""}. Nothing here is classified as a promoter hit: this project `
     + `has not defended a definition of promoter proximity, and inventing one would turn a `
     + `convenience into a scientific claim.</p></div>`;
@@ -757,7 +819,21 @@ document.addEventListener("click", (event) => {
   const sort = event.target.closest("[data-screensort]");
   if (sort) { state.screeningSort = sort.dataset.screensort; renderOffTarget(); return; }
   if (event.target.closest("[data-expand-all]")) {
-    state.screeningExpandAll = true; renderOffTarget(); return;
+    state.screeningExpandAll = true; renderOffTarget();
+    const entry = screenings()[state.screeningScope]?.byCandidate[state.screeningOpen];
+    if (entry && state.screeningScope === "transcript") loadHitAnnotations(entry, groupHits(entry).map(g => g.accession));
+    return;
+  }
+  if (event.target.closest("[data-retry-annotations]")) {
+    const entry = screenings()[state.screeningScope]?.byCandidate[state.screeningOpen];
+    if (entry) {
+      for (const [key,value] of Object.entries(entry.search.annotations)) {
+        if (value.status === "unavailable") delete entry.search.annotations[key];
+      }
+      renderOffTarget();
+      loadHitAnnotations(entry, groupHits(entry).slice(0,state.screeningExpandAll ? undefined : 5).map(g=>g.accession));
+    }
+    return;
   }
   const resume = event.target.closest("[data-resume]");
   if (resume) { resumeScreening(resume.dataset.resume); return; }
@@ -767,6 +843,19 @@ document.addEventListener("click", (event) => {
     state.screeningOpen = state.screeningOpen === id ? null : id;
     state.screeningExpandAll = false;
     renderOffTarget();
+    if (state.screeningOpen && state.screeningScope === "transcript") {
+      const entry = screenings().transcript?.byCandidate[id];
+      if (entry) {
+        const groups = groupHits(entry);
+        loadHitAnnotations(entry, groups.slice(0,5).map(g => g.accession));
+      }
+    }
+  }
+});
+
+document.addEventListener("keydown", event => {
+  if ((event.key === "Enter" || event.key === " ") && event.target.matches("[data-screenrow]")) {
+    event.preventDefault(); event.target.click();
   }
 });
 

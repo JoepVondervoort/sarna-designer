@@ -21,8 +21,11 @@ from sarna.app.web import AppRouter
 from sarna.offtarget.models import GENOMIC_SCOPE, TRANSCRIPT_SCOPE
 from sarna.offtarget.ncbi import BlastClient
 from tests.unit.test_app import DNA, run_request, service_for
-from tests.unit.test_offtarget_ncbi import PUT_REPLY, READY_WITH_HITS, REPORT
+from tests.unit.test_offtarget_ncbi import PUT_REPLY, READY_WITH_HITS
+from tests.unit.test_offtarget_ncbi import REPORT as CORE_REPORT
 from tests.unit.test_workbook import sheets_of
+
+REPORT = CORE_REPORT.replace(b"saRNA-1549", b"saRNA-001").replace(b"saRNA-0002", b"saRNA-002")
 
 
 def blast_answering(replies: list[bytes]) -> BlastClient:

@@ -113,13 +113,14 @@ class BlockedTranscripts:
     a change to which transcripts are considered; a test asserts the two agree hit for hit.
     """
 
-    __slots__ = ("_block", "_blocks", "_lookup", "requests")
+    __slots__ = ("_block", "_blocks", "_failures", "_lookup", "requests")
 
     def __init__(self, lookup: TranscriptLookup, block: int = BLOCK_SIZE) -> None:
         """Wrap ``lookup``, caching whole blocks of ``block`` bases."""
         self._lookup = lookup
         self._block = block
         self._blocks: dict[tuple[str, int], list[dict[str, Any]]] = {}
+        self._failures: dict[tuple[str, int], str] = {}
         self.requests = 0
         """Underlying lookups performed, so the saving can be measured rather than claimed."""
 
@@ -144,15 +145,21 @@ class BlockedTranscripts:
         ordinary in BLAST output -- would otherwise have failed the whole screening.
         """
         key = (interval.contig, index)
+        if key in self._failures:
+            raise RuntimeError(self._failures[key])
         cached = self._blocks.get(key)
         if cached is None:
             limit = interval.assembly.contig_length(interval.contig)
             start = min(index * self._block, max(0, limit - 1))
             end = min((index + 1) * self._block, limit)
             self.requests += 1
-            cached = list(self._lookup(GenomicInterval(
-                interval.assembly, interval.contig, start, end, Strand.PLUS,
-            )))
+            try:
+                cached = list(self._lookup(GenomicInterval(
+                    interval.assembly, interval.contig, start, end, Strand.PLUS,
+                )))
+            except Exception as error:
+                self._failures[key] = str(error)
+                raise
             self._blocks[key] = cached
         return cached
 
@@ -196,11 +203,21 @@ def place_hit(
     )
     nearest: dict[str, Any] | None = None
     nearest_distance: int | None = None
-    for transcript in lookup(interval):
+    try:
+        transcripts = lookup(interval)
+    except Exception:
+        return PromoterProximity(
+            hit=hit, contig=contig, position=position, nearest_gene=None,
+            nearest_transcript=None, distance_to_tss=None, inside_run_window=False,
+            annotation_status="unavailable",
+        )
+    for transcript in transcripts:
         tss = tss_of(transcript)
         if tss is None:
             continue
         distance = signed_distance(position, tss, int(transcript.get("strand", 1)))
+        if abs(distance) > search_radius:
+            continue
         if nearest_distance is None or abs(distance) < abs(nearest_distance):
             nearest, nearest_distance = transcript, distance
     inside = (
@@ -221,6 +238,8 @@ def place_hit(
 
 def describe(placement: PromoterProximity) -> str:
     """Return one sentence stating where the hit is, and claiming nothing more."""
+    if placement.annotation_status == "unavailable":
+        return f"On {placement.contig}, but transcript annotation was unavailable."
     if not placement.on_chromosome:
         return (
             f"On {placement.contig}, which is not an assembled chromosome this project maps, "

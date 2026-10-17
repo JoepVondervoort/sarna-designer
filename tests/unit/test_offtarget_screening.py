@@ -215,7 +215,7 @@ class TestWaitingIsPacedByNcbisOwnEstimate:
         client, _ = scripted([PUT_REPLY, READY_NO_HITS])
         run_screening("run-1", CANDIDATES, TRANSCRIPT_SCOPE, 19, client,
                       sleep=intervals.append)
-        assert intervals[0] == pytest.approx(27.0)
+        assert intervals[0] == pytest.approx(MINIMUM_POLL_SECONDS)
 
     def test_an_estimate_below_the_floor_does_not_beat_the_rate_limit(self) -> None:
         impatient = PUT_REPLY.replace(b"RTOE = 27", b"RTOE = 1")
@@ -242,7 +242,7 @@ class TestWaitingIsPacedByNcbisOwnEstimate:
         client, _ = scripted([PUT_REPLY, WAITING, WAITING, READY_NO_HITS])
         run_screening("run-1", CANDIDATES, TRANSCRIPT_SCOPE, 19, client,
                       sleep=intervals.append)
-        assert intervals[0] == pytest.approx(27.0)
+        assert intervals[0] == pytest.approx(MINIMUM_POLL_SECONDS)
         assert intervals[1:] == [MINIMUM_POLL_SECONDS] * (len(intervals) - 1)
 
     def test_no_estimate_falls_back_to_the_floor(self) -> None:
@@ -255,9 +255,12 @@ class TestWaitingIsPacedByNcbisOwnEstimate:
 
     def test_the_requests_saved_are_counted_against_the_old_flat_interval(self) -> None:
         # The measurement this change exists for, on NCBI's own estimate for this submission.
-        estimate, floor = 27.0, MINIMUM_POLL_SECONDS
-        polls_before = estimate / floor
-        assert polls_before > 1, "a flat interval polls before the search can have finished"
+        # An estimate is not a lower bound. Even large estimates use the policy interval.
+        intervals: list[float] = []
+        client, _ = scripted([PUT_REPLY.replace(b"27", b"900"), READY_NO_HITS])
+        run_screening("run-1", CANDIDATES, TRANSCRIPT_SCOPE, 19, client,
+                      sleep=intervals.append)
+        assert intervals == [MINIMUM_POLL_SECONDS]
 
 
 MANY: list[dict[str, Any]] = [
@@ -554,4 +557,4 @@ class TestAnEstimateBeyondTheBudgetIsNotWaitedOut:
         client, _ = scripted([self._slow(120), WAITING, READY_NO_HITS])
         run_screening("run-1", CANDIDATES, TRANSCRIPT_SCOPE, 19, client,
                       sleep=intervals.append, max_wait=1800)
-        assert intervals[0] == pytest.approx(120.0)
+        assert intervals[0] == pytest.approx(MINIMUM_POLL_SECONDS)
