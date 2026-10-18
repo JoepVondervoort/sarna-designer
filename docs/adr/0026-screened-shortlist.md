@@ -1,5 +1,7 @@
 # 0026: A separate shortlist after complete local screening
 
+> Automatic exclusions and export restrictions are superseded by [ADR 0027](0027-advisory-offtarget-results.md).
+
 The user requests a top 10 or 15 that considers off-target findings and excludes close matches.
 This supersedes the earlier decision to make screening display-only **for automatic selection**;
 the frozen design scores, original ranking and manual research notes remain unchanged.

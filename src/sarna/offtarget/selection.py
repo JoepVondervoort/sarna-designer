@@ -2,7 +2,8 @@
 
 Neither the 18/19 exclusion nor the five 17/19 alignment limit is a validated saRNA
 specificity threshold. Counts concern reference alignments, not distinct genes or effects.
-Both search scopes must pass this policy before the UI offers a screened shortlist.
+Saved assessments are retained for provenance. The UI now shows these findings as
+advisory review notes without filtering the design-ranked list (ADR 0027).
 """
 
 from collections.abc import Mapping

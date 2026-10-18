@@ -325,9 +325,18 @@ class AppRouter:
                 status = self.service.store.status(run_id)
                 if status["status"] == "complete":
                     snapshot = self._workspace_snapshot(run_id)
-                    # Large verdict arrays load only when a candidate is selected.
-                    snapshot["candidates"] = [{k: v for k, v in c.items() if k != "rules"}
-                                              for c in snapshot["candidates"]]
+                    # Keep full verdict arrays lazy, but include saved preference evidence
+                    # for the top 15 so the comparison heatmap needs no extra requests.
+                    brief = []
+                    for candidate in snapshot["candidates"]:
+                        row = {k: v for k, v in candidate.items() if k != "rules"}
+                        if candidate.get("rank") is not None and candidate["rank"] <= 15:
+                            row["preference_verdicts"] = [
+                                rule for rule in candidate.get("rules", [])
+                                if rule["kind"] == "preference"
+                            ]
+                        brief.append(row)
+                    snapshot["candidates"] = brief
                     status["result"] = snapshot
                 return self._json(200, status)
             snapshot = self.service.store.snapshot(run_id)

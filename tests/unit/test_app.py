@@ -317,6 +317,16 @@ def test_saved_run_and_candidate_details_reopen_without_engine_or_source(tmp_pat
         result = json.loads(data)["result"]
         assert result["counts"] == saved["counts"]
         assert "rules" not in result["candidates"][0]
+        originals = {c["id"]: c for c in saved["candidates"]}
+        for candidate in result["candidates"]:
+            if candidate["rank"] is not None and candidate["rank"] <= 15:
+                assert candidate["preference_verdicts"] == [
+                    rule for rule in originals[candidate["id"]]["rules"]
+                    if rule["kind"] == "preference"
+                ]
+            else:
+                assert "preference_verdicts" not in candidate
+        assert "preference_verdicts" not in service.store.snapshot(run_id)["candidates"][0]
         cid = saved["candidates"][0]["id"]
         _, _, detail = router.dispatch("GET", f"/api/runs/{run_id}/candidates/{cid}")
         assert json.loads(detail)["rules"] == saved["candidates"][0]["rules"]

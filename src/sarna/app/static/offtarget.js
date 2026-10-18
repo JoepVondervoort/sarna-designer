@@ -14,6 +14,8 @@ const SCOPE_BUTTON = {transcript:"screen-transcript", genomic:"screen-genomic"};
 const SCOPE_NAME = {transcript:"Transcript matches (RefSeq RNA)",
                     genomic:"Genomic matches (GRCh38)"};
 const BATCH_SIZES = [1, 5, 10, 15, 25];
+const MATCH_COLOURS = {"19":"#81572b", "18":"#327968", "17":"#97bcb1"};
+
 
 // One hue, darker is closer, per ADR 0022. Green to red would read as good to bad, and an
 // alignment is neither: it is a measurement the researcher judges.
@@ -607,6 +609,7 @@ function renderOffTarget(scope) {
       : "No results recorded in this scope yet."}</p>`;
     renderBatchControls(); return;
   }
+  const plotOpen = host.querySelector?.("details.ot-plot")?.open;
   const methodsOpen = host.querySelector?.(".ot-methods")?.open;
   const notesOpen = host.querySelector?.(".ot-record-notes")?.open;
   const core = state.result?.candidates?.[0]?.target_site_dna?.length || 19;
@@ -618,6 +621,7 @@ function renderOffTarget(scope) {
     + notesFor(held)
     + resultsTable(held, entries, core, genomic)
     + (genomic ? tssPlot(entries) : "");
+  if (plotOpen && host.querySelector("details.ot-plot")) host.querySelector("details.ot-plot").open = true;
   if (methodsOpen) host.querySelector(".ot-methods").open = true;
   if (notesOpen && host.querySelector(".ot-record-notes")) host.querySelector(".ot-record-notes").open = true;
   renderBatchControls();
@@ -955,9 +959,13 @@ function alignmentDetail(entry, core, genomic) {
  */
 function tssPlot(entries) {
   const subset = entries.some(e => e.row.details_retained !== undefined && e.row.details_retained < e.row.hit_count);
-  const scopeNote = subset ? `<p class="hint">This plot uses retained alignment details (up to 200 per candidate). Table counts include all eligible alignments; the plot is not a complete map of every matched locus.</p>` : "";
   const placed = entries.flatMap(e => e.placements.filter(p => p.distance_to_tss !== null)
     .map(p => ({...p, candidate: e.row.candidate})));
+  const total = entries.reduce((n,e)=>n + e.row.hit_count, 0);
+  const retained = entries.reduce((n,e)=>n + (e.row.details_retained ?? e.hits?.length ?? e.placements.length), 0);
+  const percent = total ? (100 * placed.length / total).toLocaleString(undefined, {maximumFractionDigits:1}) : "0";
+  const scopeNote = `<p class="hint"><b>${fmt(placed.length)} of ${fmt(total)} reported genomic alignments (${percent}%) are shown</b>: displayed alignments within 10 kb of the nearest eligible annotated start site anywhere in the reference, which may belong to another gene.</p>`
+    + `<p class="hint">${fmt(retained)} alignment details retained${subset ? " (up to 200 per candidate, prioritising the closest sequence matches)" : ""}. ${subset ? "Other alignments may also lie near a start site; their locations are not shown. This percentage describes plot coverage, not the fraction of all alignments near a TSS." : "This is annotation proximity, not evidence of binding or gene regulation."}</p>`;
   if (!placed.length) {
     return scopeNote + `<p class="hint">No displayed genomic alignment has an eligible annotated start nearby, so `
       + `there is nothing to plot. Distance is reported only where a transcript was found `
@@ -997,13 +1005,14 @@ function tssPlot(entries) {
   }
   parts.push(`<text x="${(left + right) / 2}" y="131" text-anchor="middle" fill="#61767a" `
     + `font-size="10">bp from the nearest annotated start site, upstream left</text>`);
+  const full19 = placed.every(p=>p.hit.alignment_length === 19);
   placed.forEach((p, i) => {
     // Vertical offset is spacing so overlapping marks stay countable. It means nothing, and
     // the caption says so rather than leaving a reader to find a pattern in it.
     const y = 34 + (i % 5) * 12;
-    const strong = p.hit.identities >= Math.ceil(p.hit.alignment_length * 0.8);
+    const colour = !full19 ? (p.hit.identities >= Math.ceil(p.hit.alignment_length * 0.8) ? "#1d5c52" : "#9cc6ba") : p.hit.identities >= 19 ? "#81572b" : p.hit.identities === 18 ? "#327968" : p.hit.identities === 17 ? "#699d91" : "#b4d0c8";
     parts.push(`<circle cx="${scale(p.distance_to_tss).toFixed(1)}" cy="${y}" `
-      + `r="${p.inside_run_window ? 5 : 4}" fill="${strong ? "#1d5c52" : "#9cc6ba"}" `
+      + `r="${p.inside_run_window ? 5 : 4}" fill="${colour}" `
       + `${p.inside_run_window ? 'stroke="#c08a2e" stroke-width="1.5"' : ""} `
       + otTip(`${p.candidate} aligns ${p.hit.identities} of ${p.hit.alignment_length} bases on `
         + `${p.contig}:${fmt(p.position)}, ${Math.abs(p.distance_to_tss).toLocaleString()} bp `
@@ -1013,7 +1022,7 @@ function tssPlot(entries) {
         + `Proximity to an annotated start site does not establish that the promoter is active `
         + `or that the duplex binds it.`) + `/>`);
   });
-  return `<div class="ot-plot"><h4>Where the genomic hits sit, relative to the nearest `
+  return `<details class="ot-plot"><summary>Genomic alignment locations · ${fmt(placed.length)} / ${fmt(total)} shown (${percent}%)</summary><h4>Where the genomic hits sit, relative to the nearest `
     + `annotated start site</h4>`
     + scopeNote
     + `<svg viewBox="0 0 ${width} ${height}" role="img" `
@@ -1021,10 +1030,8 @@ function tssPlot(entries) {
     + `transcription start site">${parts.join("")}</svg>`
     + `<p class="hint">Distance is on a log scale either side of the start site, so near hits `
     + `stay separable from far ones. Vertical position is spacing only and carries no meaning. `
-    + `Darker marks reach the reporting threshold${window ? ", and the shaded band is the window this run "
-        + "designed against" : ""}. Nothing here is classified as a promoter hit: this project `
-    + `has not defended a definition of promoter proximity, and inventing one would turn a `
-    + `convenience into a scientific claim.</p></div>`;
+    + `${full19 ? "Colour indicates matching bases: 19 (brown), 18 (dark green), 17 (green), 16 (pale green)" : "Darker marks reach the reporting threshold"}${window ? ", and the shaded band is the window this run "
+        + "designed against" : ""}. Annotation proximity does not establish promoter activity, binding or an off-target effect.</p></details>`;
 }
 
 /* ---------------------------------------------------------------- events */
@@ -1187,9 +1194,8 @@ if (state.result) {
   renderScreeningStatus();
 }
 
-/* The screened shortlist filters on Python verdicts, then retains the original design rank.
- * It never treats a missing or capped report as a negative finding, and never fills vacancies
- * with an excluded candidate. Manual research notes and the original design record remain.
+/* Off-target findings accompany the original design rank. Historical project-rule
+ * assessments remain review notes; they never remove a design or block export.
  */
 function screenedDecisions() {
   const candidates = (state.result?.candidates || []).filter(c=>c.rank !== null);
@@ -1208,35 +1214,124 @@ function screenedDecisions() {
       else if (assessment.status === "excluded") reasons.push(...assessment.reasons.map(reason=>`${scope}: ${reason}`));
       else if (assessment.status !== "eligible") pending.push(...assessment.reasons.map(reason=>`${scope}: ${reason}`));
     }
-    return {candidate, evidence, reasons:[...reasons,...pending], status:reasons.length ? "excluded" : pending.length ? "pending" : "eligible"};
+    return {candidate, evidence, reasons:[...reasons,...pending], status:pending.length ? "pending" : reasons.length ? "review" : "complete"};
   }).sort((a,b)=>a.candidate.rank-b.candidate.rank);
 }
+function offTargetCounts(entry) {
+  const c = entry?.row.identity_counts;
+  if (!c || ["19","18","17"].some(k=>!Number.isInteger(c[k]) || c[k] < 0)) return '<span class="hint">Not available</span>';
+  const complete = entry.row.enumeration_complete && !entry.row.alignments_capped;
+  return `<span class="ot-counts">${fmt(c["19"])} / ${fmt(c["18"])} / ${fmt(c["17"])}</span>`
+    + (complete ? "" : '<small>Incomplete evidence</small>');
+}
+function candidateScreeningSummary(decision) {
+  if (!decision) return "";
+  return decision.evidence.map(e=>`<span>${e.scope === "genomic" ? "Genome" : "RNA"} 19/18/17: ${offTargetCounts(e.entry)}</span>`).join("")
+    + (decision.status === "pending" ? '<span>Screening evidence incomplete</span>' : decision.status === "review" ? '<span class="screening-evidence review">Review sequence matches</span>' : "");
+}
+function topOffTargetSummary() {
+  const best = screenedDecisions().find(d=>d.candidate.rank === 1);
+  if (!best) return "";
+  return `<details class="top-screening-note"><summary>Off-target sequence matches · ${best.status === "pending" ? "evidence incomplete" : best.status === "review" ? "review findings" : "both scopes recorded"}</summary>`
+    + `<p>Full-length reference alignments at 19 / 18 / 17 matching bases: `
+    + best.evidence.map(e=>`${e.scope === "genomic" ? "Genome" : "Transcripts"}: ${offTargetCounts(e.entry)}`).join(" · ")
+    + `.</p><p class="hint">Sequence similarity is a review signal. It does not establish binding or a biological effect. Details are in Screening.</p></details>`;
+}
+/* Comparisons use saved measurements only; no chart changes rank or selection. */
+function matchCountData(entry) {
+  const c = entry?.row.identity_counts;
+  if (!c || ["19","18","17"].some(k=>!Number.isInteger(c[k]) || c[k]<0)) return null;
+  return {counts:c, total:c["19"]+c["18"]+c["17"], complete:entry.row.enumeration_complete && !entry.row.alignments_capped};
+}
+function matchCountPlot(decisions) {
+  const max = Math.max(1,...decisions.flatMap(d=>d.evidence.map(e=>matchCountData(e.entry)?.total || 0)));
+  const rows = decisions.map(d=>`<div class="comparison-candidate"><button type="button" class="text-button" data-screened-inspect="${escapeHTML(d.candidate.id)}">#${d.candidate.rank} ${escapeHTML(d.candidate.id)}</button>${d.evidence.map(e=>{
+    const data = matchCountData(e.entry), name = e.scope === "genomic" ? "Genome" : "RNA";
+    if (!data) return `<div class="match-bar-row"><span>${name}</span><span class="hint">No identity counts available</span></div>`;
+    const values = ["19","18","17"].map(k=>`${fmt(data.counts[k])} at ${k}/19`).join(" · ");
+    return `<div class="match-bar-row"><span>${name}</span><div class="match-bar-track" role="img" aria-label="${escapeHTML(`${d.candidate.id}, ${name}: ${values}${data.complete ? "" : "; incomplete evidence"}`)}">${["19","18","17"].map(k=>`<span class="match-bar-segment" style="width:${100*data.counts[k]/max}%;background:${MATCH_COLOURS[k]}" title="${escapeHTML(`${name}: ${fmt(data.counts[k])} alignments at ${k}/19`)}"></span>`).join("")}</div><span class="match-bar-value">${fmt(data.counts["19"])} / ${fmt(data.counts["18"])} / ${fmt(data.counts["17"])}${data.complete ? "" : " · incomplete"}</span></div>`;
+  }).join("")}</div>`).join("");
+  return `<details class="candidate-plot" data-comparison-plot="counts"><summary>Match counts per candidate · genome and transcripts</summary><p class="hint">Reference alignments at 19, 18 and 17 matching bases, from saved identity counts. Both scopes share a linear scale from 0 to ${fmt(max)} alignments; bar length is the sum of these three strata. Counts include isoforms and alternate records, not independent biological targets. Missing evidence is not zero.</p><div class="plot-legend">${["19","18","17"].map(k=>`<span><i style="background:${MATCH_COLOURS[k]}"></i>${k}/19 bases</span>`).join("")}</div><div class="match-comparison">${rows}</div></details>`;
+}
+function preferenceHeatmap(decisions) {
+  const configured = state.result?.configuration?.rules || [];
+  const ids = [...new Set([...configured.filter(r=>r.kind === "preference").map(r=>r.id),...decisions.flatMap(d=>(d.candidate.rules || d.candidate.preference_verdicts || []).filter(r=>r.kind === "preference").map(r=>r.id))])];
+  const names = new Map(configured.map(r=>[r.id,r.name || r.id]));
+  if (!ids.length) return `<details class="candidate-plot" data-comparison-plot="criteria"><summary>Design-criteria heatmap</summary><p class="hint">No preference criteria are available in this saved run.</p></details>`;
+  const cells = decisions.map(d=>`<tr><th scope="row"><button class="text-button" type="button" data-screened-inspect="${escapeHTML(d.candidate.id)}">#${d.candidate.rank} ${escapeHTML(d.candidate.id)}</button></th>${ids.map(id=>{
+    const r=(d.candidate.rules || d.candidate.preference_verdicts || []).find(r=>r.id===id && r.kind === "preference");
+    const outcome = r?.outcome === "pass" ? "pass" : r?.outcome === "fail" ? "fail" : "unknown";
+    const label = outcome === "pass" ? "Met" : outcome === "fail" ? "Missed" : "Not evaluated";
+    const detail = `${d.candidate.id}, ${names.get(id)||id}: ${label}. ${r?.detail || "No saved verdict is available."}`;
+    return `<td class="criterion-cell ${outcome}"><button type="button" class="criterion-mark" ${otTip(detail)}>${outcome === "pass" ? "✓" : outcome === "fail" ? "×" : "?"}</button></td>`;
+  }).join("")}</tr>`).join("");
+  return `<details class="candidate-plot" data-comparison-plot="criteria"><summary>Design-criteria heatmap · ${ids.length} preference criteria</summary><p class="hint">Saved preference verdicts for the displayed top designs: ✓ met, × missed, ? not evaluated or unavailable. Hover or focus a cell for its explanation. Mandatory design gates and tie-breakers are separate from these preferences; no verdict is inferred from the overall score.</p><div class="plot-scroll"><table class="criteria-heatmap"><caption>Design preferences by candidate</caption><thead><tr><th scope="col">Candidate</th>${ids.map(id=>`<th scope="col">${escapeHTML(names.get(id)||id)}</th>`).join("")}</tr></thead><tbody>${cells}</tbody></table></div></details>`;
+}
+function mismatchMapData(entry, core) {
+  const retained = entry?.hits || [];
+  const usable = retained.filter(h=>h.alignment_length===core && h.gaps===0
+    && Math.min(h.query_start,h.query_end)===1 && Math.max(h.query_start,h.query_end)===core
+    && h.has_alignment_detail && Array.isArray(h.mismatch_positions)
+    && h.mismatch_positions.every(p=>Number.isInteger(p) && p>=1 && p<=core)
+    && new Set(h.mismatch_positions).size === core-h.identities);
+  return {retained:retained.length, usable:usable.sort((a,b)=>b.identities-a.identities || String(a.accession).localeCompare(String(b.accession)) || a.subject_start-b.subject_start)};
+}
+function mismatchPositionPlot(decisions) {
+  const chosen = decisions.find(d=>d.candidate.id===state.mismatchPlotCandidate) || decisions[0];
+  if (!chosen) return "";
+  const scope = state.mismatchPlotScope === "transcript" ? "transcript" : "genomic";
+  const entry = chosen.evidence.find(e=>e.scope===scope)?.entry;
+  const core = chosen.candidate.target_site_dna?.length || 19;
+  const data = mismatchMapData(entry,core), shown = data.usable.slice(0,40);
+  const candidateSelect = `<label>Candidate <select id="mismatch-plot-candidate">${decisions.map(d=>`<option value="${escapeHTML(d.candidate.id)}" ${d===chosen ? "selected" : ""}>#${d.candidate.rank} ${escapeHTML(d.candidate.id)}</option>`).join("")}</select></label>`;
+  const scopeSelect = `<label>Reference <select id="mismatch-plot-scope"><option value="genomic" ${scope==="genomic" ? "selected" : ""}>Genome</option><option value="transcript" ${scope==="transcript" ? "selected" : ""}>Transcripts</option></select></label>`;
+  const total = entry?.row.hit_count;
+  const note = !entry ? "No screening evidence is available for this candidate in this scope."
+    : `${fmt(shown.length)} alignments shown out of ${fmt(data.retained)} retained details and ${fmt(total)} reported alignments. ${fmt(data.usable.length)} retained details have complete, ungapped, full-length mismatch positions.${entry.row.alignments_capped || !entry.row.enumeration_complete ? " Search evidence is incomplete." : ""} Only the strongest 40 usable retained alignments are drawn; this is not a complete map of all matched loci.`;
+  const header = Array.from({length:core},(_,i)=>`<th scope="col">${i+1}<small>${escapeHTML(chosen.candidate.target_site_dna?.[i] || "?")}</small></th>`).join("");
+  const body = shown.map(h=>{
+    const mismatches = new Set(h.mismatch_positions);
+    const locus = `${h.accession}:${Math.min(h.subject_start,h.subject_end)}–${Math.max(h.subject_start,h.subject_end)} (${h.subject_strand})`;
+    return `<tr><th scope="row" title="${escapeHTML(locus)}">${escapeHTML(locus)}<small>${h.identities}/${core} bases</small></th>${Array.from({length:core},(_,i)=>`<td class="mismatch-map-cell ${mismatches.has(i+1) ? "mismatch" : "match"}" title="${escapeHTML(`${locus}; target position ${i+1}: ${mismatches.has(i+1) ? "mismatch" : "match"}`)}">${mismatches.has(i+1) ? "×" : "·"}</td>`).join("")}</tr>`;
+  }).join("");
+  return `<details class="candidate-plot" data-comparison-plot="mismatches"><summary>Mismatch-position map · inspect a candidate</summary><div class="plot-controls">${candidateSelect}${scopeSelect}</div><p class="hint">${escapeHTML(note)}</p><p class="hint">Columns follow the promoter target DNA, 5′ → 3′ (T corresponds to U in RNA), not the antisense guide orientation. × mismatch; · match. Gapped, partial or missing-position alignments are omitted. This does not estimate seed effects or biological specificity.</p>${shown.length ? `<div class="plot-scroll"><table class="mismatch-heatmap"><caption>Mismatch positions for ${escapeHTML(chosen.candidate.id)} · ${scope === "genomic" ? "genome" : "transcripts"}</caption><thead><tr><th scope="col">Reference alignment</th>${header}</tr></thead><tbody>${body}</tbody></table></div>` : `<p class="hint">No usable mismatch-position details to draw. Missing details do not mean zero matches.</p>`}</details>`;
+}
+function candidateComparisonPlots(decisions) {
+  if (!decisions.length) return "";
+  return `<div class="candidate-comparisons"><h4>Compare these top ${decisions.length} designs</h4>${matchCountPlot(decisions)}${preferenceHeatmap(decisions)}${mismatchPositionPlot(decisions)}</div>`;
+}
+
 function renderScreenedShortlist() {
   const host = $("screened-shortlist");
   if (!host || !state.result) return;
+  const openPlots = [...(host.querySelectorAll?.("[data-comparison-plot][open]") || [])].map(node=>node.dataset.comparisonPlot);
   const decisions = screenedDecisions(), limit = state.screenedShortlistLimit || 10;
-  const eligible = decisions.filter(d=>d.status === "eligible"), chosen = eligible.slice(0,limit);
-  const excluded = decisions.filter(d=>d.status === "excluded"), pending = decisions.filter(d=>d.status === "pending");
-  if (state.screenedManagedRun === state.result.app.run_id) {
-    const eligibleIds = new Set(eligible.map(d=>d.candidate.id));
-    let changed = false;
-    for (const id of state.screenedManagedSelection || []) {
-      if (!eligibleIds.has(id) && state.checked.delete(id)) changed = true;
-    }
-    if (changed) renderTable();
+  const chosen = decisions.slice(0,limit), pending = decisions.filter(d=>d.status === "pending");
+  const byId = new Map(decisions.map(d=>[d.candidate.id,d]));
+  for (const note of document.querySelectorAll?.("[data-candidate-screening]") || []) {
+    screeningHTML(note, candidateScreeningSummary(byId.get(note.dataset.candidateScreening)));
   }
-  const counts = entry => {
-    const c = entry?.row.identity_counts;
-    return c ? `${c["19"]} / ${c["18"]} / ${c["17"]}` : "n/a";
-  };
-  screeningHTML(host, `<div class="screened-heading"><div><p class="screened-eyebrow">AFTER SCREENING</p><h3>Your screened shortlist</h3><p class="hint">Passing designs that meet the project’s sequence-screening rules, ordered by their original design rank.</p></div><label>Show top <select id="screened-shortlist-limit" aria-label="Screened shortlist size"><option value="10" ${limit===10?"selected":""}>10</option><option value="15" ${limit===15?"selected":""}>15</option></select></label></div>`
-    + `<div class="screened-metrics"><div><strong>${chosen.length}<small> / ${limit}</small></strong><span>in this shortlist</span></div><div><strong>${eligible.length}</strong><span>meet project rules</span></div><div><strong>${excluded.length}</strong><span>excluded by screening</span></div><div><strong>${pending.length}</strong><span>need evidence</span></div></div>`
-    + `<details class="screened-policy"><summary>Selection rules · project defaults, not validated safety cutoffs</summary><p>Both local searches must be complete against the same selected reference. Exclude if either scope has any full-length 18/19 or 19/19 match, or at least five 17/19 matches. Genomic screening must know the intended locus so its own hits can be removed. Counts are reference alignments, including transcript isoforms and alternate genome records; they are not counts of independent genes. Transcript matches are retained even for the intended gene because possible RNA silencing matters.</p><p>The original design score and rank determine the order after exclusion. These numeric cutoffs are conservative project choices, not experimentally validated saRNA thresholds. There is no validated combined efficacy/specificity score here. A shorter list stays shorter.</p><p>Evidence supports sequence-dependent RNA activation and potential off-target silencing, but does not establish these cutoffs: <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC4379447/" target="_blank" rel="noopener">Wang et al., 2015</a>; <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC4797303/" target="_blank" rel="noopener">Meng et al., 2016</a>; <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC1484447/" target="_blank" rel="noopener">Jackson et al., 2006 (siRNA)</a>. Seed effects, gaps, variants and cell-specific activity remain unassessed. Meeting these rules does not establish biological specificity.</p></details>`
-    + (chosen.length ? `<div class="screened-table-wrap"><table class="screened-table"><thead><tr><th>Shortlist</th><th>Candidate</th><th>Design score</th><th>Transcript<br><small>19 / 18 / 17-base matches</small></th><th>Genome<br><small>19 / 18 / 17-base matches</small></th><th></th></tr></thead><tbody>${chosen.map((d,i)=>`<tr><td><span class="screened-number">${i+1}</span></td><td><strong>${escapeHTML(d.candidate.id)}</strong><small>Design rank ${d.candidate.rank}</small></td><td>${d.candidate.rating?.met ?? "n/a"} / ${d.candidate.rating?.evaluated ?? "n/a"}</td><td>${counts(d.evidence.find(e=>e.scope==="transcript").entry)}</td><td>${counts(d.evidence.find(e=>e.scope==="genomic").entry)}</td><td><button class="secondary" type="button" data-screened-inspect="${escapeHTML(d.candidate.id)}">Inspect</button></td></tr>`).join("")}</tbody></table></div>` : `<div class="screened-empty"><strong>${pending.length ? "Complete both local searches to build your shortlist" : "No candidates meet these project rules"}</strong><p>${pending.length ? "Screen all passing candidates in both scopes for a complete top 10 or 15. Older reports may need a refresh; local alignment caches avoid repeating the search." : "Review the exclusions below or design additional candidates. Excluded candidates are never used to fill the list."}</p></div>`)
-    + `<div class="screened-actions">${pending.length && !frozen ? `<button id="screened-screen-all" class="secondary" type="button" ${!REFERENCE_STATUS?.ready || screeningBackend() !== "local" || Object.keys(SCOPE_BUTTON).some(scope=>["running","waiting"].includes(currentScreeningJob(scope)?.status)) ? "disabled" : ""}>Screen all locally · both scopes</button>` : ""}<button id="screened-use" class="secondary" type="button" ${chosen.length ? "" : "disabled"}>Select these ${chosen.length} for export</button><button id="screened-audit" class="secondary" type="button">Download selection record</button><span class="hint">${pending.length ? "Provisional order: unscreened candidates may still qualify ahead of this list." : "All passing candidates have a screening decision."} Research selection; experimental validation remains necessary.</span></div>`
-    + `<details class="screened-decisions"><summary>Review ${excluded.length} exclusions and ${pending.length} pending candidates</summary>${[...excluded,...pending].map(d=>`<article><strong>${escapeHTML(d.candidate.id)}</strong><span class="tag">${d.status === "excluded" ? "EXCLUDED" : "NEEDS EVIDENCE"}</span><p>${d.reasons.map(escapeHTML).join(" · ")}</p></article>`).join("") || '<p class="hint">Every passing candidate meets the project rules.</p>'}</details>`);
+  const topNote = $("top-offtarget-summary");
+  if (topNote) screeningHTML(topNote, topOffTargetSummary());
+  screeningHTML(host, `<div class="screened-heading"><div><p class="screened-eyebrow">DESIGN RANK &amp; SCREENING</p><h3>Top saRNAs with off-target findings</h3><p class="hint">Ordered by original design rank. Off-target findings stay visible for review; they do not remove candidates.</p></div><label>Show top <select id="screened-shortlist-limit" aria-label="Top saRNA list size"><option value="10" ${limit===10?"selected":""}>10</option><option value="15" ${limit===15?"selected":""}>15</option></select></label></div>`
+    + `<p class="screened-context hint">${chosen.length} shown · ${decisions.length - pending.length} with both scopes complete · ${pending.length} with incomplete evidence. Counts below are reference alignments at <b>19 / 18 / 17 matching bases</b>, including isoforms and alternate records; they are not counts of independent genes.</p>`
+    + (chosen.length ? `<div class="screened-table-wrap"><table class="screened-table"><thead><tr><th>Design rank</th><th>Candidate</th><th>Design score</th><th>Transcripts<br><small>19 / 18 / 17 bases</small></th><th>Genome<br><small>19 / 18 / 17 bases</small></th><th>Screening evidence</th><th></th></tr></thead><tbody>${chosen.map(d=>`<tr><td><span class="screened-number">${d.candidate.rank}</span></td><td><strong>${escapeHTML(d.candidate.id)}</strong></td><td>${d.candidate.rating?.met ?? "n/a"} / ${d.candidate.rating?.evaluated ?? "n/a"}</td><td>${offTargetCounts(d.evidence.find(e=>e.scope==="transcript").entry)}</td><td>${offTargetCounts(d.evidence.find(e=>e.scope==="genomic").entry)}</td><td><span class="screening-evidence ${d.status === "review" ? "review" : ""}">${d.status === "pending" ? "Incomplete" : d.status === "review" ? "Review findings" : "Recorded"}</span>${d.reasons.length ? `<details><summary>Why?</summary><p class="hint">${d.reasons.map(escapeHTML).join(" · ")}</p></details>` : ""}</td><td><button class="secondary" type="button" data-screened-inspect="${escapeHTML(d.candidate.id)}">Inspect</button></td></tr>`).join("")}</tbody></table></div>` : `<div class="screened-empty"><p>No candidates passed the design gates. Review the design results or adjust your criteria.</p></div>`)
+    + candidateComparisonPlots(chosen)
+    + `<details class="screened-policy"><summary>How to interpret screening</summary><p>The former project rule flagged any 18/19 or 19/19 alignment, or five or more 17/19 alignments in either scope. These unvalidated cutoffs now provide review notes only. Missing or incomplete screening is labelled explicitly. Design rank and export selection are independent of these findings.</p><p>The intended genomic locus is removed where coordinates are known. Transcript matches, including those to the intended gene, remain visible because potential RNA silencing matters. Sequence counts do not measure binding, gene activation, silencing or safety. Seed effects, gaps, variants and cell-specific activity are not assessed.</p><p>Background: <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC4379447/" target="_blank" rel="noopener">Wang et al., 2015</a>; <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC4797303/" target="_blank" rel="noopener">Meng et al., 2016</a>. These papers do not validate the former numeric cutoffs.</p></details>`
+    + `<div class="screened-actions">${pending.length && !frozen ? `<button id="screened-screen-all" class="secondary" type="button" ${!REFERENCE_STATUS?.ready || screeningBackend() !== "local" || Object.keys(SCOPE_BUTTON).some(scope=>["running","waiting"].includes(currentScreeningJob(scope)?.status)) ? "disabled" : ""}>Screen all locally · both scopes</button>` : ""}<button id="screened-use" class="secondary" type="button" ${chosen.length ? "" : "disabled"}>Select these ${chosen.length} for export</button><button id="screened-audit" class="secondary" type="button">Download screening record</button><span class="hint">Research selection; experimental validation remains necessary.</span></div>`);
+  for (const key of openPlots) {
+    const plot = host.querySelector?.(`[data-comparison-plot="${key}"]`);
+    if (plot) plot.open = true;
+  }
 }
 $("screened-shortlist")?.addEventListener("change", event=>{
+  if (event.target.id === "mismatch-plot-candidate" || event.target.id === "mismatch-plot-scope") {
+    if (event.target.id === "mismatch-plot-candidate") state.mismatchPlotCandidate = event.target.value;
+    else state.mismatchPlotScope = event.target.value;
+    renderScreenedShortlist();
+    $(event.target.id)?.focus();
+    return;
+  }
   if (event.target.id !== "screened-shortlist-limit") return;
   state.screenedShortlistLimit = Number(event.target.value) === 15 ? 15 : 10;
   renderScreenedShortlist();
@@ -1249,7 +1344,7 @@ $("screened-shortlist")?.addEventListener("click", event=>{
   const inspect = event.target.closest("[data-screened-inspect]");
   if (inspect) { selectCandidate(inspect.dataset.screenedInspect); $("candidate-layout").scrollIntoView({block:"start"}); }
   if (event.target.id === "screened-use") {
-    state.checked = new Set(screenedDecisions().filter(d=>d.status === "eligible").slice(0,state.screenedShortlistLimit || 10).map(d=>d.candidate.id));
+    state.checked = new Set(screenedDecisions().slice(0,state.screenedShortlistLimit || 10).map(d=>d.candidate.id));
     state.screenedManagedSelection = new Set(state.checked);
     state.screenedManagedRun = state.result.app.run_id;
     renderTable();
@@ -1257,14 +1352,13 @@ $("screened-shortlist")?.addEventListener("click", event=>{
   }
   if (event.target.id === "screened-audit") {
     const decisions = screenedDecisions().map(d=>({candidate:d.candidate.id, original_rank:d.candidate.rank, design_score:d.candidate.rating, status:d.status, reasons:d.reasons, evidence:d.evidence.map(e=>({scope:e.scope, search_id:e.entry?.search.id, searched_at:e.entry?.search.searched_at, reference:e.entry?.search.reference?.release, counts:e.entry?.row.identity_counts, assessment:e.entry?.row.selection_assessment}))}));
-    downloadBlob(new Blob([JSON.stringify({run_id:state.result.app.run_id, generated_at:new Date().toISOString(), limit:state.screenedShortlistLimit || 10, order:"Original design rank after project-rule exclusions", decisions},null,2)],{type:"application/json"}),"screened-selection.json");
+    downloadBlob(new Blob([JSON.stringify({run_id:state.result.app.run_id, generated_at:new Date().toISOString(), limit:state.screenedShortlistLimit || 10, order:"Original design rank; off-target findings are advisory", decisions},null,2)],{type:"application/json"}),"screened-selection.json");
   }
 });
 
 function validateScreenedExport() {
   if (state.screenedManagedRun !== state.result?.app.run_id) return;
-  const allowed = new Set(screenedDecisions().filter(d=>d.status === "eligible").map(d=>d.candidate.id));
-  if (!state.checked.size || [...state.checked].some(id=>!allowed.has(id))) {
-    throw new Error("Choose eligible candidates from the screened shortlist before exporting selected sequences. Excluded or pending candidates cannot be included in this selection. Whole-run JSON and HTML remain available for review.");
+  if (!state.checked.size) {
+    throw new Error("Select at least one candidate for export.");
   }
 }

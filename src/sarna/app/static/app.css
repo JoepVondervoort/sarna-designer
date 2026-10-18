@@ -439,3 +439,56 @@ button.link{border:0;background:none;padding:0;color:var(--teal);font-size:11px;
   .screened-heading, .screened-metrics, .screened-actions { padding: 1rem; }
   .screened-policy, .screened-decisions { margin: 1rem; }
 }
+
+/* Quiet screening context alongside design-ranked candidates. */
+.screened-context { margin: 1rem 1.5rem; line-height: 1.6; }
+.ot-counts { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.screening-evidence { color: #526b75; font-size: .8rem; }
+.screening-evidence.review { color: #81572b; }
+.screened-table details { margin-top: .35rem; font-size: .8rem; }
+.screened-table summary, .top-screening-note summary, details.ot-plot > summary { cursor: pointer; color: #327968; }
+.top-screening-note { margin: .75rem 0; padding: .75rem 1rem; border: 1px solid #e4eeea; border-radius: .5rem; font-size: .85rem; }
+.top-screening-note p { margin: .5rem 0 0; line-height: 1.6; }
+
+.candidate-screening-note { display: flex; flex-wrap: wrap; gap: .15rem .6rem; margin-top: .4rem; color: #526b75; font-size: .72rem; line-height: 1.5; }
+.candidate-screening-note small { display: inline; margin-left: .3rem; }
+
+/* Saved-measurement comparisons; disclosures keep the primary result compact. */
+.candidate-comparisons { padding: 1rem 1.5rem; border-top: 1px solid #e4eeea; }
+.candidate-comparisons h4 { margin: .25rem 0 .75rem; }
+.candidate-plot { padding: .85rem 0; border-top: 1px solid #e4eeea; }
+.candidate-plot > summary { cursor: pointer; color: #327968; font-size: .9rem; }
+.candidate-plot p { max-width: 110ch; line-height: 1.6; }
+.plot-legend, .plot-controls { display: flex; flex-wrap: wrap; gap: .7rem 1.2rem; margin: .8rem 0; font-size: .8rem; }
+.plot-legend span { display: inline-flex; align-items: center; gap: .4rem; }
+.plot-legend i { width: .85rem; height: .85rem; border-radius: 2px; }
+.plot-controls label { display: flex; align-items: center; gap: .5rem; }
+.comparison-candidate { padding: .5rem 0; border-bottom: 1px solid #edf2f0; }
+.comparison-candidate > button { font-size: .8rem; }
+.match-bar-row { display: grid; grid-template-columns: 4rem minmax(5rem,1fr) 12rem; gap: .65rem; align-items: center; padding: .25rem 0; font-size: .75rem; }
+.match-bar-track { display: flex; height: .85rem; background: #f1f5f3; border-radius: 2px; overflow: hidden; }
+.match-bar-segment { display: block; height: 100%; flex-shrink: 0; }
+.match-bar-value { font-variant-numeric: tabular-nums; }
+.plot-scroll { overflow-x: auto; max-height: 36rem; }
+.criteria-heatmap, .mismatch-heatmap { width: 100%; border-collapse: collapse; font-size: .75rem; }
+.criteria-heatmap caption, .mismatch-heatmap caption { text-align: left; padding: .5rem 0; color: #526b75; }
+.criteria-heatmap th, .criteria-heatmap td, .mismatch-heatmap th, .mismatch-heatmap td { border: 1px solid #e0e9e5; padding: .4rem; text-align: center; }
+.criteria-heatmap thead th { min-width: 6rem; max-width: 9rem; font-weight: 500; background: #f5f9f8; }
+.criteria-heatmap tbody th { min-width: 9rem; text-align: left; }
+.criterion-cell.pass { background: #dceee5; }
+.criterion-cell.fail { background: #f4e8d6; }
+.criterion-cell.unknown { background: #f0f2f3; }
+.criterion-mark { width: 100%; min-height: 1.8rem; padding: .15rem; background: transparent; color: #254c43; border: 0; font-size: 1rem; }
+.mismatch-heatmap th small { display: block; color: #526b75; margin-top: .2rem; }
+.mismatch-heatmap tbody th { text-align: left; white-space: nowrap; max-width: 22rem; overflow: hidden; text-overflow: ellipsis; font-weight: 400; }
+.mismatch-heatmap td { min-width: 1.7rem; }
+.mismatch-map-cell.match { background: #e3eee8; color: #526b75; }
+.mismatch-map-cell.mismatch { background: #e6c99f; color: #593d20; font-weight: bold; }
+@media (max-width: 700px) {
+  .candidate-comparisons { padding: 1rem; }
+  .match-bar-row { grid-template-columns: 3.5rem minmax(4rem,1fr); }
+  .match-bar-value { grid-column: 2; }
+}
+.criteria-heatmap thead th { white-space: normal; overflow-wrap: break-word; }
+.criteria-heatmap tbody th { position: sticky; left: 0; background: #f5f9f8; }
+.mismatch-heatmap thead th { position: sticky; top: 0; z-index: 1; background: #f5f9f8; }

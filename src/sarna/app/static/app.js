@@ -913,8 +913,9 @@ function renderTable() {
   const values = filteredCandidates(), pages = Math.max(1,Math.ceil(values.length/50));
   state.page = Math.min(state.page,pages-1);
   const page = values.slice(state.page*50,(state.page+1)*50);
+  const screeningById = new Map(typeof screenedDecisions === "function" ? screenedDecisions().map(d=>[d.candidate.id,d]) : []);
   $("visible-count").textContent = `· ${fmt(values.length)}`;
-  $("candidate-rows").innerHTML = page.length ? page.map(c => `<tr data-candidate="${c.id}" class="${state.selected===c.id?"selected":""}" tabindex="0" aria-label="Inspect ${c.id}"><td><input type="checkbox" data-check="${c.id}" ${state.checked.has(c.id)?"checked":""} aria-label="Select ${c.id} for export"></td><td>${c.rank || "n/a"}</td><td><span class="dna">${escapeHTML(c.target_site_dna)}</span><p class="candidate-id">${c.id}${c.rank===null?` · ${c.excluded_by.length} failed gates`:""}</p>${twinChip(c)}</td><td>${escapeHTML(positionText(c))}</td><td>${c.gc_percent}%</td><td><div class="rating-cell"><b>${ratingText(c)}</b><span class="rating-bar"><i style="width:${c.rating.percent ?? 0}%"></i></span></div>${c.rating.unavailable?`<p class="candidate-id">${c.rating.unavailable} unavailable</p>`:""}${c.rating.unchecked_gates.length?`<p class="candidate-id">${c.rating.unchecked_gates.length} unchecked gates</p>`:""}${(c.rating.missed||[]).length?`<p class="missed-chip">missed: ${c.rating.missed.map(id=>escapeHTML(ruleName(id))).join(", ")}</p>`:""}</td><td><span class="guide-badge ${escapeHTML(c.rating.guide || "unknown")}">${escapeHTML(c.rating.guide || "unknown")}</span>${!c.rating.models_agree?'<p class="disagreement">Models disagree</p>':""}</td></tr>`).join("") : '<tr><td colspan="7" style="padding:30px;text-align:center;color:var(--muted)">No candidates match this view. Inspect excluded targets or adjust your criteria and run again.</td></tr>';
+  $("candidate-rows").innerHTML = page.length ? page.map(c => `<tr data-candidate="${c.id}" class="${state.selected===c.id?"selected":""}" tabindex="0" aria-label="Inspect ${c.id}"><td><input type="checkbox" data-check="${c.id}" ${state.checked.has(c.id)?"checked":""} aria-label="Select ${c.id} for export"></td><td>${c.rank || "n/a"}</td><td><span class="dna">${escapeHTML(c.target_site_dna)}</span><p class="candidate-id">${c.id}${c.rank===null?` · ${c.excluded_by.length} failed gates`:""}</p>${twinChip(c)}<div class="candidate-screening-note" data-candidate-screening="${c.id}">${typeof candidateScreeningSummary === "function" ? candidateScreeningSummary(screeningById.get(c.id)) : ""}</div></td><td>${escapeHTML(positionText(c))}</td><td>${c.gc_percent}%</td><td><div class="rating-cell"><b>${ratingText(c)}</b><span class="rating-bar"><i style="width:${c.rating.percent ?? 0}%"></i></span></div>${c.rating.unavailable?`<p class="candidate-id">${c.rating.unavailable} unavailable</p>`:""}${c.rating.unchecked_gates.length?`<p class="candidate-id">${c.rating.unchecked_gates.length} unchecked gates</p>`:""}${(c.rating.missed||[]).length?`<p class="missed-chip">missed: ${c.rating.missed.map(id=>escapeHTML(ruleName(id))).join(", ")}</p>`:""}</td><td><span class="guide-badge ${escapeHTML(c.rating.guide || "unknown")}">${escapeHTML(c.rating.guide || "unknown")}</span>${!c.rating.models_agree?'<p class="disagreement">Models disagree</p>':""}</td></tr>`).join("") : '<tr><td colspan="7" style="padding:30px;text-align:center;color:var(--muted)">No candidates match this view. Inspect excluded targets or adjust your criteria and run again.</td></tr>';
   $("page-label").textContent = values.length ? `${fmt(state.page*50+1)}–${fmt(Math.min((state.page+1)*50,values.length))} of ${fmt(values.length)} · page ${state.page+1}/${pages}` : "0 candidates";
   $("page-previous").disabled = state.page===0; $("page-next").disabled = state.page>=pages-1;
   $("select-page").checked = page.length>0 && page.every(c=>state.checked.has(c.id));
@@ -926,7 +927,7 @@ function renderTable() {
 function renderExportNote() {
   const screened = Object.keys(state.screenings || {});
   $("export-note").textContent =
-    `${state.screenedManagedRun === state.result?.app.run_id ? `${state.checked.size} screened shortlist candidates selected` : state.checked.size ? `${state.checked.size} selected candidates`
+    `${state.screenedManagedRun === state.result?.app.run_id ? `${state.checked.size} design-ranked candidates selected` : state.checked.size ? `${state.checked.size} selected candidates`
                           : "All passing candidates"}. `
     + `Excel carries every candidate with its values, plus the run and its rules on their own `
     + `sheets. Order CSV gives the 21-mers to synthesise; core CSV gives the 19 nt cores alone. `
@@ -1851,6 +1852,7 @@ function renderTopResult(result) {
     + `${met} evaluated preferences, with ${escapeHTML(best.rating.guide || "an unknown")} predicted as the guide strand.</p>`
     + `</div><span class="tag">RANK 1</span></div>`
     + duplex
+    + `<div id="top-offtarget-summary">${typeof topOffTargetSummary === "function" ? topOffTargetSummary() : ""}</div>`
     + `<div class="top-actions-row">`
     + `<button type="button" id="print-duplex" class="primary">Print duplex sheet</button>`
     + `<button type="button" id="inspect-top" class="secondary">Why this one?</button>`

@@ -549,7 +549,7 @@ def check_local_reference_setup(browser: Browser, screenshots: Path | None) -> N
 
 
 def check_screened_shortlist(browser: Browser, screenshots: Path | None) -> None:
-    """A candidate needs complete evidence in both scopes; later failures remove selection."""
+    """Findings and incomplete evidence stay visible without filtering design-ranked selection."""
     from sarna.offtarget.selection import assess_counts
 
     assessments = {name: assess_counts(counts, own_locus_known=True)
@@ -588,18 +588,33 @@ def check_screened_shortlist(browser: Browser, screenshots: Path | None) -> None
     })()""")
     decisions = cast(list[dict[str, Any]], browser.evaluate(
         "screenedDecisions().map(d=>({id:d.candidate.id,status:d.status}))"))
-    assert sum(d["status"] == "excluded" for d in decisions) == 1
+    assert sum(d["status"] == "review" for d in decisions) == 1
     assert sum(d["status"] == "pending" for d in decisions) == 3
     browser.evaluate("document.getElementById('screened-use').click()")
     selected = cast(list[str], browser.evaluate("[...state.checked]"))
     assert selected and len(selected) <= 10
-    assert all(d["status"] == "eligible" for d in decisions if d["id"] in selected), (
-        selected, decisions, browser.exceptions)
+    assert selected == [d["id"] for d in decisions[:10]], (selected, decisions)
+    assert decisions[0]["id"] in selected  # Review findings never empty the top list.
+    assert decisions[1]["id"] in selected  # Missing evidence is explicit, not an exclusion.
     browser.evaluate("""(() => {
       const select=document.getElementById('screened-shortlist-limit');select.value='15';
       select.dispatchEvent(new Event('change',{bubbles:true}));
     })()""")
     assert browser.evaluate("state.screenedShortlistLimit") == 15
+    assert browser.evaluate("document.querySelectorAll('[data-comparison-plot]').length") == 3
+    assert browser.evaluate("document.querySelectorAll('.match-bar-row').length") == 30
+    assert browser.evaluate("document.querySelectorAll('.criteria-heatmap tbody tr').length") == 15
+    browser.evaluate("""(() => {
+      document.querySelector('[data-comparison-plot="mismatches"]').open=true;
+      const scope=document.getElementById('mismatch-plot-scope');scope.value='transcript';
+      scope.dispatchEvent(new Event('change',{bubbles:true}));
+      const candidate=document.getElementById('mismatch-plot-candidate');
+      candidate.selectedIndex=1;candidate.dispatchEvent(new Event('change',{bubbles:true}));
+    })()""")
+    assert browser.evaluate("state.mismatchPlotScope") == "transcript"
+    assert browser.evaluate("document.querySelector('[data-comparison-plot=\"mismatches\"]').open")
+    assert "No usable mismatch-position details" in cast(str, browser.evaluate(
+        "document.querySelector('[data-comparison-plot=\"mismatches\"]').innerText"))
     if screenshots:
         browser.evaluate("document.getElementById('screened-shortlist').scrollIntoView()")
         browser.screenshot(screenshots / "screened-shortlist.png")
@@ -609,10 +624,11 @@ def check_screened_shortlist(browser: Browser, screenshots: Path | None) -> None
         entry.row.selection_assessment=selectionTestAssessments.excluded;
       renderScreenedShortlist();
     })()""")
-    assert browser.evaluate("document.getElementById('screened-use').disabled") is True
-    assert browser.evaluate("state.checked.size") == 0
-    assert browser.evaluate("""(()=>{try {validateScreenedExport();return false;}
-      catch(error){return error.message.includes('Choose eligible candidates');}})()""") is True
+    assert browser.evaluate("document.getElementById('screened-use').disabled") is False
+    assert browser.evaluate("state.checked.size") == len(selected)
+    assert browser.evaluate("validateScreenedExport();true") is True
+    browser.evaluate("document.getElementById('screened-use').click()")
+    assert browser.evaluate("state.checked.size") == 15
     browser.evaluate("""(() => {
       state.screenings=selectionBefore.screenings;state.checked=selectionBefore.checked;
       state.result.candidates=selectionBefore.candidates;
@@ -622,7 +638,7 @@ def check_screened_shortlist(browser: Browser, screenshots: Path | None) -> None
       document.getElementById('screening-backend').value=selectionBefore.backend;
       renderScreenedShortlist();renderTable();
     })()""")
-    print("    screened shortlist: exclusion, pending evidence, capped reports and top 10/15")
+    print("    top saRNAs: advisory findings, incomplete evidence, export and top 10/15")
 
 
 def check_local_result_display(browser: Browser, screenshots: Path | None) -> None:
@@ -1657,6 +1673,9 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     browser.call("Page.navigate", url=archive.as_uri())
     browser.wait("document.body?.classList.contains('frozen') && "
                  "document.querySelector('#candidate-detail .sequence-box')!==null")
+    assert browser.evaluate("document.querySelectorAll('[data-comparison-plot]').length") == 3
+    assert browser.evaluate("document.querySelectorAll('.criteria-heatmap tbody tr').length") == (
+        min(10, cast(int, browser.evaluate("state.result.counts.passing"))))
     browser.evaluate("document.querySelector('[data-filter=rejected]').click()")
     browser.wait("document.querySelector('#candidate-rows [data-candidate]')!==null")
     browser.evaluate("document.querySelector('#candidate-rows [data-candidate]').click()")
