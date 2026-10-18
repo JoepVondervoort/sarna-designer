@@ -701,24 +701,48 @@ function notesFor(held) {
       + other.map(n => `<p class="hint">${escapeHTML(n)}</p>`).join("") + `</details>` : "");
 }
 
-function resultsTable(held, entries, core, genomic) {
-  const sort = state.screeningSort || "wang_homology_hits";
-  const value = (e) => {
-    const v = sort === "distinct_loci" ? (e.row.distinct_loci ?? distinctLoci(e.hits))
+function screeningTableOrder(entries, sort="design_rank", descending=false) {
+  const candidates = new Map((state.result?.candidates || []).map(c=>[c.id,c]));
+  const rank = e => candidates.get(e.row.candidate)?.rank ?? Infinity;
+  const value = e => {
+    const v = sort === "design_rank" ? rank(e)
+      : sort === "distinct_loci" ? (e.row.distinct_loci ?? distinctLoci(e.hits))
       : sort === "distinct_sequences" ? (e.row.distinct_sequences ?? new Set(e.hits.map(h=>h.accession.split(".")[0])).size)
       : e.row[sort];
-    return v === null || v === undefined ? (sort === "best_evalue" ? Infinity : -1) : v;
+    return Number.isFinite(v) && v >= 0 ? v : null;
   };
-  const ordered = [...entries].sort((a, b) =>
-    sort === "best_evalue" ? value(a) - value(b) : value(b) - value(a));
-  const quiet = ordered.filter(e => e.row.hit_count === 0);
-  const found = ordered.filter(e => e.row.hit_count > 0);
-  const header = (key, label, tip) =>
-    `<th><button data-screensort="${key}"${sort === key ? ' class="active"' : ""} `
-    + `data-tip="${escapeHTML(tip)}" tabindex="0">${label} &#8645;</button></th>`;
+  return [...entries].sort((a,b)=>{
+    // Incomplete or missing counts must not appear to be the fewest-match findings.
+    if (sort !== "design_rank") {
+      const incomplete = e => !!e.row.alignments_capped || e.row.enumeration_complete === false;
+      if (incomplete(a) !== incomplete(b)) return incomplete(a) ? 1 : -1;
+    }
+    const av=value(a), bv=value(b);
+    if ((av===null) !== (bv===null)) return av===null ? 1 : -1;
+    if (av!==bv) return (descending ? -1 : 1)*(av-bv);
+    if (rank(a)!==rank(b)) return rank(a)-rank(b);
+    return a.row.candidate.localeCompare(b.row.candidate,undefined,{numeric:true});
+  });
+}
+function resultsTable(held, entries, core, genomic) {
   const threshold = entries[0]?.row.strong_threshold || Math.ceil(core * 0.8);
-  return `<div class="table-scroll"><table class="ot-table"><thead><tr>`
-    + `<th>Candidate</th><th>Strongest match</th><th>Alignments by identity</th>`
+  const choices = [["design_rank","Design rank · same as Candidates"],
+    ["hit_count","Fewest reported sequence matches first"],
+    ["perfect_hits","Fewest exact alignments first"],
+    ["wang_homology_hits",`Fewest alignments ≥${threshold}/${core} first`],
+    [genomic ? "distinct_loci" : "distinct_sequences",genomic ? "Fewest distinct reported loci first" : "Fewest transcript records first"],
+    ...(genomic ? [["in_run_window_hits","Fewest matches in the design window first"]] : [])];
+  const sort = choices.some(([key])=>key===state.screeningSort) ? state.screeningSort : "design_rank";
+  const descending = !!state.screeningSortDescending;
+  const ordered = screeningTableOrder(entries,sort,descending);
+  const header = (key, label, tip) =>
+    `<th${sort === key ? ` aria-sort="${descending ? "descending" : "ascending"}"` : ""}><button data-screensort="${key}"${sort === key ? ' class="active"' : ""} `
+    + `data-tip="${escapeHTML(tip)}" tabindex="0">${label} ${sort === key ? descending ? "↓" : "↑" : "↕"}</button></th>`;
+  return `<div class="screening-order"><label for="screening-order">Order by <select id="screening-order">${choices.map(([key,label])=>`<option value="${key}" ${sort===key ? "selected" : ""}>${escapeHTML(descending ? label.replace(/^Fewest /,"Most ") : label)}</option>`).join("")}</select></label><button type="button" class="secondary" id="screening-order-direction">${sort === "design_rank" ? descending ? "Reverse rank order ↓" : "Rank 1 first ↑" : descending ? "Most matches first ↓" : "Fewest matches first ↑"}</button><p class="hint">${sort === "design_rank" ? descending ? "Reverse of the original design-rank order." : "Original design rank; the same default order as Candidates." : "Reported sequence counts; incomplete evidence is placed last. Column headings change the sort."} Fewer matches do not establish biological specificity. Candidates with no reported alignments stay in the table.</p></div>`
+    + `<div class="table-scroll"><table class="ot-table"><thead><tr>`
+    + `<th>Candidate</th>`
+    + header("design_rank", "Design rank", "The original design rank shown in Candidates. Screening does not change it.")
+    + `<th>Design score</th><th>Strongest match</th><th>Alignments by identity</th>`
     + header("perfect_hits", "Exact alignments",
              `Full-length exact matches elsewhere, all ${core} bases with no gaps. One of these `
              + `is a reported sequence match; biological targeting is untested.`)
@@ -733,20 +757,16 @@ function resultsTable(held, entries, core, genomic) {
          + "site. A statement about this run's configuration, not a definition of a promoter.")
        : "")
     + `</tr></thead><tbody>`
-    + found.map(e => candidateRow(e, core, genomic)).join("")
-    + (quiet.length
-        ? `<tr class="ot-quiet"><td colspan="${genomic ? 8 : 7}">`
-          + `<details><summary>${quiet.length} candidate${quiet.length === 1 ? "" : "s"} `
-          + `returned no alignments. That is not proof of specificity: it is one search, of one `
-          + `database, on one day.</summary><p>`
-          + quiet.map(e => escapeHTML(e.row.candidate)).join(", ")
-          + `</p></details></td></tr>`
-        : "")
+    + ordered.map(e => candidateRow(e, core, genomic)).join("")
     + `</tbody></table></div>`;
 }
 
 function candidateRow(entry, core, genomic) {
   const row = entry.row, counts = bandCounts(entry, core);
+  const candidate = state.result?.candidates?.find(c=>c.id===row.candidate);
+  const rating = candidate?.rating;
+  const score = Number.isInteger(rating?.met) && Number.isInteger(rating?.evaluated) && rating.evaluated > 0
+    ? `${rating.met} / ${rating.evaluated}` : "Not available";
   const best = worstHit(entry);
   const placement = best
     ? entry.placements.find(p => p.hit.accession === best.accession && p.hit.subject_start === best.subject_start
@@ -764,8 +784,10 @@ function candidateRow(entry, core, genomic) {
         `${row.on_target_hits} alignment at this candidate's own target locus was removed from `
         + `these findings. A sequence matching the promoter it was designed against is the `
         + `intended target, not an off-target one.`)}>own locus removed</p>` : "")
-    + `</td>`
-    + `<td>${best
+    + (row.hit_count === 0 ? '<p class="candidate-id">No reported alignments; specificity untested</p>' : "")
+    + `</td><td data-label="Design rank">${candidate?.rank ?? "Not available"}</td>`
+    + `<td data-label="Design score"><strong>${score}</strong><p class="candidate-id">preferences met / evaluated</p></td>`
+    + `<td class="ot-strongest">${best
         ? `<b>${escapeHTML(hitName(best, placement))}</b> <span class="muted">`
           + `${best.identities}/${core}</span>`
           + (placement && placement.distance_to_tss !== null
@@ -929,7 +951,7 @@ function alignmentDetail(entry, core, genomic) {
   const threshold = entry.row.strong_threshold || Math.ceil(core*0.8);
   const matching = entry.row.wang_homology_hits ?? 0;
   const weak = Math.max(0,entry.row.hit_count-matching);
-  return `<tr class="ot-detail"><td colspan="${genomic ? 8 : 7}">`
+  return `<tr class="ot-detail"><td colspan="${genomic ? 10 : 9}">`
     + `<p class="ot-candidate-explanation"><b>1 saRNA candidate searched → ${entry.row.hit_count} alignments returned → `
     + `${matching} with ≥${threshold}/${core} matching bases.</b> `
     + `${weak ? `${weak} weaker alignment${weak === 1 ? " is" : "s are"} also included in the returned list.`
@@ -1062,7 +1084,16 @@ document.addEventListener("click", (event) => {
     return;
   }
   const sort = event.target.closest("[data-screensort]");
-  if (sort) { state.screeningSort = sort.dataset.screensort; renderOffTarget(); return; }
+  if (sort) {
+    const previous = state.screeningSort || "design_rank";
+    state.screeningSortDescending = previous === sort.dataset.screensort ? !state.screeningSortDescending : false;
+    state.screeningSort = sort.dataset.screensort;
+    renderOffTarget(); return;
+  }
+  if (event.target.closest("#screening-order-direction")) {
+    state.screeningSortDescending = !state.screeningSortDescending;
+    renderOffTarget(); return;
+  }
   if (event.target.closest("[data-expand-all]")) {
     state.screeningExpandAll = true; renderOffTarget();
     const entry = screenings()[state.screeningScope]?.byCandidate[state.screeningOpen];
@@ -1374,3 +1405,11 @@ function validateScreenedExport() {
     throw new Error("Select at least one candidate for export.");
   }
 }
+
+$("offtarget-results")?.addEventListener("change", event=>{
+  if (event.target.id !== "screening-order") return;
+  state.screeningSort = event.target.value;
+  state.screeningSortDescending = false;
+  renderOffTarget();
+  $("screening-order")?.focus();
+});

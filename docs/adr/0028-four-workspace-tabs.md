@@ -28,3 +28,14 @@ Batch comparisons stay accessible while child runs complete, and group downloads
 available even if there is no completed child. Frozen HTML retains the same tabs and saved
 observations; Design shows read-only reference/settings context. Duplex printing hides every
 workspace panel and prints only the generated duplex sheet, regardless of the active tab.
+
+
+## Screening order and design context
+
+The detailed screening table defaults to original design-rank order and shows the same
+saved rank and preferences-met/evaluated score as Candidates. An explicit sort control
+also offers fewest reported matches, exact alignments and other displayed counts. Count
+sorts start ascending; headings and a direction control allow reversing the order. Ties
+retain original rank. Missing counts and incomplete/capped evidence do not sort as clean
+zeroes. Zero-match candidates remain individual rows in the selected order, with an
+explicit statement that absence of reported matches does not establish specificity.
