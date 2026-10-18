@@ -842,6 +842,7 @@ function setSource(source) {
 }
 function showResult(result) {
   state.result = result; state.selected = null; state.checked.clear(); state.page = 0;
+  state.screeningEvidence = null;
   state.start = 0; state.end = result.promoter.length;
   $("empty-state").hidden = true; $("result-area").hidden = false; $("draft-notice").hidden = true; $("diff-notice").hidden = true;
   $("draft-badge").textContent = "SAVED";
@@ -872,7 +873,8 @@ function showResult(result) {
   // completion before it is parsed, and a hard call here left the whole page unrendered.
   state.screenings = {}; state.screeningJobs = {}; state.screeningOpen = null;
   if (typeof renderOffTarget === "function") {
-    renderOffTarget("transcript");
+    if (frozen) for (const record of frozenScreeningRecords().filter(r=>r.status === "complete")) mergeScreening(record);
+    renderOffTarget("genomic");
     renderScreeningStatus();
     if (!frozen) loadSavedScreenings(result.app.run_id);
   }
@@ -926,14 +928,8 @@ function renderTable() {
   if (typeof renderBatchControls === "function") renderBatchControls();
 }
 function renderExportNote() {
-  const screened = Object.keys(state.screenings || {});
-  $("export-note").textContent =
-    `${state.screenedManagedRun === state.result?.app.run_id ? `${state.checked.size} design-ranked candidates selected` : state.checked.size ? `${state.checked.size} selected candidates`
-                          : "All passing candidates"}. `
-    + `Excel carries every candidate with its values, plus the run and its rules on their own `
-    + `sheets. Order CSV gives the 21-mers to synthesise; core CSV gives the 19 nt cores alone. `
-    + `${screened.length ? `Off-target screening (${screened.join(", ")}) travels with them.`
-                         : screeningSentence()}`;
+  const selection = state.checked.size ? `${state.checked.size} checked candidates` : "all design-passing candidates (no explicit selection)";
+  $("export-note").textContent = `Excel and all three CSV downloads use ${selection}. JSON and HTML preserve the whole run and its screening history. SVG follows the screening plot’s range and sort controls. Each file’s contents are listed below.`;
   if (typeof workflowStatus === "function") workflowStatus();
   if (state.workspaceTab === "export" && typeof renderExportSelection === "function") renderExportSelection();
 }
@@ -1605,7 +1601,7 @@ function csvText(result) {
 function orderCsvText(result) {
   // Rows come from the Python record. Selection filters them by candidate id (column 2);
   // nothing here derives a sequence, an overhang or a verdict.
-  const order=result.order, ids=state.checked;
+  const order=result.screening_order || result.order, ids=state.checked;
   if (!order || !order.rows?.length) throw new Error("This record carries no order-ready duplexes.");
   const rows=ids.size?order.rows.filter(r=>ids.has(r[1])):order.rows;
   if (!rows.length) throw new Error("None of the selected candidates passed the gates, so none can be ordered.");
@@ -1626,7 +1622,7 @@ async function exportRun(type) {
     if ((type === "csv" || type === "xlsx") && typeof validateScreenedExport === "function") validateScreenedExport();
     if (typeof flushWorkspace === "function") await flushWorkspace(state.result.app.run_id);
     const r=state.result, name=`${r.gene?.symbol || "promoter"}-${r.app.run_id.slice(0,8)}.${type}`;
-    if (frozen) { downloadBlob(new Blob([type==="csv"?csvText(r):JSON.stringify(r,null,2)],{type:type==="csv"?"text/csv":"application/json"}),name); return; }
+    if (frozen) { downloadBlob(new Blob([type==="csv"?csvText(r):JSON.stringify({...r,screenings:frozenScreeningRecords(),screening_summary:frozenScreeningSummary()},null,2)],{type:type==="csv"?"text/csv":"application/json"}),name); return; }
     // A selection applies to the row-wise exports; an HTML or JSON archive is the whole run.
     const selectable = type === "csv" || type === "xlsx";
     const ids = selectable && state.checked.size

@@ -27,7 +27,7 @@ const valid={candidate:'c1',accession:'NC_1',identities:18,alignment_length:19,g
  query_start:1,query_end:19,subject_start:100,subject_end:118,subject_strand:'minus',
  has_alignment_detail:true,mismatch_positions:[2]};
 const entry={row:{hit_count:1000,enumeration_complete:true,alignments_capped:false,
- identity_counts:{'19':0,'18':2,'17':10}},hits:[valid,
+ identity_counts:{'19':0,'18':2,'17':10,'16':988}},hits:[valid,
  {...valid,query_start:2}, {...valid,gaps:1}, {...valid,has_alignment_detail:false},
  {...valid,mismatch_positions:[]},{...valid,mismatch_positions:[20]},
  {...valid,identities:17,mismatch_positions:[2,2]}]};
@@ -35,9 +35,10 @@ const decision={candidate,evidence:[{scope:'genomic',entry},{scope:'transcript'}
 state.testDecision=decision;state.testEntry=entry;
 `,context);
 const counts=vm.runInContext('matchCountPlot([state.testDecision])',context);
-assert(counts.includes('linear scale from 0 to 12'));
-assert(counts.includes('0 / 2 / 10'));
-assert(counts.includes('No identity counts available'));
+assert(counts.includes('linear scale 0\u20131000'));
+assert(counts.includes('data-match-bases="16" data-count="988"'));
+assert(counts.includes('not screened / counts unavailable'));
+assert.equal((counts.match(/data-bar-scope=/g)||[]).length,2);
 assert(!counts.includes('NaN'));
 const heatmap=vm.runInContext('preferenceHeatmap([state.testDecision])',context);
 assert.equal((heatmap.match(/criterion-cell pass/g)||[]).length,1);
@@ -59,10 +60,12 @@ vm.runInContext(`state.mismatchPlotScope='transcript'`,context);
 map=vm.runInContext('mismatchPositionPlot([state.testDecision])',context);
 assert(map.includes('No screening evidence is available'));
 assert(map.includes('Missing details do not mean zero matches'));
-vm.runInContext(`state.testEntry.row.identity_counts={'19':0,'18':0,'17':0};
+vm.runInContext(`state.testEntry.row.hit_count=0;state.testEntry.row.identity_counts={'19':0,'18':0,'17':0,'16':0};
 state.testEntry.row.enumeration_complete=false;`,context);
 const zero=vm.runInContext('matchCountPlot([state.testDecision])',context);
-assert(zero.includes('0 / 0 / 0 · incomplete'));
+assert(zero.includes('data-total="0"'));
+assert(zero.includes('stroke-dasharray="3 2"'));
+assert(zero.includes('not established complete'));
 assert(!zero.includes('NaN'));
 vm.runInContext(`state.mismatchPlotScope='genomic';state.testEntry.hits=Array.from({length:55},(_,i)=>
  ({...state.testEntry.hits[0],identities:i<5?19:18,mismatch_positions:i<5?[]:[2],subject_start:100+i}));`,context);

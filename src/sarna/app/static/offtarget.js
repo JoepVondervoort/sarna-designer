@@ -600,32 +600,39 @@ function hitName(hit, placement) {
 }
 
 function renderOffTarget(scope) {
-  state.screeningScope = scope || state.screeningScope;
-  const held = screenings()[state.screeningScope];
-  const host = $("offtarget-results");
-  if (!host) return;
-  if (!held) {
-    const pending = ["running", "waiting"].includes(currentScreeningJob(state.screeningScope)?.status);
-    host.innerHTML = scopeTabs() + `<p class="ot-empty hint">${pending
-      ? "Search submitted. Results will appear here when collection finishes; there are no findings to interpret yet."
-      : "No results recorded in this scope yet."}</p>`;
-    renderBatchControls(); return;
+  state.screeningScope = scope || state.screeningScope || "genomic";
+  const genomic=state.screeningScope === "genomic";
+  const choices=screeningSortChoices(19,genomic);
+  if(!choices.some(([key])=>key === (state.screeningSort || "design_rank"))) {
+    state.screeningSort="design_rank";state.screeningSortDescending=false;
   }
-  const plotOpen = host.querySelector?.("details.ot-plot")?.open;
-  const methodsOpen = host.querySelector?.(".ot-methods")?.open;
-  const notesOpen = host.querySelector?.(".ot-record-notes")?.open;
-  const core = state.result?.candidates?.[0]?.target_site_dna?.length || 19;
-  const entries = Object.values(held.byCandidate);
-  const genomic = state.screeningScope === "genomic";
-  host.innerHTML =
-    scopeTabs()
-    + summaryLine(held, entries, core, genomic)
-    + notesFor(held)
-    + resultsTable(held, entries, core, genomic)
-    + (genomic ? tssPlot(entries) : "");
-  if (plotOpen && host.querySelector("details.ot-plot")) host.querySelector("details.ot-plot").open = true;
-  if (methodsOpen) host.querySelector(".ot-methods").open = true;
-  if (notesOpen && host.querySelector(".ot-record-notes")) host.querySelector(".ot-record-notes").open = true;
+  const host=$("offtarget-results");
+  if(!host) return;
+  const decisions=screeningComparisonDecisions();
+  renderScreeningComparison(decisions);
+  const held=screenings()[state.screeningScope];
+  const core=state.result?.candidates?.[0]?.target_site_dna?.length || 19;
+  const entries=decisions.map(d=>comparisonEntry(state.screeningScope,d.candidate.id)
+    || {row:{candidate:d.candidate.id,enumeration_complete:false},hits:[],placements:[],missing:true});
+  const actual=entries.filter(e=>!e.missing);
+  const shownHeld=held ? {...held,byCandidate:Object.fromEntries(actual.map(e=>[e.row.candidate,e])),
+    searches:[...new Map(actual.map(e=>[e.search.id,e.search])).values()]} : null;
+  const tableOpen=host.querySelector?.(".screening-detail-table")?.open;
+  const plotOpen=host.querySelector?.("details.ot-plot")?.open;
+  const methodsOpen=host.querySelector?.(".ot-methods")?.open;
+  const mismatchOpen=host.querySelector?.('[data-comparison-plot="mismatches"]')?.open;
+  const notesOpen=host.querySelector?.(".ot-record-notes")?.open;
+  host.innerHTML=`<details class="screening-detail-table" ${tableOpen ? "open" : ""}><summary>Detailed sequence matches · ${genomic ? "genome" : "transcripts"} · ${actual.length} screened / ${entries.length} displayed candidates</summary>`
+    + scopeTabs()
+    + (held && actual.length ? summaryLine(shownHeld,actual,core,genomic) : '<p class="hint">No completed results in this scope for the displayed candidates.</p>')
+    + resultsTable(held,entries,core,genomic)+`</details>`
+    + (shownHeld?.searches.length ? notesFor(shownHeld) : "")
+    + mismatchPositionPlot(decisions)
+    + (genomic && actual.length ? tssPlot(actual) : "");
+  if(plotOpen && host.querySelector("details.ot-plot")) host.querySelector("details.ot-plot").open=true;
+  if(methodsOpen && host.querySelector(".ot-methods")) host.querySelector(".ot-methods").open=true;
+  if(notesOpen && host.querySelector(".ot-record-notes")) host.querySelector(".ot-record-notes").open=true;
+  if(mismatchOpen && host.querySelector('[data-comparison-plot="mismatches"]')) host.querySelector('[data-comparison-plot="mismatches"]').open=true;
   renderBatchControls();
 }
 
@@ -726,20 +733,12 @@ function screeningTableOrder(entries, sort="design_rank", descending=false) {
 }
 function resultsTable(held, entries, core, genomic) {
   const threshold = entries[0]?.row.strong_threshold || Math.ceil(core * 0.8);
-  const choices = [["design_rank","Design rank · same as Candidates"],
-    ["hit_count","Fewest reported sequence matches first"],
-    ["perfect_hits","Fewest exact alignments first"],
-    ["wang_homology_hits",`Fewest alignments ≥${threshold}/${core} first`],
-    [genomic ? "distinct_loci" : "distinct_sequences",genomic ? "Fewest distinct reported loci first" : "Fewest transcript records first"],
-    ...(genomic ? [["in_run_window_hits","Fewest matches in the design window first"]] : [])];
-  const sort = choices.some(([key])=>key===state.screeningSort) ? state.screeningSort : "design_rank";
-  const descending = !!state.screeningSortDescending;
+  const sort = state.screeningSort || "design_rank", descending = !!state.screeningSortDescending;
   const ordered = screeningTableOrder(entries,sort,descending);
   const header = (key, label, tip) =>
     `<th${sort === key ? ` aria-sort="${descending ? "descending" : "ascending"}"` : ""}><button data-screensort="${key}"${sort === key ? ' class="active"' : ""} `
     + `data-tip="${escapeHTML(tip)}" tabindex="0">${label} ${sort === key ? descending ? "↓" : "↑" : "↕"}</button></th>`;
-  return `<div class="screening-order"><label for="screening-order">Order by <select id="screening-order">${choices.map(([key,label])=>`<option value="${key}" ${sort===key ? "selected" : ""}>${escapeHTML(descending ? label.replace(/^Fewest /,"Most ") : label)}</option>`).join("")}</select></label><button type="button" class="secondary" id="screening-order-direction">${sort === "design_rank" ? descending ? "Reverse rank order ↓" : "Rank 1 first ↑" : descending ? "Most matches first ↓" : "Fewest matches first ↑"}</button><p class="hint">${sort === "design_rank" ? descending ? "Reverse of the original design-rank order." : "Original design rank; the same default order as Candidates." : "Reported sequence counts; incomplete evidence is placed last. Column headings change the sort."} Fewer matches do not establish biological specificity. Candidates with no reported alignments stay in the table.</p></div>`
-    + `<div class="table-scroll"><table class="ot-table"><thead><tr>`
+  return `<div class="table-scroll"><table class="ot-table"><thead><tr>`
     + `<th>Candidate</th>`
     + header("design_rank", "Design rank", "The original design rank shown in Candidates. Screening does not change it.")
     + `<th>Design score</th><th>Strongest match</th><th>Alignments by identity</th>`
@@ -757,8 +756,13 @@ function resultsTable(held, entries, core, genomic) {
          + "site. A statement about this run's configuration, not a definition of a promoter.")
        : "")
     + `</tr></thead><tbody>`
-    + ordered.map(e => candidateRow(e, core, genomic)).join("")
+    + ordered.map(e => e.missing ? missingScreeningRow(e.row.candidate,genomic) : candidateRow(e, core, genomic)).join("")
     + `</tbody></table></div>`;
+}
+
+function missingScreeningRow(id,genomic) {
+  const c=state.result?.candidates.find(c=>c.id===id);
+  return `<tr data-screenrow="${escapeHTML(id)}" data-missing-evidence="true"><td>${escapeHTML(id)}</td><td>${c?.rank ?? "Not available"}</td><td>${c?.rating?.met ?? "?"} / ${c?.rating?.evaluated ?? "?"}</td><td colspan="${genomic ? 7 : 6}">Not screened against this reference in this scope. Missing evidence is not zero.</td></tr>`;
 }
 
 function candidateRow(entry, core, genomic) {
@@ -1006,8 +1010,7 @@ function tssPlot(entries) {
   };
   // From the screening record, which states the window it measured against, rather than from
   // the run: the flag beside each hit is meaningless without the window that produced it.
-  const window = (held => held?.searches.map(s => s.window).find(Boolean) || null)(
-    screenings()[state.screeningScope]);
+  const window = entries.map(e=>e.search?.window).find(Boolean) || null;
   const parts = [];
   if (window) {
     const x1 = scale(window[0]), x2 = scale(window[1]);
@@ -1077,7 +1080,7 @@ document.addEventListener("click", (event) => {
     state.screeningMatchFilter = matchFilter.dataset.matchFilter;
     state.screeningExpandAll = false;
     renderOffTarget();
-    const entry = screenings()[state.screeningScope]?.byCandidate[state.screeningOpen];
+    const entry = comparisonEntry(state.screeningScope,state.screeningOpen);
     if (entry && state.screeningScope === "transcript") {
       loadHitAnnotations(entry, visibleHitGroups(entry).slice(0,5).map(g=>g.accession));
     }
@@ -1090,18 +1093,19 @@ document.addEventListener("click", (event) => {
     state.screeningSort = sort.dataset.screensort;
     renderOffTarget(); return;
   }
+  if (event.target.closest("#download-screening-svg")) { downloadScreeningSvg(); return; }
   if (event.target.closest("#screening-order-direction")) {
     state.screeningSortDescending = !state.screeningSortDescending;
     renderOffTarget(); return;
   }
   if (event.target.closest("[data-expand-all]")) {
     state.screeningExpandAll = true; renderOffTarget();
-    const entry = screenings()[state.screeningScope]?.byCandidate[state.screeningOpen];
+    const entry = comparisonEntry(state.screeningScope,state.screeningOpen);
     if (entry && state.screeningScope === "transcript") loadHitAnnotations(entry, visibleHitGroups(entry).map(g => g.accession));
     return;
   }
   if (event.target.closest("[data-retry-annotations]")) {
-    const entry = screenings()[state.screeningScope]?.byCandidate[state.screeningOpen];
+    const entry = comparisonEntry(state.screeningScope,state.screeningOpen);
     if (entry) {
       for (const [key,value] of Object.entries(entry.search.annotations)) {
         if (value.status === "unavailable") delete entry.search.annotations[key];
@@ -1120,7 +1124,7 @@ document.addEventListener("click", (event) => {
     state.screeningExpandAll = false;
     renderOffTarget();
     if (state.screeningOpen && state.screeningScope === "transcript") {
-      const entry = screenings().transcript?.byCandidate[id];
+      const entry = comparisonEntry("transcript",id);
       if (entry) {
         const groups = visibleHitGroups(entry);
         loadHitAnnotations(entry, groups.slice(0,5).map(g => g.accession));
@@ -1199,6 +1203,7 @@ $("open-reference-setup")?.addEventListener("click", () => {
   $("local-reference-panel").scrollIntoView({behavior:"smooth", block:"center"});
 });
 $("screening-backend")?.addEventListener("change", () => {
+  state.screeningEvidence=null;
   for (const scope of Object.keys(SCOPE_BUTTON)) cancelScreeningCheck(scope);
   state.screeningJobs = {};
   renderReferenceStatus();
@@ -1223,8 +1228,8 @@ $("screen-genomic").addEventListener("click", () => startScreening("genomic"));
 // by the time this executes. Catch up rather than leave the panel blank: an archive of a
 // screened run that showed no screening would be a record quietly missing its own evidence.
 if (state.result) {
-  for (const record of (frozen?.screenings || [])) mergeScreening(record);
-  renderOffTarget(frozen?.screenings?.[0]?.scope || "transcript");
+  for (const record of frozenScreeningRecords().filter(r=>r.status === "complete")) mergeScreening(record);
+  renderOffTarget("genomic");
   renderScreeningStatus();
 }
 
@@ -1273,21 +1278,126 @@ function topOffTargetSummary() {
     + `.</p><p class="hint">Sequence similarity is a review signal. It does not establish binding or a biological effect. Details are in Off-target screening.</p><button type="button" class="text-button" data-screening-candidate="${escapeHTML(best.candidate.id)}">View screening details →</button></details>`;
 }
 /* Comparisons use saved measurements only; no chart changes rank or selection. */
+function screeningEvidenceKey() {
+  const keys = [...new Set(Object.values(screenings()).flatMap(h=>Object.keys(h.byEvidence || {})))];
+  if (state.screeningEvidence && keys.includes(state.screeningEvidence)) return state.screeningEvidence;
+  if (!frozen) return selectedEvidenceKey();
+  const shared = keys.filter(k=>k.startsWith("local:") && screenings().genomic?.byEvidence?.[k] && screenings().transcript?.byEvidence?.[k]);
+  return shared.at(-1) || keys.filter(k=>k.startsWith("local:")).at(-1) || keys.at(-1) || "local:";
+}
+function comparisonEntry(scope,id) {
+  const held = screenings()[scope];
+  return held?.byEvidence ? held.byEvidence[screeningEvidenceKey()]?.[id] : held?.byCandidate?.[id];
+}
+function screeningComparisonDecisions() {
+  let decisions = (state.result?.candidates || []).filter(c=>c.rank !== null)
+    .sort((a,b)=>a.rank-b.rank).map(candidate=>({candidate,
+      evidence:["transcript","genomic"].map(scope=>({scope,entry:comparisonEntry(scope,candidate.id)}))}));
+  if (state.screeningPlotLimit === 10 || state.screeningPlotLimit === 15) decisions = decisions.slice(0,state.screeningPlotLimit);
+  else decisions = decisions.filter(d=>d.evidence.some(e=>e.entry));
+  const entries = decisions.map(d=>comparisonEntry(state.screeningScope || "genomic",d.candidate.id)
+    || {row:{candidate:d.candidate.id,enumeration_complete:false},hits:[],placements:[],missing:true});
+  const order = screeningTableOrder(entries,state.screeningSort || "design_rank",!!state.screeningSortDescending);
+  const byId = new Map(decisions.map(d=>[d.candidate.id,d]));
+  return order.map(e=>byId.get(e.row.candidate));
+}
+function screeningSortChoices(core=19,genomic=true) {
+  return [["design_rank","Design rank · same as Candidates"],
+    ["hit_count","Fewest reported sequence matches first"],
+    ["perfect_hits","Fewest exact alignments first"],
+    ["wang_homology_hits",`Fewest alignments ≥${Math.ceil(core*.8)}/${core} first`],
+    [genomic ? "distinct_loci" : "distinct_sequences",genomic ? "Fewest distinct reported loci first" : "Fewest transcript records first"],
+    ...(genomic ? [["in_run_window_hits","Fewest matches in the design window first"]] : [])];
+}
+function screeningComparisonControls() {
+  const genomic = (state.screeningScope || "genomic") === "genomic", choices = screeningSortChoices(19,genomic);
+  const sort = state.screeningSort || "design_rank", descending = !!state.screeningSortDescending;
+  const evidenceKeys=[...new Set([screeningEvidenceKey(),...Object.values(screenings()).flatMap(h=>Object.keys(h.byEvidence || {}))])];
+  const evidenceSelect=`<label>Evidence set <select id="screening-evidence-set">${evidenceKeys.map(key=>`<option value="${escapeHTML(key)}" ${key===screeningEvidenceKey() ? "selected" : ""}>${escapeHTML(key.startsWith("local:") ? `Local · ${key.slice(6) || "current reference"}` : "NCBI BLAST · reported results")}</option>`).join("")}</select></label>`;
+  return `<div class="screening-order">${evidenceSelect}<label>Order using <select id="screening-sort-scope"><option value="genomic" ${genomic ? "selected" : ""}>Genome counts</option><option value="transcript" ${!genomic ? "selected" : ""}>Transcript counts</option></select></label><label>Order by <select id="screening-order">${choices.map(([key,label])=>`<option value="${key}" ${sort===key ? "selected" : ""}>${escapeHTML(descending ? label.replace(/^Fewest /,"Most ") : label)}</option>`).join("")}</select></label><button type="button" class="secondary" id="screening-order-direction">${sort === "design_rank" ? descending ? "Reverse rank order ↓" : "Rank 1 first ↑" : descending ? "Most matches first ↓" : "Fewest matches first ↑"}</button><label>Candidate range <select id="screening-plot-limit"><option value="all" ${!state.screeningPlotLimit ? "selected" : ""}>All screened designs</option><option value="10" ${state.screeningPlotLimit===10 ? "selected" : ""}>Design ranks 1–10</option><option value="15" ${state.screeningPlotLimit===15 ? "selected" : ""}>Design ranks 1–15</option></select></label></div><p class="hint">The plot and detailed table share this order and range. ${sort === "design_rank" ? descending ? "Reverse design-rank order." : "Same default order as Candidates." : "Count ordering uses the chosen scope; incomplete or missing evidence is placed last."} Both bars stay together. Fewer sequence matches do not establish biological specificity.</p>`;
+}
 function matchCountData(entry) {
-  const c = entry?.row.identity_counts;
-  if (!c || ["19","18","17"].some(k=>!Number.isInteger(c[k]) || c[k]<0)) return null;
-  return {counts:c, total:c["19"]+c["18"]+c["17"], complete:entry.row.enumeration_complete && !entry.row.alignments_capped};
+  if (!entry || !Number.isInteger(entry.row.hit_count) || entry.row.hit_count<0) return null;
+  const total=entry.row.hit_count, c=entry.row.identity_counts;
+  const valid=c && ["19","18","17","16"].every(k=>Number.isInteger(c[k]) && c[k]>=0)
+    && ["19","18","17","16"].reduce((n,k)=>n+c[k],0)<=total;
+  const counts=Object.fromEntries(["19","18","17","16"].map(k=>[k,valid ? c[k] : 0]));
+  counts.other=total-Object.values(counts).reduce((a,b)=>a+b,0);
+  return {counts,total,complete:!!entry.row.enumeration_complete && !entry.row.alignments_capped};
 }
 function matchCountPlot(decisions) {
-  const max = Math.max(1,...decisions.flatMap(d=>d.evidence.map(e=>matchCountData(e.entry)?.total || 0)));
-  const rows = decisions.map(d=>`<div class="comparison-candidate"><button type="button" class="text-button" data-screened-inspect="${escapeHTML(d.candidate.id)}">#${d.candidate.rank} ${escapeHTML(d.candidate.id)}</button>${d.evidence.map(e=>{
-    const data = matchCountData(e.entry), name = e.scope === "genomic" ? "Genome" : "RNA";
-    if (!data) return `<div class="match-bar-row"><span>${name}</span><span class="hint">No identity counts available</span></div>`;
-    const values = ["19","18","17"].map(k=>`${fmt(data.counts[k])} at ${k}/19`).join(" · ");
-    return `<div class="match-bar-row"><span>${name}</span><div class="match-bar-track" role="img" aria-label="${escapeHTML(`${d.candidate.id}, ${name}: ${values}${data.complete ? "" : "; incomplete evidence"}`)}">${["19","18","17"].map(k=>`<span class="match-bar-segment" style="width:${100*data.counts[k]/max}%;background:${MATCH_COLOURS[k]}" title="${escapeHTML(`${name}: ${fmt(data.counts[k])} alignments at ${k}/19`)}"></span>`).join("")}</div><span class="match-bar-value">${fmt(data.counts["19"])} / ${fmt(data.counts["18"])} / ${fmt(data.counts["17"])}${data.complete ? "" : " · incomplete"}</span></div>`;
-  }).join("")}</div>`).join("");
-  return `<details class="candidate-plot" data-comparison-plot="counts"><summary>Match counts per candidate · genome and transcripts</summary><p class="hint">Reference alignments at 19, 18 and 17 matching bases, from saved identity counts. Both scopes share a linear scale from 0 to ${fmt(max)} alignments; bar length is the sum of these three strata. Counts include isoforms and alternate records, not independent biological targets. Missing evidence is not zero.</p><div class="plot-legend">${["19","18","17"].map(k=>`<span><i style="background:${MATCH_COLOURS[k]}"></i>${k}/19 bases</span>`).join("")}</div><div class="match-comparison">${rows}</div></details>`;
+  if (!decisions.length) return `<section class="paired-match-plot" data-comparison-plot="counts"><h4>Sequence matches per saRNA</h4><p class="hint">Screen candidates to compare their transcript and genome matches. Missing evidence is not a zero result.</p></section>`;
+  const max=Math.max(1,...decisions.flatMap(d=>d.evidence.map(e=>matchCountData(e.entry)?.total || 0)));
+  const width=Math.max(740,70+decisions.length*98), height=394, left=58, base=282, plotHeight=222;
+  const step=(width-left-20)/decisions.length, barWidth=Math.min(28,step*.28);
+  const colours={...MATCH_COLOURS,"16":"#d6e5df",other:"#9aa6ad"};
+  const legend=["19","18","17","16","other"].map(key=>[key,colours[key]]).map(([key,colour])=>`<span><i style="background:${colour}"></i>${key==="other" ? "Other / unclassified" : `${key}/19 bases`}</span>`).join("");
+  const parts=[`<title>Reported sequence matches by candidate, transcripts and genome</title><desc>Two stacked bars per candidate on one linear scale. Colours represent 19, 18, 17 and 16 matching bases across a 19-base core. Grey represents other or unclassified reported alignments. Missing evidence is marked with a question mark, not zero.</desc><defs><pattern id="missing-screening-pattern" width="6" height="6" patternUnits="userSpaceOnUse"><path d="M0 6L6 0" stroke="#9aa6ad" stroke-width="1"/></pattern></defs>`];
+  for(let tick=0;tick<=4;tick++) {
+    const y=base-plotHeight*tick/4, count=Math.round(max*tick/4);
+    parts.push(`<line x1="${left}" x2="${width-12}" y1="${y}" y2="${y}" stroke="#e1e9e5"/><text x="${left-8}" y="${y+4}" text-anchor="end" font-size="11" fill="#526b75">${fmt(count)}</text>`);
+  }
+  parts.push(`<text x="${left}" y="25" font-size="12" fill="#254c43">Reported reference alignments · linear scale 0–${fmt(max)}</text>`);
+  decisions.forEach((d,i)=>{
+    const centre=left+step*(i+.5), score=d.candidate.rating;
+    const detail=d.evidence.map(e=>{
+      const data=matchCountData(e.entry);
+      return `${e.scope === "genomic" ? "Genome" : "Transcripts"}: ${data ? `${data.total} reported alignments; ${["19","18","17","16"].map(k=>`${data.counts[k]} at ${k}/19`).join(", ")}; ${data.counts.other} other/unclassified; ${data.complete ? "complete enumeration" : "reported counts only / incomplete"}; ${e.entry.search?.reference?.release || e.entry.search?.parameters?.database || "reference not recorded"}; ${e.entry.search?.searched_at || "date not recorded"}` : "not screened / counts unavailable"}`;
+    }).join(". ");
+    const tip=`${d.candidate.id}, design rank ${d.candidate.rank}, score ${score?.met ?? "?"}/${score?.evaluated ?? "?"} preferences. Target DNA 5′–3′: ${d.candidate.target_site_dna || "not available"}. ${detail}. Click to open this candidate’s screening details.`;
+    parts.push(`<g class="paired-candidate" data-plot-candidate="${escapeHTML(d.candidate.id)}" data-screening-candidate="${escapeHTML(d.candidate.id)}" role="button" ${otTip(tip)}><title>${escapeHTML(tip)}</title>`);
+    for(const [index,scope] of ["transcript","genomic"].entries()) {
+      const e=d.evidence.find(e=>e.scope===scope), data=matchCountData(e?.entry);
+      const x=centre+(index===0 ? -barWidth-3 : 3);
+      parts.push(`<g data-bar-scope="${scope}" data-screening-candidate="${escapeHTML(d.candidate.id)}" data-screening-scope="${scope}" data-total="${data?.total ?? "unavailable"}">`);
+      if (!data) parts.push(`<rect x="${x}" y="${base-28}" width="${barWidth}" height="28" fill="url(#missing-screening-pattern)" stroke="#9aa6ad"/><text x="${x+barWidth/2}" y="${base-34}" text-anchor="middle" font-size="12" fill="#526b75">?</text>`);
+      else {
+        let y=base;
+        for(const key of ["19","18","17","16","other"]) {
+          const h=plotHeight*data.counts[key]/max;
+          if(h>0) { y-=h;parts.push(`<rect data-match-bases="${key}" data-count="${data.counts[key]}" x="${x}" y="${y}" width="${barWidth}" height="${h}" fill="${colours[key]}"><title>${escapeHTML(`${scope}: ${data.counts[key]} ${key==="other" ? "other/unclassified alignments" : `alignments at ${key}/19`}`)}</title></rect>`); }
+        }
+        if(!data.total) parts.push(`<line x1="${x}" x2="${x+barWidth}" y1="${base}" y2="${base}" stroke="#327968" stroke-width="2"/>`);
+        if(!data.complete) parts.push(`<rect x="${x}" y="${base-Math.max(3,plotHeight*data.total/max)}" width="${barWidth}" height="${Math.max(3,plotHeight*data.total/max)}" fill="none" stroke="#81572b" stroke-dasharray="3 2"/>`);
+        parts.push(`<text x="${x+barWidth/2}" y="${Math.max(42,y-7)}" text-anchor="middle" font-size="10" fill="#254c43">${fmt(data.total)}${data.complete ? "" : "*"}</text>`);
+      }
+      parts.push(`<text x="${x+barWidth/2}" y="${base+17}" text-anchor="middle" font-size="10" fill="#526b75">${index===0 ? "RNA" : "DNA"}</text></g>`);
+    }
+    parts.push(`<text x="${centre}" y="${base+39}" text-anchor="middle" font-size="11" font-weight="600" fill="#087e80">${escapeHTML(d.candidate.id)}</text><text x="${centre}" y="${base+56}" text-anchor="middle" font-size="10" fill="#526b75">Rank ${d.candidate.rank} · ${score?.met ?? "?"}/${score?.evaluated ?? "?"}</text></g>`);
+  });
+  parts.push(`<text x="${left}" y="${height-15}" font-size="11" fill="#526b75">RNA = transcript reference · DNA = genome reference · ? unavailable · * counts not established complete</text>`);
+  return `<section class="paired-match-plot" data-comparison-plot="counts"><div class="plot-heading"><div><h4>Sequence matches per saRNA</h4><p class="hint">Transcripts and genome side by side. Hover or focus a candidate for counts, rank, score and search details; click to inspect.</p></div><button type="button" class="secondary" id="download-screening-svg">Download plot · SVG</button></div><div class="plot-legend">${legend}</div><div class="paired-plot-scroll"><svg id="screening-match-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" font-family="system-ui,sans-serif" role="group" aria-label="Paired stacked transcript and genome match counts">${parts.join("")}</svg></div><p class="hint">${decisions.length} candidates shown. Counts are reference alignments, including isoforms and alternate records; these are not independent genes or measured biological off-targets. Stacks include 16/19 matches. Grey covers reported alignments without compatible full-length identity counts. Missing evidence is not zero.</p></section>`;
 }
+function renderScreeningComparison(decisions=screeningComparisonDecisions()) {
+  const host=$("screening-comparisons");
+  if(host) screeningHTML(host,screeningComparisonControls()+matchCountPlot(decisions));
+}
+function downloadScreeningSvg() {
+  const svg=$("screening-match-svg");
+  if(!svg) return;
+  const copy=svg.cloneNode(true);
+  const metadata=document.createElementNS("http://www.w3.org/2000/svg","metadata");
+  metadata.textContent=JSON.stringify({run:state.result?.app.run_id,reference:screeningEvidenceKey(),sort:state.screeningSort || "design_rank",sort_scope:state.screeningScope,descending:!!state.screeningSortDescending,range:state.screeningPlotLimit || "all screened",interpretation:"Reference alignments; not measured biological off-targets."});
+  copy.prepend(metadata);
+  const dimensions=copy.getAttribute("viewBox").split(/\s+/).map(Number), originalHeight=dimensions[3];
+  const colours={...MATCH_COLOURS,"16":"#d6e5df",other:"#9aa6ad"};
+  const legend=document.createElementNS("http://www.w3.org/2000/svg","g");
+  ["19","18","17","16","other"].forEach((key,i)=>{
+    const rect=document.createElementNS("http://www.w3.org/2000/svg","rect");
+    Object.entries({x:58+i*126,y:originalHeight+8,width:12,height:12,fill:colours[key]}).forEach(([k,v])=>rect.setAttribute(k,v));
+    const text=document.createElementNS("http://www.w3.org/2000/svg","text");
+    Object.entries({x:76+i*126,y:originalHeight+18,"font-size":11,fill:"#254c43"}).forEach(([k,v])=>text.setAttribute(k,v));
+    text.textContent=key === "other" ? "Other / unclassified" : `${key}/19 bases`;
+    legend.append(rect,text);
+  });
+  const note=document.createElementNS("http://www.w3.org/2000/svg","text");
+  Object.entries({x:58,y:originalHeight+43,"font-size":11,fill:"#526b75"}).forEach(([k,v])=>note.setAttribute(k,v));
+  note.textContent="Reference alignments, not independent genes or measured biological effects. Retained details can be a subset.";
+  legend.append(note);copy.append(legend);dimensions[3]+=60;
+  copy.setAttribute("viewBox",dimensions.join(" "));copy.setAttribute("height",dimensions[3]);
+  downloadBlob(new Blob([new XMLSerializer().serializeToString(copy)],{type:"image/svg+xml"}),`${state.result?.gene?.symbol || "promoter"}-screening.svg`);
+}
+
 function preferenceHeatmap(decisions) {
   const configured = state.result?.configuration?.rules || [];
   const ids = [...new Set([...configured.filter(r=>r.kind === "preference").map(r=>r.id),...decisions.flatMap(d=>(d.candidate.rules || d.candidate.preference_verdicts || []).filter(r=>r.kind === "preference").map(r=>r.id))])];
@@ -1334,7 +1444,7 @@ function mismatchPositionPlot(decisions) {
 function renderScreenedShortlist() {
   const host = $("screened-shortlist");
   if (!host || !state.result) return;
-  const plotHosts = [host, $("design-comparison"), $("screening-comparisons")].filter(Boolean);
+  const plotHosts = [host, $("design-comparison"), $("screening-comparisons"), $("offtarget-results")].filter(Boolean);
   const openPlots = plotHosts.flatMap(h=>[...(h.querySelectorAll?.("[data-comparison-plot][open]") || [])]).map(node=>node.dataset.comparisonPlot);
   const decisions = screenedDecisions(), limit = state.screenedShortlistLimit || 10;
   const chosen = decisions.slice(0,limit), pending = decisions.filter(d=>d.status === "pending");
@@ -1350,7 +1460,7 @@ function renderScreenedShortlist() {
     + `<details class="screened-policy"><summary>How to interpret screening</summary><p>The former project rule flagged any 18/19 or 19/19 alignment, or five or more 17/19 alignments in either scope. These unvalidated cutoffs now provide review notes only. Missing or incomplete screening is labelled explicitly. Design rank and export selection are independent of these findings.</p><p>The intended genomic locus is removed where coordinates are known. Transcript matches, including those to the intended gene, remain visible because potential RNA silencing matters. Sequence counts do not measure binding, gene activation, silencing or safety. Seed effects, gaps, variants and cell-specific activity are not assessed.</p><p>Background: <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC4379447/" target="_blank" rel="noopener">Wang et al., 2015</a>; <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC4797303/" target="_blank" rel="noopener">Meng et al., 2016</a>. These papers do not validate the former numeric cutoffs.</p></details>`
     + `<div class="screened-actions">${pending.length && !frozen ? `<button id="screened-screen-all" class="secondary" type="button" ${!REFERENCE_STATUS?.ready || screeningBackend() !== "local" || Object.keys(SCOPE_BUTTON).some(scope=>["running","waiting"].includes(currentScreeningJob(scope)?.status)) ? "disabled" : ""}>Screen all locally · both scopes</button>` : ""}<button id="screened-use" class="secondary" type="button" ${chosen.length ? "" : "disabled"}>Select these ${chosen.length} for export</button><button id="screened-audit" class="secondary" type="button">Download screening record</button><span class="hint">Research selection; experimental validation remains necessary.</span></div>`);
   if ($("design-comparison")) screeningHTML($("design-comparison"), chosen.length ? `<div class="candidate-comparisons card"><h4>Compare design preferences · top ${chosen.length}</h4>${preferenceHeatmap(chosen)}</div>` : "");
-  if ($("screening-comparisons")) screeningHTML($("screening-comparisons"), chosen.length ? `<div class="candidate-comparisons"><h4>Compare sequence matches · top ${chosen.length}</h4>${matchCountPlot(chosen)}${mismatchPositionPlot(chosen)}</div>` : "");
+  renderScreeningComparison();
   if (typeof workflowStatus === "function") workflowStatus();
   if (state.workspaceTab === "export" && typeof renderExportSelection === "function") renderExportSelection();
   for (const key of openPlots) {
@@ -1364,7 +1474,7 @@ function handleComparisonChange(event) {
   if (event.target.id === "mismatch-plot-candidate" || event.target.id === "mismatch-plot-scope") {
     if (event.target.id === "mismatch-plot-candidate") state.mismatchPlotCandidate = event.target.value;
     else state.mismatchPlotScope = event.target.value;
-    renderScreenedShortlist();
+    renderOffTarget();
     $(event.target.id)?.focus();
     return;
   }
@@ -1372,7 +1482,7 @@ function handleComparisonChange(event) {
   state.screenedShortlistLimit = Number(event.target.value) === 15 ? 15 : 10;
   renderScreenedShortlist();
 }
-for (const id of ["screened-shortlist","design-comparison","screening-comparisons"]) {
+for (const id of ["screened-shortlist","design-comparison","screening-comparisons","offtarget-results"]) {
   $(id)?.addEventListener("change", handleComparisonChange);
 }
 function handleComparisonClick(event) {
@@ -1395,7 +1505,7 @@ function handleComparisonClick(event) {
     downloadBlob(new Blob([JSON.stringify({run_id:state.result.app.run_id, generated_at:new Date().toISOString(), limit:state.screenedShortlistLimit || 10, order:"Original design rank; off-target findings are advisory", decisions},null,2)],{type:"application/json"}),"screened-selection.json");
   }
 }
-for (const id of ["screened-shortlist","design-comparison","screening-comparisons"]) {
+for (const id of ["screened-shortlist","design-comparison","screening-comparisons","offtarget-results"]) {
   $(id)?.addEventListener("click", handleComparisonClick);
 }
 
@@ -1406,10 +1516,54 @@ function validateScreenedExport() {
   }
 }
 
-$("offtarget-results")?.addEventListener("change", event=>{
-  if (event.target.id !== "screening-order") return;
-  state.screeningSort = event.target.value;
-  state.screeningSortDescending = false;
-  renderOffTarget();
-  $("screening-order")?.focus();
+function handleScreeningOrderChange(event) {
+  const id=event.target.id;
+  if(id === "screening-evidence-set") { state.screeningEvidence=event.target.value;renderOffTarget(); }
+  else if(id === "screening-sort-scope") renderOffTarget(event.target.value);
+  else if(id === "screening-order") {
+    state.screeningSort=event.target.value;state.screeningSortDescending=false;renderOffTarget();
+  } else if(id === "screening-plot-limit") {
+    state.screeningPlotLimit=event.target.value === "all" ? null : Number(event.target.value);renderOffTarget();
+  } else return;
+  $(id)?.focus();
+}
+for(const id of ["offtarget-results","screening-comparisons"]) $(id)?.addEventListener("change",handleScreeningOrderChange);
+document.addEventListener("keydown",event=>{
+  const candidate=event.target.closest?.("svg [data-screening-candidate]");
+  if(candidate && ["Enter"," "].includes(event.key)) {
+    event.preventDefault();
+    if(typeof viewScreeningCandidate === "function") viewScreeningCandidate(candidate.dataset.screeningCandidate,candidate.dataset.screeningScope);
+  }
+});
+
+function frozenScreeningRecords() {
+  return state.result?.screenings || frozen?.screening_records || frozen?.screenings || [];
+}
+function frozenScreeningSummary() {
+  return state.result?.screening_summary || frozen?.screening_summary || [];
+}
+async function exportScreeningCsv() {
+  try {
+    validateScreenedExport();
+    const r=state.result, name=`${r.gene?.symbol || "promoter"}-${r.app.run_id.slice(0,8)}-screening.csv`;
+    if(frozen) {
+      const ids=new Set((state.result.candidates || []).filter(c=>state.checked.size ? state.checked.has(c.id) : c.rank!==null).map(c=>c.id));
+      const rows=frozenScreeningSummary().filter(row=>ids.has(row.candidate));
+      if(!rows.length) throw new Error("This older offline report has no screening-summary export. Open the run in the live app and download a new report.");
+      const columns=Object.keys(rows[0]), quote=v=>`"${(v===true ? "True" : v===false ? "False" : String(v??"")).replace(/"/g,'""')}"`;
+      const csv=[columns,...rows.map(row=>columns.map(key=>row[key]))].map(row=>row.map(quote).join(",")).join("\r\n");
+      downloadBlob(new Blob([csv],{type:"text/csv"}),name);return;
+    }
+    const response=await fetch(`/api/runs/${r.app.run_id}/export.screening.csv${state.checked.size ? `?ids=${encodeURIComponent([...state.checked].join(","))}` : ""}`);
+    if(!response.ok) throw new Error(`Screening export failed (${response.status})`);
+    downloadBlob(await response.blob(),name);
+  } catch(e) { error(e.message); }
+}
+$("export-analysis")?.addEventListener("click",exportScreeningCsv);
+$("export-plot")?.addEventListener("click",()=>{
+  if(!$("screening-match-svg")) {
+    if(typeof setWorkspaceTab === "function") setWorkspaceTab("screening",{focus:true});
+    error("Screen candidates before downloading a sequence-match plot.");return;
+  }
+  downloadScreeningSvg();
 });

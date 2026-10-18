@@ -7,6 +7,8 @@ or network access is needed by default. --gene SCN1A exercises existing cached E
 
 import argparse
 import base64
+import csv
+import io
 import json
 import os
 import re
@@ -640,7 +642,8 @@ def check_screened_shortlist(browser: Browser, screenshots: Path | None) -> None
         candidates:state.result.candidates, managed:state.screenedManagedSelection,
         managedRun:state.screenedManagedRun,
         backend:document.getElementById('screening-backend').value,
-        limit:state.screenedShortlistLimit};
+        limit:state.screenedShortlistLimit,plotLimit:state.screeningPlotLimit,
+        scope:state.screeningScope};
       document.getElementById('screening-backend').value='local';
       const key=selectedEvidenceKey();
       const template=state.result.candidates.find(c=>c.rank!==null);
@@ -650,8 +653,9 @@ def check_screened_shortlist(browser: Browser, screenshots: Path | None) -> None
       state.screenings={};
       for (const scope of ['transcript','genomic']) {
         const entries=Object.fromEntries(pool.map(c=>[c.id,
-          {search:{id:scope+'-fixture',reference:{release:key.slice(6)}},
-          row:{candidate:c.id, enumeration_complete:true, alignments_capped:false,
+          {search:{id:scope+'-fixture',backend:'local',parameters:{},notes:[],annotations:{},reference:{release:key.slice(6)}},hits:[],placements:[],
+          row:{candidate:c.id,hit_count:104,perfect_hits:0,wang_homology_hits:104,
+          strong_threshold:16,details_retained:0,enumeration_complete:true,alignments_capped:false,
           identity_counts:{'19':0,'18':0,'17':4,'16':100},
           selection_assessment:selectionTestAssessments.eligible}}]));
         // One exclusion, one never screened, one capped, one stale schema.
@@ -659,7 +663,7 @@ def check_screened_shortlist(browser: Browser, screenshots: Path | None) -> None
         delete entries[pool[1].id];
         entries[pool[2].id].row.alignments_capped=true;
         delete entries[pool[3].id].row.selection_assessment;
-        state.screenings[scope]={byEvidence:{[key]:entries}};
+        state.screenings[scope]={scope,byEvidence:{[key]:entries},byCandidate:entries,searches:[Object.values(entries)[0].search]};
       }
       renderScreenedShortlist();
     })()""")
@@ -678,8 +682,9 @@ def check_screened_shortlist(browser: Browser, screenshots: Path | None) -> None
       select.dispatchEvent(new Event('change',{bubbles:true}));
     })()""")
     assert browser.evaluate("state.screenedShortlistLimit") == 15
+    browser.evaluate("state.screeningPlotLimit=15;renderOffTarget('genomic')")
     assert browser.evaluate("document.querySelectorAll('[data-comparison-plot]').length") == 3
-    assert browser.evaluate("document.querySelectorAll('.match-bar-row').length") == 30
+    assert browser.evaluate("document.querySelectorAll('[data-bar-scope]').length") == 30
     assert browser.evaluate("document.querySelectorAll('.criteria-heatmap tbody tr').length") == 15
     browser.evaluate("""(() => {
       document.querySelector('[data-comparison-plot="mismatches"]').open=true;
@@ -711,9 +716,10 @@ def check_screened_shortlist(browser: Browser, screenshots: Path | None) -> None
       state.result.candidates=selectionBefore.candidates;
       state.screenedManagedSelection=selectionBefore.managed;
       state.screenedManagedRun=selectionBefore.managedRun;
-      state.screenedShortlistLimit=selectionBefore.limit;
+      state.screenedShortlistLimit=selectionBefore.limit;state.screeningPlotLimit=selectionBefore.plotLimit;
       document.getElementById('screening-backend').value=selectionBefore.backend;
-      renderScreenedShortlist();renderTable();
+      state.screeningScope=selectionBefore.scope;
+      renderScreenedShortlist();renderTable();renderOffTarget(state.screeningScope);
     })()""")
     print("    top saRNAs: advisory findings, incomplete evidence, export and top 10/15")
 
@@ -722,7 +728,7 @@ def check_local_result_display(browser: Browser, screenshots: Path | None) -> No
     """Keep complete local counts, bounded details and mixed historical methods distinguishable."""
     browser.evaluate("""(() => {
       window.localResultBefore = {screenings:state.screenings,scope:state.screeningScope,
-        open:state.screeningOpen,scroll:scrollY};
+        open:state.screeningOpen,scroll:scrollY,evidence:state.screeningEvidence};
       const held = state.screenings.transcript;
       const id = Object.keys(held.byCandidate)[0];
       const candidate = state.result.candidates.find(c=>c.id===id);
@@ -745,7 +751,9 @@ def check_local_result_display(browser: Browser, screenshots: Path | None) -> No
           subject_sequence:subject}]};
       window.localResultControl = {id,entry,held};
       state.screenings = {...state.screenings,transcript:{...held,
-        searches:[...held.searches,search],byCandidate:{[id]:entry}}};
+        searches:[...held.searches,search],byCandidate:{[id]:entry},
+        byEvidence:{...held.byEvidence,'local:GRCh38.p14-RefSeq110-v1':{[id]:entry}}}};
+      state.screeningEvidence='local:GRCh38.p14-RefSeq110-v1';
       state.screeningScope='transcript';state.screeningOpen=id;
       renderOffTarget('transcript');document.querySelector('.ot-methods').open=true;
     })()""")
@@ -761,19 +769,20 @@ def check_local_result_display(browser: Browser, screenshots: Path | None) -> No
     browser.evaluate("""(() => {
       const {id,entry,held}=localResultControl;
       const other=Object.keys(held.byCandidate).find(candidate=>candidate!==id);
-      state.screenings.transcript.byCandidate[other]=held.byCandidate[other];
+      state.screeningEvidence='ncbi';
       renderOffTarget('transcript');document.querySelector('.ot-methods').open=true;
     })()""")
     mixed = str(browser.evaluate("document.getElementById('offtarget-results').innerText"))
-    assert "Mixed search methods" in mixed and "Remote BLAST counts" in mixed, mixed
-    assert "Local Bowtie search" in mixed and "Local · Bowtie" in mixed, mixed
+    assert "Remote BLAST counts" in mixed and "Mixed search methods" not in mixed, mixed
+    assert "Local Bowtie search" not in mixed, mixed
     browser.evaluate("""(() => {
       Object.assign(state,{screenings:localResultBefore.screenings,
-        screeningScope:localResultBefore.scope,screeningOpen:localResultBefore.open});
+        screeningScope:localResultBefore.scope,screeningOpen:localResultBefore.open,
+        screeningEvidence:localResultBefore.evidence});
       renderOffTarget(state.screeningScope);renderScreeningStatus();
       window.scrollTo(0,localResultBefore.scroll);
     })()""")
-    print("    local results: full counts, retained details, null statistics and mixed methods")
+    print("    local results: full counts, retained details, null statistics, separate evidence")
 
 
 def check_offtarget(browser: Browser, blast: StubBlast, screenshots: Path | None) -> None:
@@ -803,9 +812,10 @@ def check_offtarget(browser: Browser, blast: StubBlast, screenshots: Path | None
                      ".dispatchEvent(new Event('change'))")
     # A batch of 5, not the whole run. The default used to be a fixed 50, which is what made a
     # genomic search time out after half an hour and come back with nothing.
-    browser.evaluate("document.querySelector('[data-batch=\"5\"]').click();"
+    browser.evaluate("renderOffTarget('transcript');document.querySelector('[data-batch=\"5\"]').click();"
                      "document.getElementById('screen-transcript').click()")
-    browser.wait("document.querySelector('#offtarget-results .ot-table')!==null")
+    browser.wait("Object.keys(state.screenings?.transcript?.byCandidate||{}).length>0")
+    browser.evaluate("document.querySelector('.screening-detail-table').open=true")
     screened = browser.evaluate("Object.keys(state.screenings.transcript.byCandidate).length")
     assert screened == min(5, pool), f"asked for 5, screened {screened}"
 
@@ -823,7 +833,7 @@ def check_offtarget(browser: Browser, blast: StubBlast, screenshots: Path | None
 
     # Where it binds, which never reached the screen before: open the first row and read the
     # gene, the matched bases and the footprint out of the DOM rather than out of the record.
-    browser.evaluate("document.querySelector('[data-screenrow]').click()")
+    browser.evaluate("document.querySelector('.screening-detail-table').open=true;document.querySelector('[data-screenrow]').click()")
     browser.wait("document.querySelector('.ot-detail')!==null")
     detail = browser.evaluate(r"""(()=>{
       const row=document.querySelector('.ot-detail');
@@ -1756,6 +1766,7 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     browser.call("Page.navigate", url=archive.as_uri())
     browser.wait("document.body?.classList.contains('frozen') && "
                  "document.querySelector('#candidate-detail .sequence-box')!==null")
+    browser.evaluate("state.screeningPlotLimit=15;renderOffTarget('genomic')")
     assert browser.evaluate("document.querySelectorAll('[data-comparison-plot]').length") == 3
     assert browser.evaluate("document.querySelectorAll('.criteria-heatmap tbody tr').length") == (
         min(10, cast(int, browser.evaluate("state.result.counts.passing"))))
@@ -1809,7 +1820,8 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     header, first = order_csv.splitlines()[0], order_csv.splitlines()[1]
     assert "sense_order_5to3" in header, header
     assert "[dT][dT]" in first, first
-    assert "off-target-screening [not-performed]" in first
+    assert "off-target-screening [not-performed]" not in first
+    assert list(csv.reader(io.StringIO(order_csv))) == list(csv.reader(io.StringIO(live_order)))
     assert browser.evaluate(
         "state.result.order.rows.every(r=>r[4].endsWith('[dT][dT]')"
         " && r[5].endsWith('[dT][dT]') && r[9]==='21')"

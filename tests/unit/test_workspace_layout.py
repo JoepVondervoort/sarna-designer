@@ -60,3 +60,13 @@ def test_four_accessible_workspaces_own_their_controls() -> None:
         assert "design-form" in layout.parents[identifier]
         assert "advanced-design-settings" in layout.parents[identifier]
     assert layout.panels["duplex-sheet"] is None  # Printing must not depend on the active tab.
+
+
+def test_promoter_is_directly_visible_and_exports_have_format_descriptions() -> None:
+    source = Path("src/sarna/app/static/index.html").read_text()
+    layout = WorkspaceLayout(source)
+    assert layout.parents["promoter-landscape"][-1] == "candidate-run"
+    assert source.index('id="promoter-landscape"') < source.index('id="result-metrics"')
+    for identifier in ["export-xlsx", "export-analysis", "export-order", "export-csv",
+                       "export-json", "export-html", "export-plot"]:
+        assert layout.panels[identifier] == "workspace-export"

@@ -18,6 +18,12 @@ from pydantic import ValidationError
 
 from sarna import __version__, settings
 from sarna.app.models import BatchRequest, DesignRequest, ShortlistRequest
+from sarna.app.screening_exports import (
+    EXPORT_NOTES,
+    SUMMARY_COLUMNS,
+    screening_sheets,
+    screening_summary,
+)
 from sarna.app.service import DesignService
 from sarna.app.workbook import Sheet, write_workbook
 from sarna.design.duplicates import identical_duplex_groups
@@ -313,7 +319,7 @@ class AppRouter:
                     return self._json(409, {"detail": "Wait for this group to finish exporting."})
                 for run in batch["runs"]:
                     if run["status"] == "complete":
-                        run["result"] = self._workspace_snapshot(run["id"])
+                        run["result"] = self._analysis_snapshot(run["id"])
                 if parts[3] == "export.json":
                     return self._json(200, batch)
                 first = next((run["result"] for run in batch["runs"]
@@ -348,15 +354,15 @@ class AppRouter:
                     raise KeyError("Candidate not in this run.")
                 return self._json(200, candidate)
             if len(parts) == 4 and parts[3] == "export.json":
-                return self._json(200, self._workspace_snapshot(run_id))
+                return self._json(200, self._analysis_snapshot(run_id))
             if len(parts) == 4 and parts[3] == "export.html":
-                # The screenings travel with the archive. They are separate dated records and
-                # stay separate, but an offline copy of a screened run that showed no screening
-                # would be a record quietly missing its own evidence.
+                analysis = self._analysis_snapshot(run_id)
+                records = analysis.pop("screenings")
+                summary = analysis.pop("screening_summary")
                 return 200, "text/html; charset=utf-8", frozen_page(
-                    {"result": self._workspace_snapshot(run_id),
-                     "screenings": self._complete_screenings(run_id)},
-                    snapshot,
+                    {"result": analysis,
+                     "screenings": [r for r in records if r["status"] == "complete"],
+                     "screening_records": records, "screening_summary": summary}, snapshot,
                 )
             if len(parts) == 4 and parts[3] == "export.csv":
                 selected = _selected_for_export(snapshot, query)
@@ -376,6 +382,14 @@ class AppRouter:
                 return 200, "text/csv; charset=utf-8", output.getvalue().encode()
             if len(parts) == 4 and parts[3] == "export.order.csv":
                 return self._order_csv(run_id, snapshot, query)
+            if len(parts) == 4 and parts[3] == "export.screening.csv":
+                candidates = _selected_for_export(snapshot, query)
+                output = io.StringIO(newline="")
+                writer = csv.DictWriter(output, fieldnames=SUMMARY_COLUMNS)
+                writer.writeheader()
+                writer.writerows(screening_summary(
+                    run_id, candidates, self._screening_records(run_id)))
+                return 200, "text/csv; charset=utf-8", output.getvalue().encode()
             if len(parts) == 4 and parts[3] == "export.xlsx":
                 return self._export_xlsx(run_id, snapshot, query)
             if len(parts) == 4 and parts[3] == "screenings":
@@ -387,6 +401,22 @@ class AppRouter:
         return {**self.service.store.snapshot(run_id),
                 "workspace": {"shortlist": self.service.store.shortlist(run_id)}}
 
+
+    def _screening_records(self, run_id: str) -> list[dict[str, Any]]:
+        """Read all dated searches, including pending and failed evidence, oldest first."""
+        return [self.service.store.screening(row["id"])
+                for row in reversed(self.service.store.screenings_for(run_id))]
+
+    def _analysis_snapshot(self, run_id: str) -> dict[str, Any]:
+        """Enrich archival exports without inflating the interactive run response."""
+        snapshot = self._workspace_snapshot(run_id)
+        records = self._screening_records(run_id)
+        _, _, order_csv = self._order_csv(run_id, snapshot, {})
+        order_rows = list(csv.reader(io.StringIO(order_csv.decode())))
+        return {**snapshot, "screenings": records,
+                "screening_summary": screening_summary(run_id, snapshot["candidates"], records),
+                "screening_export_notes": list(EXPORT_NOTES),
+                "screening_order": {"columns": order_rows[0], "rows": order_rows[1:]}}
 
     def _start_screening(self, run_id: str, body: bytes) -> tuple[int, str, bytes]:
         """Queue an off-target screening for a finished run.
@@ -705,7 +735,10 @@ class AppRouter:
              shortlist["revision"], shortlist["updated"])
             for entry in shortlist["entries"]
         ))
-        data = write_workbook([candidates, run, rule_sheet, source_sheet, shortlist_sheet])
+        data = write_workbook([
+            candidates, run, rule_sheet, source_sheet, shortlist_sheet,
+            *screening_sheets(run_id, selected, self._screening_records(run_id)),
+        ])
         return 200, ("application/vnd.openxmlformats-officedocument."
                      "spreadsheetml.sheet"), data
 

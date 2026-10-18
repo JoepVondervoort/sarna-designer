@@ -45,16 +45,19 @@ function renderExportSelection() {
       return `<tr><th><button type="button" class="text-button" data-export-inspect="${escapeHTML(c.id)}">${escapeHTML(c.id)}</button>${c.rank === null ? '<small>Excluded by design gates</small>' : `<small>Design rank ${c.rank}</small>`}</th><td><code>${escapeHTML(order?.sense_order_5to3 || "Not available")}</code></td><td><code>${escapeHTML(order?.antisense_order_5to3 || "Not available")}</code></td><td><div class="candidate-screening-note">${evidenceById.has(c.id) ? candidateScreeningSummary(evidenceById.get(c.id)) : escapeHTML(screeningSentence(c.id))}</div></td></tr>`;
     }).join("")}</tbody></table></div>${selected.length > 100 ? `<p class="hint">Previewing the first 100 of ${selected.length} candidates. Downloads include the complete selection.</p>` : ""}` : '<p class="hint">No candidates available to export. Review the design criteria in Design.</p>'));
 }
-function viewScreeningCandidate(id) {
+function viewScreeningCandidate(id, requestedScope=null) {
   if (!state.result?.candidates.some(c=>c.id===id)) return;
   state.screeningOpen = id;
   state.mismatchPlotCandidate = id;
-  const scope = screenings().genomic?.byCandidate?.[id] ? "genomic"
-    : screenings().transcript?.byCandidate?.[id] ? "transcript" : state.screeningScope || "genomic";
+  const preferred = requestedScope || state.screeningScope || "genomic";
+  const scope = comparisonEntry(preferred,id) ? preferred
+    : comparisonEntry("genomic",id) ? "genomic" : comparisonEntry("transcript",id) ? "transcript" : preferred;
   state.mismatchPlotScope = scope;
   renderOffTarget(scope);
   renderScreenedShortlist();
   setWorkspaceTab("screening", {focus:true});
+  const details = $("offtarget-results").querySelector(".screening-detail-table");
+  if (details) details.open = true;
   const row = [...$("offtarget-results").querySelectorAll("[data-screenrow]")].find(node=>node.dataset.screenrow===id);
   (row || $("offtarget-card")).scrollIntoView({block:"start"});
 }
@@ -238,7 +241,7 @@ document.addEventListener("click", event=>{
   const inspect = event.target.closest("[data-export-inspect]");
   if (inspect) { setWorkspaceTab("candidates"); selectCandidate(inspect.dataset.exportInspect); $("candidate-detail").scrollIntoView({block:"start"}); }
   const screening = event.target.closest("[data-screening-candidate]");
-  if (screening) viewScreeningCandidate(screening.dataset.screeningCandidate);
+  if (screening) viewScreeningCandidate(screening.dataset.screeningCandidate,screening.dataset.screeningScope);
 });
 
 /* History searches all saved runs in pages; comparison never modifies either snapshot. */

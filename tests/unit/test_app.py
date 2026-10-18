@@ -465,6 +465,10 @@ def test_archive_has_inline_ui_complete_verdicts_and_escaped_data(tmp_path: Path
         _, _, data = router.dispatch("GET", f"/api/runs/{run_id}/export.json")
         archived = json.loads(data)
         assert archived.pop("workspace")["shortlist"]["entries"] == []
+        assert archived.pop("screenings") == []
+        assert archived.pop("screening_summary")
+        assert archived.pop("screening_export_notes")
+        assert archived.pop("screening_order")["columns"] == saved["order"]["columns"]
         assert archived == saved
     finally:
         router.close()
@@ -591,7 +595,8 @@ class TestTheSpreadsheetExport:
         saved = run_request(service)
         sheets = self.book(service, saved["app"]["run_id"])
         assert list(sheets) == ["saRNA candidates", "Run", "Rules", "Reference sources",
-                                "Shortlist"]
+                                "Shortlist", "Off-target summary", "Retained alignments",
+                                "Screening searches", "Screening readme"]
 
     def test_every_candidate_appears_in_rank_order_with_its_values(
         self, tmp_path: Path

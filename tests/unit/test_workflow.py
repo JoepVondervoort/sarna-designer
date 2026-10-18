@@ -36,6 +36,10 @@ def test_shortlist_persists_separately_and_rejects_stale_revision(tmp_path: Path
         code, _, raw = router.dispatch('GET', f'/api/runs/{run_id}/export.json')
         exported = json.loads(raw)
         assert exported.pop('workspace')['shortlist'] == notes
+        assert exported.pop('screenings') == []
+        assert exported.pop('screening_summary')
+        assert exported.pop('screening_export_notes')
+        assert exported.pop('screening_order')['columns']
         assert exported == saved
         code, _, raw = router.dispatch('GET', f'/api/runs/{run_id}/export.html')
         assert code == 200

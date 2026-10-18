@@ -45,7 +45,8 @@ assert(html.includes('6 / 7'));
 assert(html.includes('data-label="Design rank">1'));
 assert(html.includes('No reported alignments; specificity untested'));
 assert(html.includes('data-label="Design score"><strong>Not available'));
-assert(html.includes('same default order as Candidates'));
+assert(vm.runInContext('screeningComparisonControls()',context)
+ .includes('Same default order as Candidates'));
 vm.runInContext('state.screeningSort="hit_count"',context);
 html=vm.runInContext('resultsTable({},state.entries,19,true)',context);
 assert.equal([...html.matchAll(/data-screenrow="([^"]+)"/g)][0][1],'zero');
@@ -53,6 +54,23 @@ assert(html.includes('aria-sort="ascending"'));
 const original=vm.runInContext('JSON.stringify(state.entries)',context);
 vm.runInContext('screeningTableOrder(state.entries,"perfect_hits");',context);
 assert.equal(vm.runInContext('JSON.stringify(state.entries)',context),original);
+// Plot and table must share the cohort, chosen reference and count order.
+vm.runInContext(`
+state.screeningEvidence='local:refA';
+state.screenings={genomic:{byEvidence:{'local:refA':Object.fromEntries(
+ state.entries.filter(e=>e.row.candidate!=='unknown').map(e=>[e.row.candidate,e])),
+ 'local:refB':{best:entry('best',1)}}},
+ transcript:{byEvidence:{'local:refA':{best:entry('best',20),second:entry('second',30)}}}};
+`,context);
+assert.deepEqual(ids('screeningComparisonDecisions().map(d=>d.candidate.id)'),
+ ['zero','second','best','partial']);
+vm.runInContext('state.screeningPlotLimit=10',context);
+assert.deepEqual(ids('screeningComparisonDecisions().map(d=>d.candidate.id)'),
+ ['zero','second','best','partial']);
+vm.runInContext('state.screeningEvidence="local:refB";state.screeningPlotLimit=null',context);
+assert.deepEqual(ids('screeningComparisonDecisions().map(d=>d.candidate.id)'),['best']);
+assert.equal(vm.runInContext('comparisonEntry("genomic","best").row.hit_count',context),1);
+assert.equal(vm.runInContext('comparisonEntry("transcript","best")',context),undefined);
 vm.runInContext('renderOffTarget=()=>{};',context);
 handlers.get('click')({target:{closest:selector=>selector==='[data-screensort]'
  ? {dataset:{screensort:'hit_count'}}:null}});
