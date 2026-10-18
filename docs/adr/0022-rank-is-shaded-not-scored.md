@@ -5,10 +5,9 @@
 
 ## Context
 
-The user asked for the top ten saRNAs to be clearly distinguishable in the promoter map, and
-they now are: full lane height, a rank numeral, and a fill that separates them from the other
-passing targets. Their follow-up was that ten identical dark marks had become crowded, and they
-proposed colouring them "from green (best) to red (worst score)".
+The top ten saRNAs need to be distinguishable in the promoter map: full lane height, a rank
+numeral and a fill that separates them from other passing targets. Identical dark marks became
+crowded, prompting consideration of a green-to-red colour scale.
 
 The request is reasonable and the underlying problem is real. The difficulty is what a
 green-to-red ramp asserts. Rank here is **preferences met, counted equally** (ADR 0006). On the

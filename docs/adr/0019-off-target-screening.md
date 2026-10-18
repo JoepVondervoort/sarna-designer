@@ -12,8 +12,8 @@ where else those sequences occur. This ADR records the decisions behind the answ
 ## Decisions
 
 **Opt-in and asynchronous.** The design run completes and is fully readable first; a button
-starts a search that reports when it finishes. This is the user's own stated requirement and it
-is also the right default for a second reason: starting a search sends this run's candidate
+starts a search that reports when it finishes. Explicit initiation matters because a remote
+search sends this run's candidate
 sequences to NCBI, and that should be a deliberate act. The queries are 19-mers drawn from the
 public human genome, so no novel sequence is disclosed, but a search does tell NCBI which gene
 the researcher is working on, and the interface says so beside the button.
@@ -116,8 +116,8 @@ Three changes, one of which was a defect rather than a tuning opportunity.
 **A screening was occupying the capacity the rest of the app needs.** `AppRouter` held one
 `ThreadPoolExecutor(max_workers=2)` and submitted design runs, batch children *and* screenings to
 it. A design finishes in under a second; a screening waits on NCBI for seven to fifteen minutes
-and may wait thirty. Starting both scopes (which is the supported use, and the one the user asked
-for) and therefore occupied every worker, so the next design sat in `Queued` until a search came
+and may wait thirty. Starting both supported scopes occupied every worker, so the next design
+sat in `Queued` until a search came
 back. This ADR's own premise is that the researcher reads their candidates while the search runs;
 that only holds if the search is not holding the capacity the reading needs. Screenings now have
 their own two-worker pool, which also caps this app at two concurrent NCBI jobs. A test submits

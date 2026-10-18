@@ -1,15 +1,7 @@
-"""The writing rule, enforced rather than described.
+"""Check repository editorial conventions and prohibited text encodings.
 
-The user's rule is that nothing a reader sees should look as though a language model wrote it,
-and the clearest marker is the em dash. The whole tree was swept once on 8 October 2026. A
-sweep that is not enforced comes undone within a few edits, which is why this is a test and not
-a paragraph in a style guide.
-
-An en dash is **not** covered, and must not be: this project writes real ranges, `-1000 to
--100`, `15 to 20 %`, `B1 to B18`, and a dash is the right character for several of them.
-
-``legacy/`` is exempt. It is preserved verbatim as the scientific ground truth and is excluded
-from every other check for the same reason.
+Documentation, interface text and source comments use consistent punctuation and concrete
+language. Historical legacy scripts and generated output are excluded.
 """
 
 from pathlib import Path
@@ -61,7 +53,7 @@ PHRASES = {
     "game-chang": "a claim, not a description",
 }
 """Deliberately short. Every entry has no legitimate use in this codebase, which is why it can
-be banned outright. Words that are both an AI tell and a real technical term, `harness` for a
+be banned outright. Words that are also legitimate technical terms, `harness` for a
 test harness and `comprehensive` in a caveat about what a screening is not, are left alone: a
 check that cries wolf gets suppressed, and then it checks nothing."""
 
@@ -70,6 +62,10 @@ def text_files() -> list[Path]:
     """Return every human-readable file this rule applies to."""
     found: list[Path] = []
     for path in ROOT.rglob("*"):
+        if path.relative_to(ROOT).as_posix() in {
+            "CLAUDE.md", "docs/development/continuation-plan.md",
+        }:
+            continue
         if not path.is_file() or path.suffix.lower() not in SUFFIXES:
             continue
         if SKIP_DIRECTORIES & set(path.relative_to(ROOT).parts):
@@ -119,8 +115,8 @@ def test_the_sweep_actually_covers_the_repository(files: list[Path]) -> None:
 def test_no_em_dash_outside_legacy(files: list[Path]) -> None:
     offenders = scan(files, EM_DASH)
     assert not offenders, (
-        "an em dash is the clearest marker of text that looks machine-written, and this "
-        "project does not use one. Replace it with a comma, a colon, a full stop or "
+        "Repository style uses commas, colons, full stops and parentheses instead of "
+        "em dashes. Replace the character with a comma, a colon, a full stop or "
         "parentheses, whichever the sentence actually wants:\n"
         + "\n".join(offenders[:12])
     )
@@ -146,7 +142,7 @@ def test_no_banned_phrase(files: list[Path]) -> None:
             lowered = path.read_text(encoding="utf-8", errors="replace").lower()
             if phrase in lowered:
                 found.append(f"  {path.relative_to(ROOT)}: {phrase!r}, {why}")
-    assert not found, "phrasing that reads as machine-written:\n" + "\n".join(found[:12])
+    assert not found, "Phrasing outside the editorial conventions:\n" + "\n".join(found[:12])
 
 
 def test_the_exemption_marker_is_honoured_and_narrow(tmp_path: Path) -> None:

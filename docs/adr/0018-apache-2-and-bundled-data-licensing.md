@@ -1,7 +1,7 @@
 # ADR 0018: Apache-2.0 for the code, and the bundled data's actual terms
 
 Date: 2026-10-07. Status: accepted. Supersedes the placeholder `LICENSE` and the
-"licensing undecided" entries in `README.md` and `CLAUDE.md`.
+earlier documentation describing licensing as undecided.
 
 ## Context
 
@@ -24,7 +24,7 @@ the reciprocal termination clause for anyone who sues over it, protects both the
 downstream users at no practical cost. MIT would have been defensible; it simply offers nothing
 on that axis.
 
-The accepted direction in `CLAUDE.md` was always "MIT/Apache"; this fixes the form.
+This decision resolves the initial choice between MIT and Apache-2.0.
 
 Consequences: Apache-2.0 obliges anyone redistributing a modified version to state their changes
 and to carry the `NOTICE` file (section 4). `NOTICE` is therefore part of the distribution, listed
@@ -39,8 +39,8 @@ International License".
 
 The repository's label was wrong **in the restrictive direction**, which is the more insidious
 error of the two: it would have led users to refuse uses that are in fact permitted, and it
-suggested a share-alike obligation that does not exist. `CLAUDE.md` had already flagged the
-contradiction and, correctly, warned against assuming unbundling was legally required. It is not.
+suggested a share-alike obligation that does not exist. The metadata review identified
+this contradiction; removing the bundled matrices was not required to resolve it.
 
 CC BY 4.0 permits redistribution and commercial use with attribution and imposes no share-alike
 term, so the subset ships as it is, with attribution in `NOTICE` and the corrected licence string

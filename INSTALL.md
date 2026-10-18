@@ -607,4 +607,4 @@ sarna-designer --port 8001
 - Environment variables are documented in `src/sarna/settings.py`; `SARNA_CONTACT_EMAIL` is the
   address Ensembl asks you to send with queries, and `SARNA_OFFLINE=1` forbids all network use.
 - Developing on it instead? `git clone`, then `.venv/bin/python -m pytest -q`. See
-  [CLAUDE.md](CLAUDE.md).
+  [the development guide](docs/development/environment.md).

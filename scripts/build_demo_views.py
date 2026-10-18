@@ -80,13 +80,13 @@ a {{color:#0f6e76;}} li {{margin:16px 0;}} code {{background:#e6e9e3;padding:2px
 </style></head><body>
 <h1>saRNA local previews</h1>
 <p>These are frozen design records with interactive viewing. Settings are changed in Python
-and regenerated; the settings editor and saved-run workbench are still planned.</p>
+and regenerated. Use the local app for editable settings and saved runs.</p>
 <ul>
 {real_gene}
 <li><a href="demo-default.html">Synthetic demo: Wang defaults</a> (all default settings,
-with location-dependent checks explicitly unavailable.</li>
-<li><a href="demo-custom.html">Synthetic demo: custom settings</a>) upper GC bound 65%,
-position-19 as a preference, TSS window deliberately off. See the recorded custom departures.</li>
+with location-dependent checks explicitly unavailable).</li>
+<li><a href="demo-custom.html">Synthetic demo: custom settings</a> (upper GC bound 65%,
+position-19 as a preference, TSS window deliberately off). See the recorded custom departures.</li>
 </ul>
 <p>The two synthetic pages use identical DNA. The custom page changes three settings together;
 the overall difference cannot be attributed to just one of them.</p>

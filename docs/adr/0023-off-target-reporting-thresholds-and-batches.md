@@ -66,7 +66,7 @@ column, and silently changing what a stored column means is worse than carrying 
 A candidate with five or more alignments at Wang's threshold is summarised as binding in many
 places and its alignment list is collapsed behind a count rather than drawn in full.
 
-Five is the user's number and nothing in the literature supports it. It is therefore declared
+Five is a project-selected count, without literature validation. It is therefore declared
 as what it is: a **display** threshold that changes no rank, excludes no candidate, and alters
 no stored measure. The underlying alignments stay in the record and the list expands on demand.
 

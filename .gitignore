@@ -50,3 +50,7 @@ docs/*.pdf
 
 # Built wheels for sending to colleagues; rebuild with `python -m build --wheel`.
 dist/
+
+# Local assistant instructions and session notes
+/CLAUDE.md
+/docs/development/continuation-plan.md

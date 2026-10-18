@@ -109,8 +109,9 @@ class TestEveryDesignedTargetIsWhereItSaysItIs:
     when the gene is on the minus strand.
 
     It is the only test that can catch an off-by-one or an inverted strand in
-    ``Promoter.genomic_interval``, ``offset_of`` and ``span_of``, which CLAUDE.md names as
-    defect B1's home. A sign error there produces candidates that are internally consistent,
+    ``Promoter.genomic_interval``, ``offset_of`` and ``span_of``, the coordinate-conversion
+    methods associated with legacy defect B1. A sign error there produces candidates that are
+    internally consistent,
     pass every rule, export cleanly, and point at the wrong piece of DNA, the exact failure
     this project exists to prevent, and one no amount of recorded-payload testing would reveal.
 

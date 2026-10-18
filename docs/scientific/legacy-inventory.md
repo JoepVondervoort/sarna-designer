@@ -8,7 +8,7 @@ Status: **Phase 0 / Discovery.** Living document, updated during requirements gr
 |---|---|---|---|
 | `saRNA Promoter Scanner.py` | ~560 | Promoter-sequence → 19-mer candidate design + rank | Attached in chat |
 | `saRNA by Promoter Sequence.py` | ~560 | n/a | **Byte-identical duplicate** of the above. Not a second implementation. |
-| `EpiMarker checker .py` | 837 | Gene symbol → Ensembl TSS → ±30 kb → locate *known* saRNAs → histone ChIP enrichment + RandomForest | On disk at `/home/jvon/EpiMarker checker .py` |
+| `EpiMarker checker .py` | 837 | Gene symbol → Ensembl TSS → ±30 kb → locate *known* saRNAs → histone ChIP enrichment + RandomForest | Preserved as `legacy/epimarker_checker.py` |
 | `af22_data/*.bw` | 6 files, ~890 MB | AF22 histone ChIP-seq bigWigs, GSE108506, 50 bp bins | On disk, already downloaded |
 | `20250428_saRNA_designs_with_epigenomic_marker_scanning/` | empty | Output dir from a prior run | n/a |
 | `Designs.xlsx` | **MISSING** | Input to EpiMarker: per-gene columns of 19-mers labelled positive/non control | Script aborts without it |
@@ -157,10 +157,11 @@ External services: Ensembl REST (`xrefs/symbol`, `lookup/id`, `sequence/region`)
 NCBI GEO FTP (bigWig download). No assembly pinned, no caching, no rate limiting,
 no retries on either.
 
-## 10. Environment (verified 2026-10-06)
+## 10. Original audit environment
 
-Python 3.11.4 · Node v20.20.0 · git 2.34.1 · Linux 6.18.40.1-microsoft-standard-WSL2 ·
-working dir `/home/jvon` on the Linux filesystem (good, not `/mnt/c`) · not yet a git repo.
+The initial audit on 6 October 2026 used Python 3.11.4, Node 20.20.0 and WSL2.
+These are historical audit details, not current setup requirements. See the
+[development guide](../development/environment.md) for a reproducible checkout setup.
 
 ---
 

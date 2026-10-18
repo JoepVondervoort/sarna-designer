@@ -140,7 +140,7 @@ counting, ranking, candidate verdicts and exports together, or it has not been c
 **Off**
 A rule a configuration has deliberately removed. *Off* is not *failed* and not
 *not-applicable*: the rule produced no result because it was not evaluated, and the run records
-that the omission was a choice. See *Three outcomes* in `CLAUDE.md`.
+that the omission was a choice. See [the evaluator contract](docs/adr/0007-evaluators-take-a-candidate-context.md).
 
 **Custom configuration**
 A configuration that departs from its base preset in any way, a parameter value, a selected

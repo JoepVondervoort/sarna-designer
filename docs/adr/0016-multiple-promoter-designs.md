@@ -1,7 +1,8 @@
 # ADR 0016: Select multiple promoter references and preserve separate design contexts
 
-Date: 2026-10-07. Status: accepted implementation of the user's request to continue building
-an adjustable tool for human genes with multiple promoters.
+Date: 2026-10-07. Status: accepted.
+
+The workbench supports adjustable design for human genes with multiple promoters.
 
 ## Context and decision
 

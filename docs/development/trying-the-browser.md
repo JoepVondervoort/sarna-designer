@@ -1,9 +1,11 @@
 # Open and test the current browser
 
-There are two interfaces, at different levels of trust. The **generated pages** below are
-viewers over a finished run: settings are changed in Python and the page regenerated, and they
-have tests behind their data. The **local app** further down runs new designs from a gene symbol
-and saves them, and has no tests behind it yet. Installers are still planned.
+The **generated pages** below are viewers over a finished run: settings are changed in
+Python and the page regenerated. The **local app** runs new designs from a gene symbol,
+supports browser-editable settings and saves runs. Automated tests cover the engine, application
+routes and exports; separate Chromium checks exercise browser interactions. For installation
+and the current workflow, start with the [workbench guide](local-workbench.md).
+Fresh Windows/macOS installations still need platform validation.
 
 ## Start with the offline examples
 
@@ -90,7 +92,7 @@ For automated engine checks:
 .venv/bin/python -m pytest -q
 ```
 
-## The local app, which runs but has no tests behind it
+## The local application
 
 `src/sarna/app/` is a local workbench: a loopback-only Python service and the page it serves.
 
@@ -100,15 +102,17 @@ For automated engine checks:
 curl -s localhost:8001/api/catalogue | head -c 300   # rules, presets and cell lines
 ```
 
-It was written in one pass on 7 October 2026 and has **no automated tests and no recorded browser
-check**. Use it to see what it does, not to trust what it says. Runs you make with it are saved,
-so anything you find can be reopened and reported. Compare what the page claims against the
-generated pages above and against the engine, which is tested.
+Automated tests exercise application routes, saved runs, configuration changes and exports.
+The Chromium verification script also checks the live browser workflow, including screening
+displays and mobile layout. Saved runs can be reopened for inspection. Software verification
+does not establish that a candidate will activate its target; see the
+[scientific evidence guide](../scientific/evidence-guide.md).
 
 The first run for a gene needs Ensembl access; afterwards `.cache/ensembl` serves it. A request
 for a promoter window that is not in the cache fails with the exact query it would have sent.
 
-Every route can be exercised without a socket, which is how the app's tests should be written:
+Most route behavior can be exercised without a socket; selected integration checks also use
+real localhost HTTP. For a direct route check:
 
 ```python
 from pathlib import Path
@@ -129,12 +133,13 @@ pages: **Current multi-promoter workbench** and **Remaining continuation**.
 
 Page one is the dataflow as built: input, reference choice, one Python run per reference, saved
 local comparison, the opt-in off-target screen, and the order-ready duplex that the exports are
-written from. The amber boxes are the only place anything leaves the machine (pressing the
-screening button sends candidate 19-mers to NCBI, and nothing else does. On page two, green
-marks work that is finished.
+written from. Remote BLAST sends candidate sequences to NCBI; local reference screening
+keeps candidate queries on the computer. Gene and annotation retrieval contact their source
+services, and reference preparation downloads external data. On page two, green marks completed
+work. See the current workbench and screening guides for implemented behavior.
 
 [website-flow.svg](../architecture/website-flow.svg) is a browser-viewable preview, and it is
-**generated**) edit the `.drawio` and re-run:
+**generated**: edit the `.drawio` and re-run:
 
 ```bash
 .venv/bin/python scripts/render_flow_diagram.py

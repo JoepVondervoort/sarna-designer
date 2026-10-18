@@ -466,10 +466,10 @@ class TestTrackDiscovery:
 @pytest.fixture(scope="module")
 def real_reader() -> Af22ChromatinReader:
     """Open the real AF22 tracks, skipping the whole class when they are absent."""
-    from pyliftover import LiftOver
-
     if not find_tracks():
         pytest.skip("AF22 tracks not present")
+    from pyliftover import LiftOver
+
     built = open_af22_reader()
     assert built is not None
     assert isinstance(built._converter, LiftOver)

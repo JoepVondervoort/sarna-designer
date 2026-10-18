@@ -13,6 +13,7 @@ import zipfile
 from collections.abc import Callable
 from contextlib import closing
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -498,6 +499,8 @@ def test_tool_self_check_fails_before_large_downloads(
     def refuse(*_args: object) -> None:
         raise ValueError("Native self-check failed")
 
+    monkeypatch.setattr(shutil, "disk_usage",
+                        lambda _path: SimpleNamespace(free=25 * 1024**3))
     monkeypatch.setattr(manager, "_download", download)
     monkeypatch.setattr(manager, "command", lambda *_args: None)
     monkeypatch.setattr(manager, "_tool_check", refuse)

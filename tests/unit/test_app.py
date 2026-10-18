@@ -546,7 +546,7 @@ def test_local_routes_serve_real_setup_and_reject_unknown_files(tmp_path: Path):
         assert b'"wang-2015"' in router.dispatch("GET", "/api/catalogue")[2]
         assert b'id="gene-symbol"' in router.dispatch("GET", "/")[2]
         assert b"Design saRNAs" in router.dispatch("GET", "/")[2]
-        assert router.dispatch("GET", "/../CLAUDE.md")[0] == 404
+        assert router.dispatch("GET", "/../pyproject.toml")[0] == 404
         assert router.dispatch("GET", "/favicon.ico")[0] == 200
     finally:
         router.close()

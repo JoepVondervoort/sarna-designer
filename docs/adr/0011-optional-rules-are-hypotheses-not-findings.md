@@ -29,8 +29,8 @@ it from the paper this project treats as canonical.
 
 The forces in tension:
 
-- A user asked for these options, and refusing to offer them is not neutrality, it just moves
-  the choice outside the tool, where it is made without provenance.
+- Researchers need to investigate alternative criteria. Recording those choices in the tool
+  preserves provenance that would otherwise be lost in external analyses.
 - Adding a rule to the default ranking changes every design the project recommends. The evidence
   above does not come close to justifying that.
 - "Optional" is not self-explaining. A rule offered without its cost is a trap (the existing

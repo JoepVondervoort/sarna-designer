@@ -14,8 +14,8 @@ coding transcripts. They span chr2:166,073,669 to chr2:166,149,213, over 75 kb. 
 them moves the promoter window by up to that distance, which is to say the choice decides which
 sequence gets designed against, entirely.
 
-The legacy pipeline took the first transcript Ensembl returned. The user's brief lists "never
-assume one TSS" among the silent assumptions this project exists to remove.
+The legacy pipeline took the first transcript Ensembl returned. Explicit transcript selection
+removes the silent assumption that each gene has one relevant TSS.
 
 Candidate policies:
 

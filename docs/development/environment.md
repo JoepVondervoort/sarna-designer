@@ -1,25 +1,42 @@
-# Development environment (WSL)
+# Development environment
 
-Verified on this machine, 2026-10-06.
+The package requires **Python 3.11**. Use an isolated virtual environment for development.
+Git is required to clone the repository; Node.js is used by JavaScript checks in the test suite.
+The application itself has no Node.js runtime requirement.
 
-| Component | Version | Notes |
-|---|---|---|
-| OS | Linux 6.18.40.1-microsoft-standard-WSL2 | WSL2 on Windows |
-| Python | 3.11.4 | miniconda at `~/miniconda3` |
-| Node | v20.20.0 | via nvm at `~/.nvm` |
-| git | 2.34.1 | |
-| `gh` CLI | **not installed** | needed for the `to-tickets` / `pr` workflow |
-| `uv` | **not installed** | recommended Python package manager |
+## Set up a checkout
 
-## Filesystem placement
+```bash
+git clone https://github.com/JoepVondervoort/sarna-designer.git
+cd sarna-designer
+python3.11 -m venv .venv
+.venv/bin/python -m pip install -e ".[app,dev]"
+```
 
-The repository lives at `~/sarna-designer`, i.e. on the **Linux** filesystem, deliberately
-**not** under `/mnt/c`. Cross-OS filesystem access in WSL2 is slow and `inotify` file-watching
-is unreliable there, which breaks test watchers and frontend dev servers. Keep it here.
+The repository currently requires GitHub read access. On Windows, use
+`.venv\Scripts\python.exe` in place of `.venv/bin/python`, or follow the
+[application installation guide](../../INSTALL.md) if you only need to run the workbench.
 
-The ~890 MB of AF22 bigWig files at `~/af22_data/` stay outside the repo and are gitignored.
+## Verify changes
 
-## Caveat on Python
+```bash
+.venv/bin/python -m pytest -q
+.venv/bin/python -m ruff check .
+.venv/bin/python -m mypy src tests scripts
+```
 
-`python3` currently resolves to a miniconda base environment. The project will use an isolated
-virtualenv (`.venv/`) so the base environment is never mutated.
+GitHub Actions runs these checks on Ubuntu with Python 3.11. The default suite excludes
+live-network tests. Optional AF22 track tests skip when their data are unavailable.
+Browser interactions have a separate [verification script](../../scripts/verify_workbench_browser.py)
+that takes a Chromium executable through `--chrome`.
+
+## Optional genomics data
+
+Install `.[app,dev,genomics]` to read local AF22 bigWig tracks. The genomics extra adds
+pyBigWig, NumPy and pyliftover; native Windows support for pyBigWig is limited, so use Linux,
+WSL or macOS for these tracks. Keep downloaded genomic data outside the checkout and set
+`SARNA_AF22_DIR` to their location. The core application works without them.
+
+For WSL development, keep the checkout on the Linux filesystem to reduce cross-filesystem
+I/O. Application runs and reference indexes are stored separately from the source tree;
+see [reproducibility](reproducibility.md) and [local screening validation](local-screening-validation.md).

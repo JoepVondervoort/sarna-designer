@@ -5,7 +5,7 @@ Date: 2026-10-07. Status: accepted implementation of accepted constraints 4, 11 
 ## Context
 
 A candidate carries a 19 nt RNA core, which is what every rule is evaluated against. What a
-researcher buys is two 21-mers. `CLAUDE.md` named this the largest gap before bench use: the
+researcher buys is two 21-mers. The initial design review identified a gap before bench use: the
 chemistry question was already settled and only the export was missing.
 
 Chapter 2's supplementary material settles the chemistry, a 2 nt **dTdT** 3' overhang on **both**

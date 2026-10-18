@@ -105,18 +105,17 @@ yet. Two routes:
 - **AF22 has no public ChIP-seq.** The project already holds AF22 histone bigWigs (GSE108506), which
   give chromatin state rather than factor occupancy. H3K4me3 and H3K27ac at a promoter is evidence
   it is active in AF22, which is arguably more useful for explaining chapter 4's result than any
-  single factor would be. Blocked on the GRCh37/GRCh38 reconciliation (defect B15, ADR 0004).
+  single factor would be. The current AF22 reader uses guarded GRCh38-to-GRCh37 liftover;
+  see [the assembly decision](../adr/0004-assembly-grch38-canonical-liftover-at-adapter.md).
 
 The asymmetry is worth stating plainly: the tool will be able to say much more about HeLa than about
 AF22, and AF22 is the disease-relevant model. That is a property of the available data, not of the
 tool, and the interface should say so rather than letting an empty AF22 column read as a negative
 result.
 
-## Licensing constraint
+## Licensing and attribution
 
-JASPAR matrices are distributed under **CC BY-NC-SA 4.0**, non-commercial, share-alike. Bundling
-them in `src/sarna/regulatory/data/` therefore constrains this package's own licence, which
-[`LICENSE`](../../LICENSE) records as undecided. For an internal research tool this is no obstacle.
-It would become one if the tool were ever distributed commercially, and the alternative is to fetch
-matrices at runtime rather than ship them. Flagged here so the decision is made deliberately rather
-than discovered later.
+The bundled JASPAR CORE subset is distributed under **CC BY 4.0**, with attribution in
+[NOTICE](../../NOTICE). The earlier CC BY-NC-SA label was incorrect and was corrected on
+7 October 2026. The application code uses Apache-2.0; see
+[the licensing decision](../adr/0018-apache-2-and-bundled-data-licensing.md).

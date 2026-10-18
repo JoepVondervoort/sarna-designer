@@ -8,11 +8,9 @@
 [ADR 0012](0012-mane-select-or-refuse.md) settled *which* transcript this tool offers first: MANE
 Select, or it refuses to choose. That ADR is about reaching a defensible reference. It says
 nothing about whether the reference it reaches is a transcript the researcher's cells actually
-make, and the user asked for exactly that:
-
-> it should show the "main" transcript on top and it should also show as much as possible which
-> transcripts are transcripted in which cells. So for a researcher it is nice to know if certain
-> transcripts are transcript in the brain, or af22 cells for example.
+make. Researchers need transcript-level expression evidence beside the annotated default,
+including tissue context and an explicit distinction between measured expression and missing
+cell-line evidence.
 
 The two questions can disagree, and for this project's own flagship gene they do. Measured
 against GTEx v10 on 8 October 2026:
