@@ -17,9 +17,9 @@ def test_resume_crosses_the_http_boundary_without_resubmitting(tmp_path: Path) -
     collected = Event()
     calls = []
 
-    def collect(identifier: str) -> None:
-        calls.append(identifier)
-        service.store.finish_screening(identifier, {"request_id": "EXISTING-RID",
+    def collect(screening_id: str, blast_client: object = None, sleep: object = None) -> None:
+        calls.append(screening_id)
+        service.store.finish_screening(screening_id, {"request_id": "EXISTING-RID",
                                                     "candidates_searched": ["saRNA-001"]})
         collected.set()
 

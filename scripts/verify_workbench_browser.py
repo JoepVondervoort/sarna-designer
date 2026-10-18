@@ -992,7 +992,9 @@ def check_offtarget(browser: Browser, blast: StubBlast, screenshots: Path | None
         widths = browser.evaluate(
             "[...document.querySelectorAll('.ot-hit-info')]"
             ".map(n=>n.getBoundingClientRect().width)")
-        assert widths and min(widths) > 200, f"Mobile hit content is squeezed: {widths}"
+        assert isinstance(widths, list) and widths and min(widths) > 200, (
+            f"Mobile hit content is squeezed: {widths}"
+        )
         browser.call("Emulation.setDeviceMetricsOverride", width=1440, height=1100,
                      deviceScaleFactor=1, mobile=False)
     browser.evaluate("setWorkspaceTab('candidates');document.querySelector('.candidate-context').open=true")

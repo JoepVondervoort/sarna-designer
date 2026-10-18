@@ -385,9 +385,9 @@ class AppRouter:
             if len(parts) == 4 and parts[3] == "export.screening.csv":
                 candidates = _selected_for_export(snapshot, query)
                 output = io.StringIO(newline="")
-                writer = csv.DictWriter(output, fieldnames=SUMMARY_COLUMNS)
-                writer.writeheader()
-                writer.writerows(screening_summary(
+                summary_writer = csv.DictWriter(output, fieldnames=SUMMARY_COLUMNS)
+                summary_writer.writeheader()
+                summary_writer.writerows(screening_summary(
                     run_id, candidates, self._screening_records(run_id)))
                 return 200, "text/csv; charset=utf-8", output.getvalue().encode()
             if len(parts) == 4 and parts[3] == "export.xlsx":

@@ -1,543 +1,174 @@
 # saRNA Designer
 
-An internal research application for designing promoter-targeting **small activating RNAs**
-(saRNAs), taking a researcher from a gene symbol or a pasted promoter sequence through to
-ranked, annotated, exportable duplex candidates.
+**An auditable research workbench for promoter-targeting small activating RNA design.**
 
-> **Status: local research workbench.**
-> A gene symbol resolves to a promoter through Ensembl, the engine designs and ranks candidates
-> on either strand and explains every verdict, the promoter is annotated with CpG islands,
-> regulatory features and TF motif predictions, and the whole run renders as one self-contained
-> interactive HTML page. The local app adds gene lookup, browser-editable rules, Python reruns,
-> saved runs, local off-target screening with optional NCBI cross-checks, and exports including a spreadsheet of every
-> candidate with its values.
->
-> The engine is now validated against measured activity for the first time, against 125 assayed
-> sequences, 14 of them activators. The position-19 gate excludes CEBPA, a known activator;
-> the default window excludes 10 of 14 when recovered locations are used.
-> Read [`docs/scientific/empirical-validation.md`](docs/scientific/empirical-validation.md) for
-> what that does and does not establish. Treat a high rank as a prioritisation aid, not a
-> prediction of activity.
+saRNA Designer takes a human gene symbol or promoter sequence through candidate generation,
+literature-derived design checks, off-target screening and export of RNA duplexes for ordering.
+It connects sequence design with the evidence needed to explain a shortlist: transcript choice,
+genomic coordinates, rule provenance, strand-loading predictions and screening records.
 
-## Installing it, complete steps
+Developed by **Joep van de Vondervoort**, the project brings saRNA biology, critical evaluation
+of design assumptions and reproducible research software into one workflow.
 
-Everything needed is below. [`INSTALL.md`](INSTALL.md) is the same thing with more hand-holding
-and a troubleshooting section; this is the whole procedure.
+[![Checks](https://github.com/JoepVondervoort/sarna-designer/actions/workflows/checks.yml/badge.svg)](https://github.com/JoepVondervoort/sarna-designer/actions/workflows/checks.yml)
+![Python 3.11](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-087F8C)](LICENSE)
 
-### What you need first
+[Installation](INSTALL.md) · [Scientific evidence](docs/scientific/evidence-guide.md) ·
+[Empirical evaluation](docs/scientific/empirical-validation.md) ·
+[Architecture decisions](docs/adr/) · [Screenshot gallery](docs/assets/screenshots/README.md)
 
-| | Needed? | How |
-|---|---|---|
-| **PowerShell** | Yes, it is where you type | Already on Windows. Press <kbd>Win</kbd>, type `powershell`, Enter. |
-| **`uv`** | Yes, the only install | One line, in step 1 below. |
-| **Python** | No | `uv` downloads the right version (3.11) into its own folder. Your system Python is untouched. |
-| **WSL** | **No** | Not used. See [the one exception](#optional-af22-histone-tracks) below. |
-| **Administrator rights** | No | Everything goes under your own user account. |
-| **Docker, Anaconda, Visual Studio** | No | None of them. |
-| **Git** | Only for route B | [Git for Windows](https://git-scm.com/download/win) |
+![SCN1A promoter landscape with transcript reference, design windows, candidate positions and exclusion reasons](docs/assets/screenshots/promoter-landscape.png)
 
-### Windows, start to finish
+*SCN1A, using cached Ensembl promoter data and the default Wang 2015 configuration.
+The interface retains excluded targets and explains the available checks. Screenshots show
+software outputs, not experimentally confirmed activation.*
 
-**1. Install `uv`** ([what this is](https://docs.astral.sh/uv/)). In PowerShell:
+## Why this project exists
 
-```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
+Promoter-targeting saRNA design involves decisions that a sequence score alone cannot capture.
+A gene can have multiple transcription start sites; design recommendations have different
+evidential support; strand and assembly mistakes change the interpretation of a target.
+A candidate that passes a checklist still needs experimental validation.
 
-If your organisation blocks that, `winget install --id=astral-sh.uv -e` does the same job.
+This project replaces disconnected design and annotation scripts with a workflow in which
+those decisions are explicit, inspectable and saved with the result.
 
-**2. Close PowerShell and open it again.** This is required, because the new command is only visible to a
-fresh window. Check it worked:
+## From target to research shortlist
 
-```powershell
-uv --version
-```
+| Stage | What the workbench provides |
+|---|---|
+| **Define the promoter** | Human gene lookup through Ensembl, MANE Select or explicit reference selection, assembly-tagged coordinates and transcript-oriented sequence. Pasted DNA is also supported. |
+| **Generate and inspect** | Candidate enumeration, GC and sequence criteria, CpG-island checks where context permits, TSS-relative positions and an interactive promoter map. |
+| **Explain the design** | Per-rule citations, rationale and verdicts; mandatory gates separated from preferences; editable settings with recorded departures from the baseline. |
+| **Inspect the duplex** | Guide/passenger predictions, terminal thermodynamics, antiparallel strand display and 3′ dTdT overhangs for the project's order chemistry. |
+| **Review off-target evidence** | Local human genome and transcript screening against pinned references, with optional remote NCBI BLAST cross-checks. Missing and incomplete evidence remain visible. |
+| **Export and reproduce** | Order CSV, screening summaries, Excel, self-contained HTML and whole-run JSON; offline replay of the core design calculation. |
 
-**3. Install the tool.** This repository is **private**, so pick the route that applies:
+![Candidate inspection showing paired RNA strands, terminal energies, guide prediction and individual rule verdicts](docs/assets/screenshots/duplex-inspection.png)
 
-*Route A, from a `.whl` file you were sent* (needs no GitHub account and no Git):
+*Candidate-level inspection connects the proposed duplex to the calculations and design rules
+behind it. Strand-loading predictions do not establish activation.*
 
-Save the wheel into **Downloads** without extracting it. If you received an outer ZIP,
-choose **Extract All** once, then copy the `.whl` file inside into Downloads. Do not extract
-the inner wheel. A ZIP icon is okay; a folder named `.whl` is not.
+## Scientific approach and current evidence
 
-Paste each **complete line** below separately into PowerShell and press Enter. Do not paste
-only the quoted path, and do not drag a file into a partially typed command.
+The default configuration implements the recommendations in
+[Wang et al., 2015](https://doi.org/10.14440/jbm.2015.39).
+Mandatory criteria determine inclusion; surviving candidates are ordered by the number of
+preferences met, with thermodynamic asymmetry as a tie-break. Equal preference weighting is a
+project choice, not a published efficacy model. Optional siRNA-derived criteria and exploratory
+hypotheses are distinguished from published saRNA guidance.
 
-First verify the file:
+The bundled evaluation contains **125 assayed sequences, including 14 labelled activators**.
+It makes limitations of the design assumptions measurable:
 
-```powershell
-Test-Path -LiteralPath "$env:USERPROFILE\Downloads\sarna_designer-0.2.0-py3-none-any.whl" -PathType Leaf
-```
+- The sequence-only preference score **has not demonstrated discrimination above chance**.
+  This evaluation does not validate the complete production ranking with its thermodynamic tie-break.
+- Known activators can fail published gates: the CEBPA example fails the position-19 criterion,
+  and the default location window excludes 10 of 14 labelled activators using recovered locations.
+- The dataset is small, heterogeneous and restricted by the original design process.
+  It can reveal exclusions of known activators, but cannot establish performance on unselected
+  candidates or independently validate hypotheses derived from the same data.
 
-It must print **`True`**. If it prints `False`, check the filename and location using
-[the detailed instructions](INSTALL.md#step-3--install-sarna-designer) before continuing.
-These commands assume that exact filename; replace it in both commands if your release has
-another name. Leave `$env:USERPROFILE` as written; it uses your own user folder automatically.
+**Use rank to prioritise investigation, not to predict activation.** Off-target alignments
+also do not establish biological specificity. The next scientific validation step is an
+independent, prospectively defined evaluation across relevant targets and cell contexts.
 
-Then install:
+Read the [empirical evaluation](docs/scientific/empirical-validation.md) for methods and label
+caveats, and the [evidence guide](docs/scientific/evidence-guide.md) for interpretation.
 
-```powershell
-uv tool install --python 3.11 "$env:USERPROFILE\Downloads\sarna_designer-0.2.0-py3-none-any.whl[app]"
-```
+## Engineering decisions that protect scientific interpretation
 
-The `[app]` installs the browser interface and must stay inside the quotes. An existing Python
-3.14 installation is fine; this command selects 3.11 separately. If PowerShell shows `>>`,
-press **Ctrl+C** and paste the entire command again.
+- **Coordinate correctness:** explicit sequence, TSS and genomic coordinate conventions,
+  with strand-aware conversion and assembly boundaries covered by regression tests.
+- **Traceable decisions:** citations and rationale travel with rules; custom roles and parameter
+  changes are recorded rather than silently treated as published recommendations.
+- **Explicit unknowns:** unavailable context differs from a negative finding. Sequence motif
+  predictions, tissue expression and chromatin observations remain distinct evidence axes.
+- **Reproducible calculations:** saved inputs, resolved configurations and software fingerprints
+  support offline replay. Annotation enrichment and screening records are preserved, not replayed.
+- **A reusable Python core:** the design engine is independent of the browser interface and
+  network services, so it can also run in scripts or notebooks.
 
-*Route B, from this repository*, if you have been added to it and have
-[Git for Windows](https://git-scm.com/download/win):
+The [architecture decision records](docs/adr/) explain the trade-offs.
+The [legacy inventory](docs/scientific/legacy-inventory.md) records defects found in the
+original scripts, which remain preserved under [`legacy/`](legacy/).
 
-```powershell
+## Run locally
+
+**Status: local research workbench. Python 3.11.** The repository currently requires GitHub
+read access. New gene retrieval needs internet; cached inputs support offline work.
+
+With [uv](https://docs.astral.sh/uv/) and Git installed:
+
+```bash
 uv tool install --python 3.11 "sarna-designer[app] @ git+https://github.com/JoepVondervoort/sarna-designer"
-```
-
-Either way it ends with `Installed 2 executables: sarna-designer, sarna-designer-check`.
-
-**The first installation may take several minutes** while Python and packages download.
-Wait for the `PS ...>` prompt to return. If installation fails, stop and send the complete
-command and output to the sender; see [troubleshooting](INSTALL.md#if-something-goes-wrong).
-Do not continue to the check or start commands until installation succeeds.
-
-**4. Close PowerShell and open it again**, for the same PATH reason as step 2.
-
-**5. Check it works:**
-
-```powershell
 sarna-designer-check
-```
-
-Ends with `RESULT: PASS`. Every failure prints what to do about it.
-
-**6. Run it:**
-
-```powershell
 sarna-designer
 ```
 
-Open the address it prints (`http://localhost:8001/`) in your browser, and leave the
-PowerShell window open while you work. <kbd>Ctrl</kbd>+<kbd>C</kbd> stops it.
+Open **http://localhost:8001/** and keep the terminal running.
+For a GitHub installation, update with `uv tool upgrade sarna-designer`.
 
-### macOS and Linux
+The [installation guide](INSTALL.md) covers Windows, macOS, Linux and troubleshooting.
+The [Windows GitHub walkthrough](docs/install-via-github.md) includes first-time authentication
+and local off-target reference setup. Colleagues without repository access can install a supplied
+`sarna_designer-0.2.0-py3-none-any.whl`; see the [wheel instructions](INSTALL.md#step-3-install-sarna-designer).
 
-Use the [macOS and Linux instructions in INSTALL.md](INSTALL.md#macos); the Windows
-`$env:USERPROFILE` commands above do not work in those terminals. Install `uv` with:
+Local screening references are a separate, explicit download of about 1.2 GB and need at least
+20 GiB of free disk space during preparation. Screening covers full-length 19-base cores with
+0–3 mismatches; gaps, bulges, shorter seed matches and personal variants are outside its scope.
+Native Windows screening and fresh Windows/macOS installations still need platform validation.
 
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-### Optional: AF22 histone tracks
-
-**This is the only part that needs WSL on Windows, and almost nobody needs it.** The
-`[genomics]` extra reads local AF22 bigWig files, and it depends on
-[pyBigWig](https://pypi.org/project/pyBigWig/), which publishes **no Windows wheel** and lists
-only MacOS, POSIX and Unix as supported, because it needs `libcurl` and `zlib` headers to build. The
-design tool does not use it; chromatin simply reports "not loaded" without it.
-
-If you do want those tracks on Windows, install
-[WSL](https://learn.microsoft.com/windows/wsl/install) from an **administrator** PowerShell:
-
-```powershell
-wsl --install
-```
-
-Reboot, then follow the Linux steps above inside the Ubuntu window, adding `[app,genomics]`
-instead of `[app]`, and set `SARNA_AF22_DIR` to the folder holding the bigWigs.
-
-### Giving it to a colleague
-
-Because the repository is private, send them a file rather than a link:
-
-```bash
-python -m build --wheel      # one ~320 kB .whl appears in dist/
-```
-
-They need no GitHub account, no Git and no Python. That is route A above.
-[`INSTALL.md`](INSTALL.md#sending-it-to-a-colleague) has a message you can copy into the email,
-and, if you develop inside WSL, how to reach the file from Windows at all, since a path
-inside WSL is invisible to Outlook.
-
-### Updating to a newer version
-
-Which command works depends on how it was installed, and the difference is not cosmetic.
-
-**Installed from this repository (route B):**
-
-```powershell
-uv tool upgrade sarna-designer
-```
-
-`uv` remembers the repository and reinstalls whatever is on the default branch now. It tracks
-the **commit**, not the version number, so this picks up new work even when the version has not
-changed. Measured against a local clone on 8 October 2026, and written up in
-[`docs/development/releasing.md`](docs/development/releasing.md).
-
-**Installed from a `.whl` file (route A):**
-
-`uv tool upgrade` prints `Nothing to upgrade`, because there is no repository for it to upgrade
-from. That message is correct and is not an error. Ask for the new file, then run the same
-install command again with the new filename:
-
-```powershell
-uv tool install --python 3.11 "$env:USERPROFILE\Downloads\sarna_designer-0.2.0-py3-none-any.whl[app]"
-```
-
-Installing over the top replaces the old build. Saved runs in `.sarna-designer` are kept.
-
-**Either way, afterwards:**
-
-```powershell
-sarna-designer-check
-```
-
-It prints the version that is now installed, which is how anyone tells one build from another.
-Every saved run records the same string as its `engine_version`, so a result can be traced back
-to the code that produced it.
-
-**Moving a colleague from route A to route B** turns every future update into one command
-they run themselves: [`docs/install-via-github.md`](docs/install-via-github.md) is the
-walkthrough, written to be sent on its own. It needs them added as a collaborator and
-[Git for Windows](https://git-scm.com/download/win) installed, and it needs no WSL.
-
-**Publishing an update** is the maintainer's side of the same question:
-[`docs/development/releasing.md`](docs/development/releasing.md) is the checklist, including why
-the work has to reach the default branch before `uv tool upgrade` can deliver it.
-
-### Running it from a checkout instead
-
-```bash
-.venv/bin/python -m sarna.app      # then open http://localhost:8001/
-```
-
-## What problem this solves
-
-The existing workflow is two unconnected Python scripts: one scans a pasted promoter string for
-19-mer candidates, the other locates already-chosen candidates in a genome and checks histone
-marks around them. Neither knows about the other. Between them they disagree on the design
-rules, the scientific parameters are hardcoded module constants, there is no concept of a
-transcript or a genome assembly in the design path, and minus-strand coordinates are computed
-incorrectly.
-
-This project turns that into a maintainable tool that a colleague without programming
-experience can use, and whose answers a reviewer can audit.
-
-## Scientific scope
-
-Design rules derive from **Wang J, Place RF, Portnoy V, Huang V, Kang MR, Kosaka M, Ho MKC,
-Li L-C. _Inducing gene expression by targeting promoter sequences using small activating RNAs._
-J Biol Methods, 2015** ([PMC4379447](https://pmc.ncbi.nlm.nih.gov/articles/PMC4379447/)),
-whose Table 1 supplies the default criteria. These are literature recommendations rather than
-universal biological requirements; researchers can investigate alternatives in custom configurations.
-
-Four rule presets ship (see [ADR 0002](docs/adr/0002-wang-2015-default-legacy-preset.md) and
-[ADR 0011](docs/adr/0011-optional-rules-are-hypotheses-not-findings.md)):
-
-- **`wang-2015`** is the default. Conformant with Table 1.
-- **`strict`** tightens only the *location* criteria. The range-restricted dataset does not
-  establish better efficacy for these settings. Two sequence tightenings were tried, measured and
-  rejected: requiring zero CpG excludes 4 of the 14 known activators, and requiring an asymmetry
-  margin of 0.5 kcal/mol excludes 2 more.
-- **`exploratory`** adds optional criteria from Reynolds et al. 2004, Ui-Tei et al. 2004 and the
-  thesis's own positional analysis. Admits exactly the same candidates as the default, since every
-  added rule is a preference; it reorders them. Its score denominator is 13, so its numbers are
-  **not comparable** with any other preset's.
-- **`legacy-scanner`** reproduces the original script's *filtering* closely, defects included,
-  so historical designs can be re-derived. **Not bit-for-bit**, and the two known divergences are
-  declared on the preset itself so they appear in exports and the UI: position 1 G/C is scored as
-  a preference where the original required it (so this preset admits candidates the original
-  rejected), and ranking is by criteria count rather than the original's weighted sum. See
-  [ADR 0010](docs/adr/0010-presets-are-selections-with-overrides.md).
-
-Every design rule carries its **source citation, evidence class and rationale**, visible in the
-UI ([ADR 0003](docs/adr/0003-rule-provenance-is-first-class.md)). Rules with no traceable
-source are labelled `unsourced` rather than quietly presented as established biology.
-
-### How candidates are ranked
-
-Mandatory criteria are a **gate**: fail one and the candidate is excluded, with the failing rule
-named. Everything else is a **checklist of preferences, each worth one point, all weighted
-equally**. A candidate reads as "meets 5 of 7 preferences", itemised. Ties break on
-thermodynamic asymmetry, reported as a tie-break rather than folded into the score. See
-[ADR 0006](docs/adr/0006-criteria-count-ranking.md).
-
-This follows the structure of Wang 2015 Table 1, which separates requirements from criteria
-marked "preferably". It is **not** a formula taken from the paper: the paper publishes no
-weights and no ranking formula at all. Equal weighting is a deliberate choice, because the
-evidence gives no basis for ranking the preferences against each other.
-
-### Evidence and uncertainty
-
-[Reading the evidence](docs/scientific/evidence-guide.md) distinguishes published saRNA guidance,
-siRNA-derived extrapolations, project choices, exploratory hypotheses and unknowns. A source
-citation is not validation of this application's ranking. New rule records carry an evidence-scope
-explanation and curated source links; custom roles and values remain researcher choices.
-
-### Reproduce a saved calculation
-
-New runs record code/build fingerprints, installed package versions, input identities and Ensembl
-response metadata. Export whole-run JSON and run `sarna-designer-replay run.json` to repeat the core
-calculation offline using the saved sequence and resolved rules. The report distinguishes matching
-outputs from matching software and environment. Annotation releases and original legacy-cache
-retrieval dates remain explicitly unknown. See [reproducibility](docs/development/reproducibility.md)
-for scope and limitations; enrichment annotations and BLAST are preserved rather than replayed.
-
-### Honest expectations
-
-Wang et al. report that of designed duplexes, **15–20 % significantly activate** the target
-gene, **~70 % have no effect**, and **5–10 % suppress** it. A high rank from this tool is a
-prioritisation aid, not a prediction of activity.
-
-## Using the engine
-
-To use the adjustable app, follow the [local workbench guide](docs/development/local-workbench.md).
-It retrieves supported human genes through Ensembl and accepts pasted DNA. New genes/windows need
-internet; cached responses support offline runs. The earlier generated pages remain described in
-the [preview guide](docs/development/trying-the-browser.md). An editable
-[flow diagram](docs/architecture/website-flow.drawio) shows the dataflow and the remaining work;
-its [SVG preview](docs/architecture/website-flow.svg) is generated from it by
-`scripts/render_flow_diagram.py`.
+## Use the Python engine
 
 ```python
 from sarna.design.pipeline import design_sarnas
 from sarna.design.presets import WANG_2015
 from sarna.genome.promoter import Promoter
-from sarna.genome.tss import TssPosition
 from sarna.sequence.nucleic import NucleicSequence
 
-promoter = Promoter(
-    sequence=NucleicSequence.parse(open("promoter.txt").read()),
-    tss_start=TssPosition(-1000),          # optional; omit for a bare sequence
-)
-result = design_sarnas(promoter, WANG_2015.resolve())
+with open("promoter.txt") as handle:
+    promoter = Promoter(sequence=NucleicSequence.parse(handle.read()))
 
+result = design_sarnas(promoter, WANG_2015.resolve())
 for candidate in result.ranked[:10]:
-    print(candidate.id, candidate.tss_span, candidate.score_summary)
-    print(" guide 5'-", candidate.antisense_strand, "-3'")
-    print(" ", candidate.guide_comparison.summary)
-
-rejected = result.rejected[0]
-print(rejected.id, rejected.rejection_summary)   # never silently dropped
+    print(candidate.id, candidate.score_summary)
+    print(candidate.antisense_strand)
 ```
 
-`result.to_dict()` is a JSON-serialisable record of the run, including the resolved
-configuration, every candidate and every rule verdict.
+A pasted sequence without a TSS or genomic context leaves location-dependent checks unavailable.
+The run retains rejected candidates and their reasons. See the
+[workbench guide](docs/development/local-workbench.md) and
+[reproducibility guide](docs/development/reproducibility.md) for the full workflow.
 
-### Custom settings
-
-Wang remains the default. Supported binary scientific rules can become gates, preferences or
-be switched off. Required generation inputs and continuous tie-break semantics remain enforced.
-
-```python
-from sarna.rules.rule import RuleKind
-
-config = WANG_2015.resolve(
-    {"gc-content": {"maximum-gc-fraction": 0.65}},
-    role_overrides={
-        "tss-window": RuleKind.PREFERENCE,
-        "tss-preferred-window": None,   # off: avoid scoring location twice
-    },
-)
-result = design_sarnas(promoter, config)
-print(config.customizations)             # changes from the frozen preset baseline
-```
-
-The generated page labels custom settings and shows disabled rules, sources, consequences and
-alternatives. A matching numerical value is distinguished from a deliberately selected sourced
-option. Adjusting a rule changes filtering/ranking; it does not establish improved activity.
-See [configuration verification](docs/development/custom-configuration-verification.md).
-
-### From a gene symbol
-
-```python
-from sarna.genome.ensembl import promoter_for_symbol
-
-gene, transcript, promoter = promoter_for_symbol("SCN1A")   # MANE Select, or it raises
-result = design_sarnas(promoter, WANG_2015.resolve())
-```
-
-`select_transcript` returns the MANE Select transcript or **refuses**, listing the alternatives: a
-promoter is a property of a transcript, and SCN1A alone has 16 distinct TSSs across 75 kb
-([ADR 0012](docs/adr/0012-mane-select-or-refuse.md)).
-
-### Checking a rule against measured activity
-
-```python
-from sarna.validation.benchmark import benchmark
-from sarna.validation.dataset import load_chapter4_dataset
-
-report = benchmark(load_chapter4_dataset(), WANG_2015.resolve())
-print(report.summary)
-for lost in report.rejected_activators:        # duplexes that worked and the gate would discard
-    print(lost.sequence.name, [r.rule_id for r in lost.candidate.excluded_by])
-```
-
-## Current limitations
-
-- **The workbench is an initial local release.** Automated offline tests cover jobs, scientific
-  configuration, coordinates, persistence and exports; Chromium checks cover cached SCN1A,
-  fresh live-Ensembl CHD2/KCNQ2 designs, custom reruns and explicit cache-miss recovery.
-  Windows/macOS installers were not verified in this environment. Packaged installers remain
-  to be built; see the
-  [continuation plan](docs/development/continuation-plan.md).
-- **Order exports use the project's dTdT chemistry.** Candidates are 19 nt cores and order
-  CSV represents a 3' dTdT overhang on each strand. This is not a general chemistry model.
-  Completed screening findings are included per candidate and scope; unscreened remains explicit.
-- **Empirical validation is narrow.** 125 assayed sequences exist, but all were designed to pass
-  Wang's gate, so the set cannot show a gate to be too permissive, only too strict. The sequences
-  have recovered coordinates and 519 bp context for 123 of 125 designs, enabling window and
-  flank checks through `benchmark(..., locations=load_chapter4_locations())`. This context is
-  insufficient for the default 500 bp CpG-island definition. Ranking remains unvalidated.
-- **No cell-type binding data.** Motif predictions are sequence-only and say nothing about any
-  cell type. TF-occupancy adapters remain absent; AF22 histone ChIP-seq is a separate evidence axis.
-- ~~Licensing metadata needs correction before distribution.~~ **Resolved 2026-10-07.** The code
-  is Apache-2.0 and the bundled JASPAR subset is CC BY 4.0, verified against
-  [JASPAR's own about page](https://jaspar.elixir.no/about/). The repository's previous
-  CC BY-NC-SA label was wrong and *more* restrictive than the real terms. See [`NOTICE`](NOTICE)
-  and [ADR 0018](docs/adr/0018-apache-2-and-bundled-data-licensing.md).
-- Promoter fixtures must be CpG-depleted or real sequence. Uniform random sequence is called as
-  one large CpG island by any correct detector, which rejects nearly every candidate. See
-  [`docs/scientific/synthetic-promoter-fixtures.md`](docs/scientific/synthetic-promoter-fixtures.md).
-- The legacy scripts have **18 catalogued defects**, three scientifically material. They are
-  preserved unfixed by design; see [`legacy/README.md`](legacy/README.md). The `legacy-scanner`
-  preset excludes 5 of the 14 duplexes known to activate their target, four of them on its
-  zero-CpG rule.
-- The AF22 histone bigWigs (GSE108506) are on **GRCh37/hg19**, while Ensembl REST serves
-  **GRCh38** by default. Verified 2026-10-06 from the bigWig headers. The legacy annotation
-  pipeline combined the two without converting, so **every regulatory annotation it produced is
-  unreliable** (defect B15). The current AF22 reader performs guarded GRCh38-to-hg19 liftover,
-  preserving conversion failure reasons; the design path retains assembly-tagged coordinates.
-- `Designs.xlsx` is still missing, but the thesis's own chapter 4 supplies a labelled set of 125
-  assayed sequences, which is now the project's validation fixture.
-
-## Repository layout
-
-```
-sarna-designer/
-├── GLOSSARY.md              Canonical project vocabulary, read this first
-├── legacy/                  Original scripts, preserved verbatim. Never edited.
-├── src/sarna/               The engine. No HTTP, no UI, no web framework (ADR 0005).
-│   ├── sequence/            Validated sequence primitives and CpG-island detection
-│   ├── genome/              Assembly-tagged coordinates, TSS positions, promoters
-│   ├── rules/               The rule catalogue, parameters, provenance and results
-│   ├── thermo/              Nearest-neighbour tables, duplex ends, guide prediction
-│   ├── design/              Contexts, evaluators, presets and the design pipeline
-│   ├── regulatory/          TF motifs, Ensembl Regulatory Build, the evidence model
-│   ├── expression/          Per-tissue transcript expression, and the gaps it cannot fill
-│   ├── offtarget/           Screening a finished run against RefSeq RNA and the genome
-│   ├── sources/             Cached, retrying, offline-aware access to external services
-│   ├── validation/          Assayed sequences and the benchmark that can refute a rule
-│   ├── app/                 The local workbench: routes, storage, exports, browser files
-│   └── view/                View model and the self-contained HTML browser
-├── docs/
-│   ├── adr/                 Architecture decision records
-│   ├── scientific/          Legacy inventory, rule provenance, validation records
-│   ├── architecture/        Component and data-flow documentation
-│   └── development/         Environment, workflow notes and how to publish a release
-├── tests/                   Unit, regression, strand and integration tests
-└── pyproject.toml           Package metadata and tooling configuration
-```
-
-## Setup (WSL)
-
-Prerequisites, verified versions and the rationale for keeping this repository on the Linux
-filesystem rather than `/mnt/c` are in
-[`docs/development/environment.md`](docs/development/environment.md).
-
-Python 3.11 in an isolated virtualenv, so the miniconda base environment is never mutated:
+## Development and verification
 
 ```bash
 python3.11 -m venv .venv
-.venv/bin/python -m pip install -e ".[dev,genomics]"
-```
-
-The `genomics` extra pulls in `pyBigWig`, `httpx` and `pyliftover`. The engine itself installs
-without it, which is what keeps the rules testable with no network and no 890 MB of tracks
-present.
-
-```bash
-.venv/bin/python -m pytest                      # full suite; network tests excluded by default
-.venv/bin/python -m pytest -m strand            # the coordinate-correctness gate
-.venv/bin/python -m pytest --cov --cov-report=term-missing
-.venv/bin/python -m mypy src tests              # strict
+.venv/bin/python -m pip install -e ".[app,dev]"
+.venv/bin/python -m pytest -q
 .venv/bin/python -m ruff check .
-.venv/bin/python -m pytest tests/unit/test_writing_style.py   # the writing rule, below
+.venv/bin/python -m mypy src tests scripts
 ```
 
-Tests that need the AF22 bigWigs skip cleanly when the files are absent; point
-`SARNA_AF22_DIR` at them if they live somewhere other than `~/af22_data`.
+GitHub Actions runs the default test suite, lint and strict type checks. Live-network tests are
+excluded by default; optional AF22 track tests skip when their data are absent. Browser checks
+exercise the app separately, including saved runs, screening displays, exports and mobile layout.
+See [screenshot provenance](docs/assets/screenshots/README.md) and the
+[development environment](docs/development/environment.md).
 
-To design against a real gene and open the result:
-
-```bash
-.venv/bin/python scripts/build_promoter_view.py SCN1A --html scn1a.html
-```
-
-The first run fetches from Ensembl and caches to `.cache/ensembl`; afterwards it works offline.
-The page carries its own data, so it can be mailed or committed beside a manuscript.
-
-### Configuration
-
-Everything is optional and `.env.example` documents all of it. A test asserts that file and the
-code name the same set of variables, so neither can drift from the other.
-
-| Variable | Effect |
+| Directory | Purpose |
 |---|---|
-| `SARNA_CONTACT_EMAIL` | Sent to Ensembl in the `User-Agent`, as their usage guidance asks. Unset sends the tool's name and purpose without an address; the placeholder in `.env.example` counts as unset. |
-| `SARNA_CACHE_DIR` | Cache root, default `.cache`. On WSL keep it off `/mnt/c`. |
-| `SARNA_OFFLINE` | Refuse every external lookup and serve only cached responses, so a recorded run cannot quietly re-fetch a changed annotation. A cache miss fails naming what was missing. |
-| `SARNA_ANCHORS` | Extra promoter anchors, as a `.toml` file or a directory of them. |
-| `SARNA_CELL_LINES` | Extra cell lines, each declaring evidence along three axes. |
-| `SARNA_AF22_DIR` | Where the AF22 bigWigs live, default `~/af22_data`. Absence is normal; chromatin then reports unavailable. |
+| [`src/sarna/`](src/sarna/) | Design engine, sequence and coordinate models, evidence adapters and local app |
+| [`tests/`](tests/) | Scientific invariants, regression tests, application and export checks |
+| [`docs/scientific/`](docs/scientific/) | Evidence interpretation, evaluation methods and findings |
+| [`docs/adr/`](docs/adr/) | Scientific and architectural decisions |
+| [`scripts/`](scripts/) | Evaluation, browser verification and research utilities |
+| [`legacy/`](legacy/) | Original scripts preserved for comparison |
 
-The two registries load shipped entries first and refuse duplicate ids, so your files add to them
-and never silently replace a shipped entry.
+## Licence and attribution
 
-## Writing in this repository
-
-**No em dashes, and no phrasing that reads as though a language model wrote it.** This applies
-to everything a person sees: this page, every document under `docs/`, the application's own
-text, and source comments, which are visible to anyone browsing the repository.
-
-The rule is a failing test rather than a convention, because a convention lasts about a dozen
-edits:
-
-```bash
-.venv/bin/python -m pytest tests/unit/test_writing_style.py
-```
-
-It bans the character, its JavaScript escape and its HTML entities, plus a short list of
-phrases with no legitimate use here. The list is deliberately short: words that are both an AI
-tell and a real technical term, `harness` for a test harness or `comprehensive` in a caveat
-about what a screening is not, are left alone, because a check that cries wolf gets suppressed
-and then checks nothing.
-
-Replace an em dash with whatever the sentence actually wants: a comma, a colon, a full stop, or
-parentheses for a true aside. **An en dash stays allowed**, because this project writes real
-ranges such as -1000 to -100 and B1 to B18.
-
-Text that has to *name* one of the banned characters marks that line with
-`writing-style: allow`. The marker is per line and conspicuous on purpose, so an exemption
-cannot be granted quietly. `legacy/` is exempt in full, preserved verbatim as the scientific
-ground truth. Generated pages under `out/` are not scanned.
-
-## Licence
-
-**Apache License 2.0**, see [`LICENSE`](LICENSE). Copyright 2026 Joep Vondervoort.
-
-Bundled data keep their own terms, listed in [`NOTICE`](NOTICE):
-
-| Bundled asset | Terms |
-|---|---|
-| JASPAR CORE subset | CC BY 4.0, redistribution and commercial use permitted with attribution |
-| Chapter 4 screening dataset | From a publicly defended thesis; redistributed here under Apache-2.0 |
-| Promoter anchors, cell-line registry | Compiled for this project; Apache-2.0 |
-
-Ensembl and optional NCBI BLAST are queried at runtime; local screening references are downloaded explicitly from NCBI and native Bowtie tools from their official releases; cite Ensembl in work
-that relies on its annotation. [ADR 0018](docs/adr/0018-apache-2-and-bundled-data-licensing.md)
-records why Apache-2.0 rather than MIT, and how the JASPAR mislabelling was found and corrected.
-
-
-Local off-target screening is provisioned separately through **Local off-target screening ·
-reference setup** in the app. Download and prepare the pinned human reference once, then reuse
-it across app updates. See [one-time setup and its search limits](docs/install-via-github.md#set-up-fast-local-off-target-screening-once-per-computer).
+Code: [Apache License 2.0](LICENSE). Copyright 2026 Joep van de Vondervoort.
+Bundled assets retain the terms recorded in [NOTICE](NOTICE), including attribution for the
+JASPAR CORE subset. Cite the underlying sources when using their data or design recommendations.

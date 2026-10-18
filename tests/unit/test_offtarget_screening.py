@@ -515,8 +515,11 @@ class TestPlacementIsBounded:
         # Every alignment is still counted and still listed; only the distance is missing.
         assert len(record.hits) == 40
         placed_scores = {p.hit.bit_score for p in record.proximities}
-        assert min(placed_scores) >= max(
-            h.bit_score for h in record.hits if h.bit_score not in placed_scores
+        assert None not in placed_scores
+        known_scores = {score for score in placed_scores if score is not None}
+        assert min(known_scores) >= max(
+            h.bit_score for h in record.hits
+            if h.bit_score is not None and h.bit_score not in placed_scores
         )
 
 

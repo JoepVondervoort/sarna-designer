@@ -51,7 +51,8 @@ assert(html.includes('744 of 30243 reported genomic alignments (2.5%)'));
 assert(html.includes('not the fraction of all alignments near a TSS'));
 assert(html.includes('may belong to another gene'));
 assert(html.startsWith('<details'),'Plot should be available as a disclosure');
-const empty=vm.runInContext(`tssPlot([{row:{hit_count:100,details_retained:20},placements:[]}])`,context);
+const empty=vm.runInContext(
+  `tssPlot([{row:{hit_count:100,details_retained:20},placements:[]}])`,context);
 assert(empty.includes('(0%)'));
 assert(empty.includes('Other alignments may also lie near a start site'));
 console.log('PASS');

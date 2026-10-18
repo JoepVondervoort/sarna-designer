@@ -1,0 +1,28 @@
+name: Checks
+
+on:
+  push:
+    branches: [main, publish-for-colleagues]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Tests, lint and types
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install package and development tools
+        run: python -m pip install -e '.[app,dev]'
+      - name: Unit and regression tests
+        run: python -m pytest -q
+      - name: Lint
+        run: python -m ruff check .
+      - name: Strict type checking
+        run: python -m mypy src tests scripts
