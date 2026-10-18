@@ -200,6 +200,7 @@ async function startScreening(scope, mode = "batch") {
   if (!run || frozen) { error("Screening needs a live run."); return; }
   if (screeningBackend() === "local" && !REFERENCE_STATUS?.ready) {
     $("local-reference-panel").open = true;
+    if (typeof setWorkspaceTab === "function") setWorkspaceTab("screening");
     $("local-reference-panel").scrollIntoView({behavior:"smooth", block:"center"});
     error("Prepare the local human references before searching, or explicitly choose NCBI BLAST.");
     return;
@@ -377,6 +378,7 @@ async function loadSavedScreenings(runId) {
     }
     renderOffTarget(any || state.screeningScope || "transcript");
     renderScreeningStatus();
+    if (typeof renderTopResult === "function") renderTopResult(state.result);
   } catch (e) {
     if (!current()) return;
     $("offtarget-progress").textContent = `Saved screening history could not be loaded: ${e.message}`;
@@ -1161,6 +1163,7 @@ $("reference-pause")?.addEventListener("click", async () => {
 });
 $("reference-check")?.addEventListener("click", loadReferenceStatus);
 $("open-reference-setup")?.addEventListener("click", () => {
+  if (typeof setWorkspaceTab === "function") setWorkspaceTab("screening");
   $("local-reference-panel").open = true;
   $("local-reference-panel").scrollIntoView({behavior:"smooth", block:"center"});
 });
@@ -1227,7 +1230,8 @@ function offTargetCounts(entry) {
 function candidateScreeningSummary(decision) {
   if (!decision) return "";
   return decision.evidence.map(e=>`<span>${e.scope === "genomic" ? "Genome" : "RNA"} 19/18/17: ${offTargetCounts(e.entry)}</span>`).join("")
-    + (decision.status === "pending" ? '<span>Screening evidence incomplete</span>' : decision.status === "review" ? '<span class="screening-evidence review">Review sequence matches</span>' : "");
+    + (decision.status === "pending" ? '<span>Screening evidence incomplete</span>' : decision.status === "review" ? '<span class="screening-evidence review">Review sequence matches</span>' : "")
+    + `<button type="button" class="text-button" data-screening-candidate="${escapeHTML(decision.candidate.id)}">View screening details</button>`;
 }
 function topOffTargetSummary() {
   const best = screenedDecisions().find(d=>d.candidate.rank === 1);
@@ -1235,7 +1239,7 @@ function topOffTargetSummary() {
   return `<details class="top-screening-note"><summary>Off-target sequence matches · ${best.status === "pending" ? "evidence incomplete" : best.status === "review" ? "review findings" : "both scopes recorded"}</summary>`
     + `<p>Full-length reference alignments at 19 / 18 / 17 matching bases: `
     + best.evidence.map(e=>`${e.scope === "genomic" ? "Genome" : "Transcripts"}: ${offTargetCounts(e.entry)}`).join(" · ")
-    + `.</p><p class="hint">Sequence similarity is a review signal. It does not establish binding or a biological effect. Details are in Screening.</p></details>`;
+    + `.</p><p class="hint">Sequence similarity is a review signal. It does not establish binding or a biological effect. Details are in Off-target screening.</p><button type="button" class="text-button" data-screening-candidate="${escapeHTML(best.candidate.id)}">View screening details →</button></details>`;
 }
 /* Comparisons use saved measurements only; no chart changes rank or selection. */
 function matchCountData(entry) {
@@ -1296,15 +1300,11 @@ function mismatchPositionPlot(decisions) {
   }).join("");
   return `<details class="candidate-plot" data-comparison-plot="mismatches"><summary>Mismatch-position map · inspect a candidate</summary><div class="plot-controls">${candidateSelect}${scopeSelect}</div><p class="hint">${escapeHTML(note)}</p><p class="hint">Columns follow the promoter target DNA, 5′ → 3′ (T corresponds to U in RNA), not the antisense guide orientation. × mismatch; · match. Gapped, partial or missing-position alignments are omitted. This does not estimate seed effects or biological specificity.</p>${shown.length ? `<div class="plot-scroll"><table class="mismatch-heatmap"><caption>Mismatch positions for ${escapeHTML(chosen.candidate.id)} · ${scope === "genomic" ? "genome" : "transcripts"}</caption><thead><tr><th scope="col">Reference alignment</th>${header}</tr></thead><tbody>${body}</tbody></table></div>` : `<p class="hint">No usable mismatch-position details to draw. Missing details do not mean zero matches.</p>`}</details>`;
 }
-function candidateComparisonPlots(decisions) {
-  if (!decisions.length) return "";
-  return `<div class="candidate-comparisons"><h4>Compare these top ${decisions.length} designs</h4>${matchCountPlot(decisions)}${preferenceHeatmap(decisions)}${mismatchPositionPlot(decisions)}</div>`;
-}
-
 function renderScreenedShortlist() {
   const host = $("screened-shortlist");
   if (!host || !state.result) return;
-  const openPlots = [...(host.querySelectorAll?.("[data-comparison-plot][open]") || [])].map(node=>node.dataset.comparisonPlot);
+  const plotHosts = [host, $("design-comparison"), $("screening-comparisons")].filter(Boolean);
+  const openPlots = plotHosts.flatMap(h=>[...(h.querySelectorAll?.("[data-comparison-plot][open]") || [])]).map(node=>node.dataset.comparisonPlot);
   const decisions = screenedDecisions(), limit = state.screenedShortlistLimit || 10;
   const chosen = decisions.slice(0,limit), pending = decisions.filter(d=>d.status === "pending");
   const byId = new Map(decisions.map(d=>[d.candidate.id,d]));
@@ -1316,15 +1316,20 @@ function renderScreenedShortlist() {
   screeningHTML(host, `<div class="screened-heading"><div><p class="screened-eyebrow">DESIGN RANK &amp; SCREENING</p><h3>Top saRNAs with off-target findings</h3><p class="hint">Ordered by original design rank. Off-target findings stay visible for review; they do not remove candidates.</p></div><label>Show top <select id="screened-shortlist-limit" aria-label="Top saRNA list size"><option value="10" ${limit===10?"selected":""}>10</option><option value="15" ${limit===15?"selected":""}>15</option></select></label></div>`
     + `<p class="screened-context hint">${chosen.length} shown · ${decisions.length - pending.length} with both scopes complete · ${pending.length} with incomplete evidence. Counts below are reference alignments at <b>19 / 18 / 17 matching bases</b>, including isoforms and alternate records; they are not counts of independent genes.</p>`
     + (chosen.length ? `<div class="screened-table-wrap"><table class="screened-table"><thead><tr><th>Design rank</th><th>Candidate</th><th>Design score</th><th>Transcripts<br><small>19 / 18 / 17 bases</small></th><th>Genome<br><small>19 / 18 / 17 bases</small></th><th>Screening evidence</th><th></th></tr></thead><tbody>${chosen.map(d=>`<tr><td><span class="screened-number">${d.candidate.rank}</span></td><td><strong>${escapeHTML(d.candidate.id)}</strong></td><td>${d.candidate.rating?.met ?? "n/a"} / ${d.candidate.rating?.evaluated ?? "n/a"}</td><td>${offTargetCounts(d.evidence.find(e=>e.scope==="transcript").entry)}</td><td>${offTargetCounts(d.evidence.find(e=>e.scope==="genomic").entry)}</td><td><span class="screening-evidence ${d.status === "review" ? "review" : ""}">${d.status === "pending" ? "Incomplete" : d.status === "review" ? "Review findings" : "Recorded"}</span>${d.reasons.length ? `<details><summary>Why?</summary><p class="hint">${d.reasons.map(escapeHTML).join(" · ")}</p></details>` : ""}</td><td><button class="secondary" type="button" data-screened-inspect="${escapeHTML(d.candidate.id)}">Inspect</button></td></tr>`).join("")}</tbody></table></div>` : `<div class="screened-empty"><p>No candidates passed the design gates. Review the design results or adjust your criteria.</p></div>`)
-    + candidateComparisonPlots(chosen)
     + `<details class="screened-policy"><summary>How to interpret screening</summary><p>The former project rule flagged any 18/19 or 19/19 alignment, or five or more 17/19 alignments in either scope. These unvalidated cutoffs now provide review notes only. Missing or incomplete screening is labelled explicitly. Design rank and export selection are independent of these findings.</p><p>The intended genomic locus is removed where coordinates are known. Transcript matches, including those to the intended gene, remain visible because potential RNA silencing matters. Sequence counts do not measure binding, gene activation, silencing or safety. Seed effects, gaps, variants and cell-specific activity are not assessed.</p><p>Background: <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC4379447/" target="_blank" rel="noopener">Wang et al., 2015</a>; <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC4797303/" target="_blank" rel="noopener">Meng et al., 2016</a>. These papers do not validate the former numeric cutoffs.</p></details>`
     + `<div class="screened-actions">${pending.length && !frozen ? `<button id="screened-screen-all" class="secondary" type="button" ${!REFERENCE_STATUS?.ready || screeningBackend() !== "local" || Object.keys(SCOPE_BUTTON).some(scope=>["running","waiting"].includes(currentScreeningJob(scope)?.status)) ? "disabled" : ""}>Screen all locally · both scopes</button>` : ""}<button id="screened-use" class="secondary" type="button" ${chosen.length ? "" : "disabled"}>Select these ${chosen.length} for export</button><button id="screened-audit" class="secondary" type="button">Download screening record</button><span class="hint">Research selection; experimental validation remains necessary.</span></div>`);
+  if ($("design-comparison")) screeningHTML($("design-comparison"), chosen.length ? `<div class="candidate-comparisons card"><h4>Compare design preferences · top ${chosen.length}</h4>${preferenceHeatmap(chosen)}</div>` : "");
+  if ($("screening-comparisons")) screeningHTML($("screening-comparisons"), chosen.length ? `<div class="candidate-comparisons"><h4>Compare sequence matches · top ${chosen.length}</h4>${matchCountPlot(chosen)}${mismatchPositionPlot(chosen)}</div>` : "");
+  if (typeof workflowStatus === "function") workflowStatus();
+  if (state.workspaceTab === "export" && typeof renderExportSelection === "function") renderExportSelection();
   for (const key of openPlots) {
-    const plot = host.querySelector?.(`[data-comparison-plot="${key}"]`);
-    if (plot) plot.open = true;
+    for (const target of plotHosts) {
+      const plot = target.querySelector?.(`[data-comparison-plot="${key}"]`);
+      if (plot) plot.open = true;
+    }
   }
 }
-$("screened-shortlist")?.addEventListener("change", event=>{
+function handleComparisonChange(event) {
   if (event.target.id === "mismatch-plot-candidate" || event.target.id === "mismatch-plot-scope") {
     if (event.target.id === "mismatch-plot-candidate") state.mismatchPlotCandidate = event.target.value;
     else state.mismatchPlotScope = event.target.value;
@@ -1335,14 +1340,18 @@ $("screened-shortlist")?.addEventListener("change", event=>{
   if (event.target.id !== "screened-shortlist-limit") return;
   state.screenedShortlistLimit = Number(event.target.value) === 15 ? 15 : 10;
   renderScreenedShortlist();
-});
-$("screened-shortlist")?.addEventListener("click", event=>{
+}
+for (const id of ["screened-shortlist","design-comparison","screening-comparisons"]) {
+  $(id)?.addEventListener("change", handleComparisonChange);
+}
+function handleComparisonClick(event) {
   if (event.target.id === "screened-screen-all") {
+    if (typeof setWorkspaceTab === "function") setWorkspaceTab("screening");
     if (screeningBackend() === "local") Promise.all([startScreening("transcript","all"),startScreening("genomic","all")]);
     return;
   }
   const inspect = event.target.closest("[data-screened-inspect]");
-  if (inspect) { selectCandidate(inspect.dataset.screenedInspect); $("candidate-layout").scrollIntoView({block:"start"}); }
+  if (inspect) { if (typeof setWorkspaceTab === "function") setWorkspaceTab("candidates"); selectCandidate(inspect.dataset.screenedInspect); $("candidate-layout").scrollIntoView({block:"start"}); }
   if (event.target.id === "screened-use") {
     state.checked = new Set(screenedDecisions().slice(0,state.screenedShortlistLimit || 10).map(d=>d.candidate.id));
     state.screenedManagedSelection = new Set(state.checked);
@@ -1354,7 +1363,10 @@ $("screened-shortlist")?.addEventListener("click", event=>{
     const decisions = screenedDecisions().map(d=>({candidate:d.candidate.id, original_rank:d.candidate.rank, design_score:d.candidate.rating, status:d.status, reasons:d.reasons, evidence:d.evidence.map(e=>({scope:e.scope, search_id:e.entry?.search.id, searched_at:e.entry?.search.searched_at, reference:e.entry?.search.reference?.release, counts:e.entry?.row.identity_counts, assessment:e.entry?.row.selection_assessment}))}));
     downloadBlob(new Blob([JSON.stringify({run_id:state.result.app.run_id, generated_at:new Date().toISOString(), limit:state.screenedShortlistLimit || 10, order:"Original design rank; off-target findings are advisory", decisions},null,2)],{type:"application/json"}),"screened-selection.json");
   }
-});
+}
+for (const id of ["screened-shortlist","design-comparison","screening-comparisons"]) {
+  $(id)?.addEventListener("click", handleComparisonClick);
+}
 
 function validateScreenedExport() {
   if (state.screenedManagedRun !== state.result?.app.run_id) return;

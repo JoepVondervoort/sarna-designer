@@ -484,8 +484,84 @@ class StubBlast:
                 + "</BlastOutput_iterations></BlastOutput>").encode()
 
 
+def check_workspace_tabs(browser: Browser) -> None:
+    """Switching workspaces must preserve the run, draft and export selection."""
+    assert browser.evaluate("state.workspaceTab") == "candidates"
+    assert browser.evaluate("document.querySelectorAll('[role=tab]').length") == 4
+    assert browser.evaluate(
+        "document.querySelectorAll('.workspace-panel:not([hidden])').length") == 1
+    browser.evaluate("""(() => {
+      window.tabsBefore={checked:state.checked, jobs:state.screeningJobs,
+        managed:state.screenedManagedSelection, managedRun:state.screenedManagedRun,
+        gc:document.getElementById('gc-min').value,
+        draftNotice:document.getElementById('draft-notice').hidden,
+        badge:document.getElementById('draft-badge').textContent};
+      document.getElementById('screened-use').click();
+      window.tabsChosen=[...state.checked];
+      window.tabsRun=state.result.app.run_id;
+      document.getElementById('tab-export').click();
+    })()""")
+    assert browser.evaluate("document.querySelectorAll('#export-selection tbody tr').length") == (
+        browser.evaluate("state.checked.size"))
+    browser.evaluate("state.checked=new Set();renderTable();setWorkspaceTab('export')")
+    assert browser.evaluate("document.querySelectorAll('#export-selection tbody tr').length") == 0
+    assert "No candidates selected" in str(browser.evaluate(
+        "document.getElementById('export-selection').textContent"))
+    browser.evaluate("state.checked=new Set(tabsChosen);renderTable()")
+    browser.evaluate("""(() => {
+      document.getElementById('tab-design').click();
+      document.getElementById('advanced-design-settings').open=true;
+      const gc=document.getElementById('gc-min');gc.value='41';
+      gc.dispatchEvent(new Event('input',{bubbles:true}));
+      document.getElementById('tab-candidates').click();
+      document.getElementById('tab-design').click();
+    })()""")
+    assert browser.evaluate("document.getElementById('gc-min').value") == "41"
+    assert browser.evaluate("state.result.app.run_id===window.tabsRun") is True
+    assert browser.evaluate(
+        "JSON.stringify([...state.checked])===JSON.stringify(tabsChosen)") is True
+    browser.evaluate("""(() => {
+      state.screeningJobs={genomic:{status:'running',backend:'local',stage:'Test progress'}};
+      renderScreeningStatus();
+      document.getElementById('tab-export').click();
+    })()""")
+    assert browser.evaluate(
+        "document.getElementById('screening-tab-status').textContent") == "Running"
+    browser.evaluate("""(() => {
+      document.getElementById('tab-design').focus();
+      document.getElementById('tab-design').dispatchEvent(new KeyboardEvent('keydown',
+        {key:'ArrowRight',bubbles:true}));
+    })()""")
+    assert browser.evaluate("document.activeElement.id") == "tab-candidates"
+    assert browser.evaluate("state.workspaceTab") == "candidates"
+    assert browser.evaluate(
+        "document.querySelectorAll('.workspace-panel:not([hidden])').length") == 1
+    browser.evaluate("""(() => {
+      state.checked=tabsBefore.checked;state.screeningJobs=tabsBefore.jobs;
+      state.screenedManagedSelection=tabsBefore.managed;
+      state.screenedManagedRun=tabsBefore.managedRun;
+      const gc=document.getElementById('gc-min');gc.value=tabsBefore.gc;
+      gc.dispatchEvent(new Event('input',{bubbles:true}));
+      document.getElementById('draft-notice').hidden=tabsBefore.draftNotice;
+      document.getElementById('draft-badge').textContent=tabsBefore.badge;
+      renderTable();renderScreeningStatus();
+      delete window.tabsBefore;delete window.tabsChosen;delete window.tabsRun;
+    })()""")
+    browser.evaluate("window.savedPrint=window.print;window.print=()=>{};printDuplexSheet()")
+    browser.call("Emulation.setEmulatedMedia", media="print")
+    assert browser.evaluate(
+        "getComputedStyle(document.getElementById('duplex-sheet')).display") == "block"
+    assert browser.evaluate("[...document.querySelectorAll('.workspace-panel')]"
+                            ".every(panel=>getComputedStyle(panel).display==='none')") is True
+    browser.call("Emulation.setEmulatedMedia", media="screen")
+    browser.evaluate("window.print=window.savedPrint;delete window.savedPrint")
+    print("    workspaces: four exclusive tabs, retained draft/selection, "
+          "export preview, background status and duplex printing")
+
+
 def check_local_reference_setup(browser: Browser, screenshots: Path | None) -> None:
     """Exercise setup, pause/resume and ready states without downloading a genome in Chromium."""
+    browser.evaluate("setWorkspaceTab('screening')")
     browser.wait("REFERENCE_STATUS !== null")
     assert browser.evaluate("document.getElementById('screening-backend').value") == "local"
     assert browser.evaluate("document.getElementById('screen-transcript').disabled") is True
@@ -552,6 +628,7 @@ def check_screened_shortlist(browser: Browser, screenshots: Path | None) -> None
     """Findings and incomplete evidence stay visible without filtering design-ranked selection."""
     from sarna.offtarget.selection import assess_counts
 
+    browser.evaluate("setWorkspaceTab('candidates')")
     assessments = {name: assess_counts(counts, own_locus_known=True)
                    for name, counts in {
                        "eligible": {"19": 0, "18": 0, "17": 4, "16": 100},
@@ -709,6 +786,7 @@ def check_offtarget(browser: Browser, blast: StubBlast, screenshots: Path | None
     """
     check_local_reference_setup(browser, screenshots)
     check_screened_shortlist(browser, screenshots)
+    browser.evaluate("setWorkspaceTab('screening')")
     candidates = cast(list[dict[str, Any]], browser.evaluate("state.result.candidates") or [])
     blast.loci = {
         c["id"]: (c["genomic"]["contig"], c["genomic"]["start"], c["genomic"]["end"])
@@ -907,6 +985,7 @@ def check_offtarget(browser: Browser, blast: StubBlast, screenshots: Path | None
         assert widths and min(widths) > 200, f"Mobile hit content is squeezed: {widths}"
         browser.call("Emulation.setDeviceMetricsOverride", width=1440, height=1100,
                      deviceScaleFactor=1, mobile=False)
+    browser.evaluate("setWorkspaceTab('candidates');document.querySelector('.candidate-context').open=true")
     print(f"    off-target: {screened} of {pool} screened in the first batch, alignments named "
           f"and placed, own-locus handling stated")
 
@@ -1105,9 +1184,10 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
                      "document.getElementById('design-form').requestSubmit()")
     browser.wait("!document.getElementById('result-area').hidden")
     browser.wait("document.querySelector('#candidate-detail .sequence-box')!==null")
+    check_workspace_tabs(browser)
     before = browser.evaluate("document.getElementById('metric-passing').textContent")
     original = str(browser.evaluate("state.result.app.run_id"))
-    browser.evaluate("document.getElementById('open-settings').click()")
+    browser.evaluate("setWorkspaceTab('design');document.getElementById('advanced-design-settings').open=true;document.getElementById('open-settings').click()")
     rule = "tss-window" if gene else "pos19-a"
     browser.evaluate(f"const role=document.querySelector('[data-rule=\"{rule}\"] [data-role]');"
                      "role.value='preference';"
@@ -1129,9 +1209,12 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     assert browser.evaluate("!document.getElementById('tooltip').hidden") is True
     # Opening results and using the setup shortcut must never hide the live design controls.
     for _ in range(2):
-        browser.evaluate("document.getElementById('edit-setup').click()")
+        browser.evaluate("setWorkspaceTab('candidates');document.getElementById('edit-setup').click()")
         assert browser.evaluate("getComputedStyle(document.getElementById('setup')).display"
                                 "!=='none'") is True
+    browser.evaluate("setWorkspaceTab('candidates');document.querySelector('.candidate-context').open=true")
+    browser.wait("(()=>{const svg=document.getElementById('promoter-map');return "
+                 "svg.viewBox.baseVal.width===Math.max(900,Math.round(svg.parentElement.clientWidth-24))})()")
     geometry = browser.evaluate("(()=>{const svg=document.getElementById('promoter-map');"
                                 "return {width:svg.getBoundingClientRect().width,"
                                 "height:svg.getBoundingClientRect().height,"

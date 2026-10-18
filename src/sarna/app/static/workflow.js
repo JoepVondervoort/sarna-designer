@@ -2,9 +2,68 @@
 "use strict";
 const workspaces = new Map();
 const historyState = {offset:0, selected:new Set(), rows:[], request:0};
+const WORKSPACE_TABS = ["design", "candidates", "screening", "export"];
+function workspaceAvailable(tab) {
+  return tab === "design" || tab === "screening" || !!state.result || !!state.batch;
+}
+function setWorkspaceTab(tab, {focus=false, scroll=true} = {}) {
+  if (!WORKSPACE_TABS.includes(tab) || !workspaceAvailable(tab)) return;
+  state.workspaceTab = tab;
+  for (const name of WORKSPACE_TABS) {
+    const active = name === tab, button = $(`tab-${name}`), panel = $(`workspace-${name}`);
+    panel.hidden = !active;
+    button.setAttribute("aria-selected", String(active));
+    button.tabIndex = active ? 0 : -1;
+  }
+  document.body.dataset.workspace = tab;
+  if (tab === "candidates" && state.result) requestAnimationFrame(()=>renderMap());
+  if (tab === "export") renderExportSelection();
+  workflowStatus();
+  if (scroll) $("workflow-nav").scrollIntoView({block:"start"});
+  if (focus) $(`workspace-${tab}`).focus({preventScroll:true});
+}
+function workflowBatch(batch) {
+  const changed = state.workspaceBatchId !== batch.id;
+  state.workspaceBatchId = batch.id;
+  workflowStatus();
+  if (changed && !state.result) setWorkspaceTab("candidates");
+}
+function renderExportSelection() {
+  const host = $("export-selection");
+  if (!state.result) { host.hidden = true; return; }
+  host.hidden = false;
+  const managedEmpty = state.screenedManagedRun === state.result.app.run_id && !state.checked.size;
+  const selected = state.checked.size || managedEmpty
+    ? state.result.candidates.filter(c=>state.checked.has(c.id))
+    : state.result.candidates.filter(c=>c.rank !== null);
+  selected.sort((a,b)=>(a.rank ?? Infinity)-(b.rank ?? Infinity));
+  const evidenceById = new Map(screenedDecisions().map(d=>[d.candidate.id,d]));
+  const title = managedEmpty ? "No candidates selected" : state.checked.size ? `${selected.length} selected candidates` : `All ${selected.length} design-passing candidates`;
+  screeningHTML(host, `<h3>${title}</h3><p class="hint">${managedEmpty ? "Select at least one candidate in Candidates before exporting selected sequences." : state.checked.size ? "These are the candidates checked in Candidates." : "No explicit selection: sequence exports include every design-passing candidate."} JSON and offline HTML preserve the whole run. Screening findings accompany exports and do not establish specificity.</p>`
+    + (selected.length ? `<div class="table-scroll"><table><caption>Duplex preview · ordered RNA sequences, 5′ → 3′</caption><thead><tr><th>Candidate</th><th>Sense</th><th>Antisense</th><th>Evidence</th></tr></thead><tbody>${selected.slice(0,100).map(c=>{
+      const order = orderRowFor(state.result,c.id);
+      return `<tr><th><button type="button" class="text-button" data-export-inspect="${escapeHTML(c.id)}">${escapeHTML(c.id)}</button>${c.rank === null ? '<small>Excluded by design gates</small>' : `<small>Design rank ${c.rank}</small>`}</th><td><code>${escapeHTML(order?.sense_order_5to3 || "Not available")}</code></td><td><code>${escapeHTML(order?.antisense_order_5to3 || "Not available")}</code></td><td><div class="candidate-screening-note">${evidenceById.has(c.id) ? candidateScreeningSummary(evidenceById.get(c.id)) : escapeHTML(screeningSentence(c.id))}</div></td></tr>`;
+    }).join("")}</tbody></table></div>${selected.length > 100 ? `<p class="hint">Previewing the first 100 of ${selected.length} candidates. Downloads include the complete selection.</p>` : ""}` : '<p class="hint">No candidates available to export. Review the design criteria in Design.</p>'));
+}
+function viewScreeningCandidate(id) {
+  if (!state.result?.candidates.some(c=>c.id===id)) return;
+  state.screeningOpen = id;
+  state.mismatchPlotCandidate = id;
+  const scope = screenings().genomic?.byCandidate?.[id] ? "genomic"
+    : screenings().transcript?.byCandidate?.[id] ? "transcript" : state.screeningScope || "genomic";
+  state.mismatchPlotScope = scope;
+  renderOffTarget(scope);
+  renderScreenedShortlist();
+  setWorkspaceTab("screening", {focus:true});
+  const row = [...$("offtarget-results").querySelectorAll("[data-screenrow]")].find(node=>node.dataset.screenrow===id);
+  (row || $("offtarget-card")).scrollIntoView({block:"start"});
+}
+
 function activeWorkspace() { return state.result ? workspaces.get(state.result.app.run_id) : null; }
 function workflowRun(result) {
   const id = result.app.run_id;
+  const changedRun = state.workspaceRunId !== id;
+  state.workspaceRunId = id;
   const saved = result.workspace?.shortlist || {revision:0, entries:[]};
   const existing = workspaces.get(id);
   if (!existing || (!existing.dirty && !existing.saving && saved.revision>existing.revision)) {
@@ -12,18 +71,44 @@ function workflowRun(result) {
   }
   document.body.classList.add("workflow-review");
   renderShortlist(); workflowStatus();
+  if (changedRun || !state.workspaceTab) setWorkspaceTab("candidates");
   if (state.selected) workflowCandidate(result.candidates.find(c=>c.id===state.selected));
 }
 function workflowStatus() {
   const run = state.result;
   for (const button of document.querySelectorAll("[data-stage]")) {
-    button.disabled = !run && ["candidates","screening","export"].includes(button.dataset.stage);
+    button.disabled = !workspaceAvailable(button.dataset.stage);
   }
-  $("edit-setup").hidden = !run || !!frozen;
-  $("edit-setup").textContent = "Go to design setup";
-  $("workflow-status").textContent = run
-    ? `Reviewing saved run ${run.app.run_id.slice(0,8)}. ${run.counts.passing} candidates pass available gates; inspect missing evidence before selecting. ${frozen?"This is a read-only offline record.":"Settings edits create a new run."}`
-    : "Choose your target and reference, then calculate candidates. Later stages become available with a saved result.";
+  for (const button of document.querySelectorAll("[data-workspace-link]")) button.disabled = !workspaceAvailable(button.dataset.workspaceLink);
+  $("edit-setup").hidden = !run || !!frozen || state.workspaceTab === "design";
+  $("edit-setup").textContent = "Edit design";
+  const name = run?.gene?.symbol || state.gene?.symbol || (run ? "Pasted promoter" : "No target selected");
+  const reference = run?.app.request?.custom_reference?.name || run?.transcript?.ensembl_id || run?.app.anchor?.label || "";
+  $("workspace-context-label").textContent = `${name}${reference ? ` · ${reference}` : ""}${run ? ` · Run ${run.app.run_id.slice(0,8)}` : " · Design setup"}`;
+  $("workspace-selection-count").textContent = run ? `${state.checked.size} selected` : "";
+  const jobs = Object.values(state.screeningJobs || {});
+  const running = jobs.some(j=>j.status === "running"), waiting = jobs.some(j=>j.status === "waiting");
+  const badge = $("screening-tab-status");
+  badge.textContent = running ? "Running" : waiting ? "Waiting" : jobs.some(j=>j.status === "error") ? "Needs review" : Object.keys(state.screenings || {}).length ? "Results" : "";
+  badge.classList.toggle("is-loading", running);
+  badge.setAttribute("aria-label", running ? "Screening running in the background" : `Screening ${badge.textContent || "not started"}`);
+  $("screening-before-run").hidden = !!run;
+  $("offtarget-card").hidden = !run;
+  $("archived-design").hidden = !frozen;
+  $("top-duplex-disclosure").hidden = !run || !run.counts.passing;
+  $("group-export").hidden = !state.batch;
+  $("export-workspace").hidden = !run;
+  $("reproducibility-panel").hidden = !run?.reproducibility;
+  if ($("candidate-run")) $("candidate-run").hidden = !run;
+  $("result-area").hidden = !run || state.workspaceTab === "design";
+  const descriptions = {
+    design: frozen ? "Saved reference and design settings · read-only offline record." : "Choose your target and context. Advanced settings are optional; edits create a new run.",
+    candidates: "Compare design rank, inspect candidates and keep your selection. Screening summaries update here as searches finish.",
+    screening: "Review sequence matches. Searches continue in the background while you use other tabs.",
+    export: "Review the selected duplexes and download sequences or the complete scientific record."
+  };
+  const description = descriptions[state.workspaceTab || "design"];
+  if ($("workflow-status").textContent !== description) $("workflow-status").textContent = description;
 }
 function workflowCandidate(candidate) {
   if (!candidate || !activeWorkspace()) return;
@@ -101,7 +186,7 @@ $("shortlist-entries").addEventListener("input",event=>{
 });
 $("shortlist-entries").addEventListener("click",event=>{
   const inspect=event.target.closest("[data-shortlist-inspect]");
-  if (inspect) { selectCandidate(inspect.dataset.shortlistInspect); $("candidate-layout").scrollIntoView({block:"start"}); }
+  if (inspect) { setWorkspaceTab("candidates"); selectCandidate(inspect.dataset.shortlistInspect); $("candidate-layout").scrollIntoView({block:"start"}); }
   const remove=event.target.closest("[data-shortlist-remove]");
   if (remove && !frozen) { const workspace=activeWorkspace();workspace.entries.delete(remove.dataset.shortlistRemove);editWorkspace(workspace);renderShortlist();workflowCandidate(state.result.candidates.find(c=>c.id===state.selected)); }
 });
@@ -129,23 +214,31 @@ $("shortlist-card").append(downloadNotes);
 window.addEventListener("beforeunload",event=>{
   if ([...workspaces.values()].some(workspace=>workspace.dirty || workspace.saving)) { event.preventDefault();event.returnValue=""; }
 });
-function stageTarget(stage) {
-  if (stage==="target" || stage==="reference") {
-    return frozen ? $("result-reference") : stage==="reference" && state.source==="gene" ? $("reference") : $("setup");
-  }
-  return $(stage==="candidates"?"candidate-layout":stage==="screening"?"offtarget-card":"export-workspace");
-}
-$("workflow-nav").addEventListener("click",event=>{
-  const button=event.target.closest("[data-stage]");if(!button)return;
-  document.querySelectorAll("[data-stage]").forEach(node=>node.removeAttribute("aria-current"));
-  button.setAttribute("aria-current","step");
-  const target=stageTarget(button.dataset.stage);target?.scrollIntoView({block:"start",behavior:"smooth"});
-  if(target){target.setAttribute("tabindex","-1");target.focus({preventScroll:true});}
-  workflowStatus();
+$("workflow-nav").addEventListener("click", event=>{
+  const button = event.target.closest("[data-stage]");
+  if (button && !button.disabled) setWorkspaceTab(button.dataset.stage, {focus:true});
 });
-$("edit-setup").addEventListener("click",()=>{
-  $("setup").scrollIntoView({block:"start",behavior:"smooth"});
-  $("setup").setAttribute("tabindex","-1");$("setup").focus({preventScroll:true});
+$("workflow-nav").addEventListener("keydown", event=>{
+  if (!["ArrowLeft","ArrowRight","Home","End"].includes(event.key)) return;
+  const enabled = [...document.querySelectorAll("[data-stage]")].filter(b=>!b.disabled);
+  const index = enabled.indexOf(event.target);
+  if (index<0) return;
+  event.preventDefault();
+  const next = event.key === "Home" ? 0 : event.key === "End" ? enabled.length-1
+    : (index + (event.key === "ArrowRight" ? 1 : -1) + enabled.length) % enabled.length;
+  setWorkspaceTab(enabled[next].dataset.stage, {scroll:false});
+  enabled[next].focus();
+});
+$("edit-setup").addEventListener("click",()=>setWorkspaceTab("design", {focus:true}));
+document.addEventListener("click", event=>{
+  const link = event.target.closest("[data-workspace-link]");
+  if (link) setWorkspaceTab(link.dataset.workspaceLink, {focus:true});
+  const evidence = event.target.closest("[data-open-run-evidence]");
+  if (evidence) renderEvidence();
+  const inspect = event.target.closest("[data-export-inspect]");
+  if (inspect) { setWorkspaceTab("candidates"); selectCandidate(inspect.dataset.exportInspect); $("candidate-detail").scrollIntoView({block:"start"}); }
+  const screening = event.target.closest("[data-screening-candidate]");
+  if (screening) viewScreeningCandidate(screening.dataset.screeningCandidate);
 });
 
 /* History searches all saved runs in pages; comparison never modifies either snapshot. */
@@ -207,5 +300,8 @@ $("history-compare").addEventListener("click",async()=>{
   $("history-compare").disabled=true;$("history-message").textContent="Loading the two saved records…";
   try {const runs=await Promise.all(ids.map(id=>api(`/api/runs/${id}`)));if(runs.some(run=>run.status!=="complete"))throw new Error("Both runs must be complete.");$("history-comparison").innerHTML=compareRuns(runs[0].result,runs[1].result);$("history-message").textContent="Comparison loaded. First and second follow your selection order.";}catch(failure){$("history-message").textContent=failure.message;}finally{$("history-compare").disabled=historyState.selected.size!==2;}
 });
+const groupExportButtons = $("export-batch-json").parentElement;
+$("group-export-actions").append(groupExportButtons);
 if (frozen) { $("open-history").hidden=true; }
+setWorkspaceTab("design", {scroll:false});
 if (state.result) workflowRun(state.result); else workflowStatus();

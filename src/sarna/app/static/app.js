@@ -734,6 +734,7 @@ function renderBatch(batch) {
   $("export-batch-html").hidden=!!frozen;
   $("job-status").textContent=batch.status==="running"?"Designing the selected references separately…":`Saved promoter comparison · ${batch.id.slice(0,8)}`;
   if (!state.result) $("empty-state").hidden=true;
+  if (typeof workflowBatch === "function") workflowBatch(batch);
 }
 async function openBatchRun(id,restore = true) {
   const child=state.batch?.runs.find(r=>r.id===id);
@@ -876,7 +877,7 @@ function showResult(result) {
     if (!frozen) loadSavedScreenings(result.app.run_id);
   }
   if (typeof workflowRun === "function") workflowRun(result);
-  if (first) selectCandidate(first.id);
+  if (first) selectCandidate(first.id, {reveal:false});
 }
 function renderDiff(previous,current) {
   if (!previous) return;
@@ -933,6 +934,8 @@ function renderExportNote() {
     + `sheets. Order CSV gives the 21-mers to synthesise; core CSV gives the 19 nt cores alone. `
     + `${screened.length ? `Off-target screening (${screened.join(", ")}) travels with them.`
                          : screeningSentence()}`;
+  if (typeof workflowStatus === "function") workflowStatus();
+  if (state.workspaceTab === "export" && typeof renderExportSelection === "function") renderExportSelection();
 }
 
 /** What this run can honestly say about off-target screening, for whichever candidate.
@@ -961,7 +964,8 @@ function screeningSentence(candidateId = null) {
     + `${exact === 1 ? "" : "es"} elsewhere and ${strong} alignment`
     + `${strong === 1 ? "" : "s"} at Wang 2015's 80%. Similarity is not measured binding.`;
 }
-async function selectCandidate(id) {
+async function selectCandidate(id, {reveal=true} = {}) {
+  if (reveal && $("candidate-inspection")) $("candidate-inspection").open = true;
   const run = state.result, candidate = run.candidates.find(c=>c.id===id);
   if (!candidate) return;
   state.selected = id; renderTable(); renderMap();
@@ -1661,7 +1665,7 @@ function renderRankingPerformance(measured) {
   if (!measured.applies) parts.push(`<p class="hint warn">${escapeHTML(measured.custom_note)}</p>`);
   if (measured.circular) parts.push(`<p class="hint warn">${escapeHTML(measured.circularity_note)}</p>`);
   parts.push(`<p class="hint">Source: ${escapeHTML(measured.source)} · AUC ${measured.auc} against ${measured.chance_auc} for a coin flip, p = ${measured.auc_p_value}</p>`);
-  box.innerHTML = parts.join("");
+  box.innerHTML = parts.slice(0,2).join("") + `<details><summary>Measurement &amp; limitations</summary>${parts.slice(2).join("")}</details>`;
 }
 
 function referenceLabel(result) {
@@ -1856,7 +1860,7 @@ function renderTopResult(result) {
     + `<div class="top-actions-row">`
     + `<button type="button" id="print-duplex" class="primary">Print duplex sheet</button>`
     + `<button type="button" id="inspect-top" class="secondary">Why this one?</button>`
-    + `<button type="button" id="export-order-top" class="secondary">Order CSV · all ${fmt(result.counts.passing)}</button>`
+    + `<button type="button" id="export-order-top" class="secondary">Review in Export →</button>`
     + `</div>`;
 }
 
@@ -2216,7 +2220,7 @@ $("saved-runs").addEventListener("change",async()=>{
 document.querySelectorAll("[data-filter]").forEach(b=>b.addEventListener("click",()=>{state.filter=b.dataset.filter;state.page=0;document.querySelectorAll("[data-filter]").forEach(v=>v.classList.toggle("active",v===b));renderTable();}));
 $("candidate-search").addEventListener("input",()=>{state.page=0;renderTable();});
 document.querySelectorAll("[data-sort]").forEach(b=>b.addEventListener("click",()=>{state.descending=state.sort===b.dataset.sort?!state.descending:b.dataset.sort==="rating";state.sort=b.dataset.sort;renderTable();}));
-$("candidate-rows").addEventListener("click",e=>{if (!e.target.closest("input")) {const row=e.target.closest("[data-candidate]");if(row)selectCandidate(row.dataset.candidate);}});
+$("candidate-rows").addEventListener("click",e=>{if (!e.target.closest("input,[data-screening-candidate]")) {const row=e.target.closest("[data-candidate]");if(row)selectCandidate(row.dataset.candidate);}});
 $("candidate-rows").addEventListener("change",e=>{const id=e.target.dataset.check;if(id){e.target.checked?state.checked.add(id):state.checked.delete(id);renderTable();}});
 $("candidate-rows").addEventListener("keydown",e=>{if ((e.key==="Enter" || e.key===" ") && e.target.matches("tr[data-candidate]")){e.preventDefault();selectCandidate(e.target.dataset.candidate);}});
 // The detail panel names the candidates ordering as this same duplex; they are buttons so
@@ -2265,7 +2269,10 @@ document.addEventListener("click", event => {
   const target = event.target.closest("#print-duplex,#inspect-top,#inspect-top-duplex,#export-order-top");
   if (!target) return;
   if (target.id === "print-duplex") printDuplexSheet();
-  if (target.id === "export-order-top") exportOrder();
+  if (target.id === "export-order-top") {
+    if (typeof setWorkspaceTab === "function") setWorkspaceTab("export", {focus:true});
+    else exportOrder();
+  }
   if (target.id === "inspect-top" || target.id === "inspect-top-duplex") {
     const best = state.result?.candidates.find(c => c.rank === 1);
     if (best) { selectCandidate(best.id); $("candidate-detail").scrollIntoView({behavior:"smooth", block:"start"}); }
