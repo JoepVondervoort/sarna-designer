@@ -7,7 +7,7 @@ literature-derived design checks, off-target screening and export of RNA duplexe
 It connects sequence design with the evidence needed to explain a shortlist: transcript choice,
 genomic coordinates, rule provenance, strand-loading predictions and screening records.
 
-Developed by **Joep van de Vondervoort**, the project brings saRNA biology, critical evaluation
+The project brings saRNA biology, critical evaluation
 of design assumptions and reproducible research software into one workflow.
 
 [![Checks](https://github.com/JoepVondervoort/sarna-designer/actions/workflows/checks.yml/badge.svg)](https://github.com/JoepVondervoort/sarna-designer/actions/workflows/checks.yml)
