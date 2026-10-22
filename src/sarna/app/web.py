@@ -5,7 +5,7 @@ import io
 import json
 import logging
 import re
-from base64 import b64encode
+from base64 import b64decode, b64encode
 from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from concurrent.futures import ThreadPoolExecutor
@@ -17,7 +17,13 @@ from urllib.parse import parse_qs, unquote, urlsplit
 from pydantic import ValidationError
 
 from sarna import __version__, settings
-from sarna.app.models import BatchRequest, DesignRequest, ShortlistRequest
+from sarna.app.models import (
+    BatchRequest,
+    ComparisonRecalculationRequest,
+    DesignRequest,
+    SequenceComparisonsRequest,
+    ShortlistRequest,
+)
 from sarna.app.screening_exports import (
     EXPORT_NOTES,
     SUMMARY_COLUMNS,
@@ -49,6 +55,8 @@ from sarna.rules.resolved import ResolvedRule
 
 STATIC = resources.files("sarna.app").joinpath("static")
 MAX_BODY = 200_000
+MAX_IMPORT_BODY = 2_800_000
+MAX_COMPARISON_BODY = 2_800_000
 
 
 def frozen_page(data: dict[str, Any], snapshot: dict[str, Any] | None) -> bytes:
@@ -232,6 +240,81 @@ class AppRouter:
                 self.workers.submit(self.service.run, run_id, request)
                 return self._json(202, {"id": run_id})
         parts = path.strip("/").split("/")
+        if method == "POST" and path == "/api/sequences/import":
+            from sarna.app.sequence_import import file_rows, normalize
+            if len(body) > MAX_IMPORT_BODY:
+                raise ValueError("Upload at most 2 MB.")
+            payload = json.loads(body)
+            rows = file_rows(payload['filename'], b64decode(payload['content'], validate=True))
+            valid, errors = [], []
+            for number, imported_row in enumerate(rows, 1):
+                try:
+                    valid.append(normalize(imported_row))
+                except ValueError as exc:
+                    errors.append(f"Record {number}: {exc}")
+            return self._json(200, {'records': valid, 'errors': errors})
+        if (len(parts) in (4, 5) and parts[:2] == ['api', 'runs']
+                and parts[3] == 'sequence-comparisons'):
+            from sarna.app.sequence_import import compare, input_identity, references
+            snapshot = self.service.store.snapshot(parts[2])
+            current = snapshot.get('sequence_comparison_revision', 0)
+            previous = snapshot.get('sequence_comparisons', [])
+            imported = [record for record in previous if not record.get('reference')]
+            controls = [record for record in previous if record.get('reference')]
+            if method == 'GET' and len(parts) == 4:
+                return self._json(200, {
+                    'revision': current, 'records': imported, 'references': controls,
+                    'notice': snapshot.get('sequence_comparison_notice', ''),
+                })
+            if method == 'POST':
+                if len(body) > MAX_COMPARISON_BODY:
+                    raise ValueError('Request is too large.')
+                recalculate = len(parts) == 5 and parts[4] == 'recalculate'
+                if len(parts) == 5 and not recalculate:
+                    raise KeyError('Unknown comparison action.')
+                comparison_draft = (
+                    ComparisonRecalculationRequest.model_validate_json(body) if recalculate
+                    else SequenceComparisonsRequest.model_validate_json(body)
+                )
+                if comparison_draft.revision != current:
+                    return self._json(409, {
+                        'code': 'sequence-comparison-conflict',
+                        'detail': 'Sequences changed in another window. Reload saved sequences '
+                                  'before adding or removing records. '
+                                  'Your pending input is retained.',
+                    })
+                if recalculate:
+                    records = compare(snapshot, imported, refresh_models=True)
+                    controls = compare(snapshot, references(
+                        (snapshot.get('gene') or {}).get('symbol', '')
+                    ), refresh_models=True)
+                else:
+                    assert isinstance(comparison_draft, SequenceComparisonsRequest)
+                    retained = {input_identity(record): record for record in imported}
+                    requested_rows = [
+                        requested.model_dump() for requested in comparison_draft.records
+                    ]
+                    missing = {input_identity(row): row for row in requested_rows
+                               if input_identity(row) not in retained}
+                    calculated = {input_identity(record): record for record in compare(
+                        snapshot, list(missing.values()),
+                    )}
+                    # Normal edits retain analyses saved under their original models.
+                    available = {**retained, **calculated}
+                    records = [available[input_identity(row)] for row in requested_rows]
+                saved = self.service.store.save_sequence_comparisons(
+                    parts[2], records, comparison_draft.revision, controls if recalculate else None,
+                )
+                if saved is None:
+                    return self._json(409, {
+                        'code': 'sequence-comparison-conflict',
+                        'detail': 'Sequences changed while saving. Reload saved sequences '
+                                  'and retry; your pending input is retained.',
+                    })
+                return self._json(200, {
+                    **saved, 'references': controls,
+                    'notice': '' if recalculate else snapshot.get('sequence_comparison_notice', ''),
+                })
         if (method == "POST" and len(parts) == 4
                 and parts[:2] == ["api", "runs"] and parts[3] == "shortlist"):
             if len(body) > MAX_BODY:
@@ -841,7 +924,12 @@ def make_server(router: AppRouter, port: int) -> ThreadingHTTPServer:
             except ValueError:
                 self.send_error(400, "Invalid Content-Length")
                 return
-            if not 0 <= length <= MAX_BODY:
+            path = urlsplit(self.path).path
+            limit = (MAX_IMPORT_BODY if path == '/api/sequences/import'
+                     else MAX_COMPARISON_BODY if re.fullmatch(
+                         r'/api/runs/[^/]+/sequence-comparisons(?:/recalculate)?', path,
+                     ) else MAX_BODY)
+            if not 0 <= length <= limit:
                 self.send_error(413, "Request too large")
                 return
             if method == "POST" and self.headers.get_content_type() != "application/json":

@@ -1158,6 +1158,66 @@ def check_human_only(browser: Browser) -> None:
     print("    human only: stated on the card and in both scopes, each naming how")
 
 
+def check_sequence_comparisons(browser: Browser) -> None:
+    """Check real imports, stable panels and conflict recovery through the browser/API."""
+    browser.evaluate("document.getElementById('sequence-import-controls').open=true;"
+                     "document.getElementById('sequence-input').value='Probe,'+"
+                     "state.result.candidates[0].target_site_dna;"
+                     "document.getElementById('sequence-role').value='sense';"
+                     "document.getElementById('sequence-add').click()")
+    browser.wait("sequencePending.length===1")
+    browser.evaluate("document.getElementById('sequence-confirm').click()")
+    browser.wait("!state.sequenceSaving && state.sequenceRecords.some(r=>r.name==='Probe')")
+    assert browser.evaluate("document.querySelector('.reference-duplex')!==null") is True
+    browser.evaluate("window.stableReference=document.querySelector('.reference-strand-disclosure');"
+                     "stableReference.open=true;document.getElementById('zoom-in').click()")
+    assert browser.evaluate("stableReference===document.querySelector("
+                            "'.reference-strand-disclosure') && stableReference.open") is True
+    browser.evaluate("""(async()=>{
+      const path=`/api/runs/${state.result.app.run_id}/sequence-comparisons`;
+      window.oldSavedComparison=JSON.stringify(state.sequenceRecords);
+      const saved=await api(path);
+      if (JSON.stringify([...saved.references,...saved.records])!==oldSavedComparison)
+        throw Error('Reopening changed saved analysis');
+      await api(path,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({revision:state.sequenceRevision,records:[
+          ...sequenceInputs(saved.records),{name:'Other window',sequence:'AUGC',role:'sense'}]})});
+    })()""")
+    browser.evaluate("document.getElementById('sequence-input').value='Pending,GCAU';"
+                     "document.getElementById('sequence-add').click()")
+    browser.wait("sequencePending[0]?.name==='Pending'")
+    browser.evaluate("document.getElementById('sequence-confirm').click()")
+    browser.wait("!state.sequenceSaving && !document.getElementById("
+                 "'sequence-conflict-recovery').hidden")
+    assert browser.evaluate("sequencePending[0].name") == 'Pending'
+    browser.evaluate("document.getElementById('sequence-reload').click()")
+    browser.wait("state.sequenceRecords.some(r=>r.name==='Other window')")
+    browser.evaluate("document.getElementById('sequence-confirm').click()")
+    browser.wait("!state.sequenceSaving && state.sequenceRecords.some(r=>r.name==='Pending')")
+    browser.evaluate(r"""(async()=>{
+      const records=Array.from({length:20},(_,i)=>({name:`Repeated ${i}`,role:'sense',
+        sequence:state.result.candidates[i%state.result.candidates.length].target_site_dna}));
+      await saveSequenceRecords(records);
+      await saveSequenceRecords([...state.sequenceRecords.filter(r=>!r.reference),
+        {name:'Twenty first',sequence:'AUGC',role:'sense'}]);
+      if(state.sequenceRecords.filter(r=>!r.reference).length!==21)
+        throw Error('Repeated additions lost a record');
+      await saveSequenceRecords([]);
+      const csv='name,sequence,source\n'+Array.from({length:180},(_,i)=>
+        `row-${i},AUGC,${'x'.repeat(1000)}\n`).join('');
+      const transfer=new DataTransfer();
+      transfer.items.add(new File([csv],'large.csv',{type:'text/csv'}));
+      const file=document.getElementById('sequence-file');file.files=transfer.files;
+      file.dispatchEvent(new Event('change',{bubbles:true}));
+    })()""")
+    browser.wait("sequencePending.length===180")
+    assert browser.evaluate("document.getElementById('sequence-status').textContent") == ''
+    browser.evaluate("sequencePending=[];document.getElementById('sequence-preview').innerHTML='';"
+                     "document.getElementById('sequence-import-controls').open=false;")
+    print('    comparisons: compact repeated imports, large HTTP upload, frozen reads, '
+          'stable zoom panels and stale-window recovery')
+
+
 def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
              screenshots: Path | None, online: bool = False,
              blast: StubBlast | None = None) -> None:
@@ -1194,9 +1254,13 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     browser.evaluate("document.getElementById('motifs').checked=false;"
                      "document.getElementById('regulatory').checked=false;"
                      "document.getElementById('design-form').requestSubmit()")
+    browser.wait("state.result && !state.busy && !document.getElementById('design-ready').hidden")
+    assert browser.evaluate("state.workspaceTab") == 'design'
+    browser.evaluate("document.querySelector('#design-ready [data-workspace-link]').click()")
     browser.wait("!document.getElementById('result-area').hidden")
     browser.wait("document.querySelector('#candidate-detail .sequence-box')!==null")
     check_workspace_tabs(browser)
+    check_sequence_comparisons(browser)
     before = browser.evaluate("document.getElementById('metric-passing').textContent")
     original = str(browser.evaluate("state.result.app.run_id"))
     browser.evaluate("setWorkspaceTab('design');document.getElementById('advanced-design-settings').open=true;document.getElementById('open-settings').click()")
@@ -1208,7 +1272,9 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     assert browser.evaluate("!document.getElementById('draft-notice').hidden") is True
     assert browser.evaluate("document.getElementById('metric-passing').textContent") == before
     browser.evaluate("document.getElementById('design-form').requestSubmit()")
-    browser.wait("!document.getElementById('diff-notice').hidden")
+    browser.wait("!state.busy && !document.getElementById('diff-notice').hidden")
+    assert browser.evaluate("state.workspaceTab") == 'design'
+    browser.evaluate("document.querySelector('#design-ready [data-workspace-link]').click()")
     run_id = str(browser.evaluate("state.result.app.run_id"))
     assert run_id != original
     assert browser.evaluate("document.getElementById('global-error').textContent") == ""
@@ -1230,10 +1296,10 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     geometry = browser.evaluate("(()=>{const svg=document.getElementById('promoter-map');"
                                 "return {width:svg.getBoundingClientRect().width,"
                                 "height:svg.getBoundingClientRect().height,"
-                                "units:svg.viewBox.baseVal.width}})()")
+                                "units:svg.viewBox.baseVal.width,unitsHeight:svg.viewBox.baseVal.height}})()")
     assert isinstance(geometry, dict)
     assert abs(geometry["width"] - geometry["units"]) < 1
-    assert geometry["height"] == 306
+    assert abs(geometry["height"] - geometry["unitsHeight"]) < 1
     # Wider layouts should add plotting space, retaining native-sized text and track heights.
     for viewport_width in (1920, 1440):
         browser.call("Emulation.setDeviceMetricsOverride", width=viewport_width, height=1100,
@@ -1244,8 +1310,9 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
         assert browser.evaluate(
             "Math.abs(document.getElementById('promoter-map').getScreenCTM().a-1)<0.001"
         ) is True
-        assert browser.evaluate("document.getElementById('promoter-map').getBoundingClientRect()"
-                                ".height") == 306
+        assert browser.evaluate("(()=>{const svg=document.getElementById('promoter-map');return "
+                                "Math.abs(svg.getBoundingClientRect().height-"
+                                "svg.viewBox.baseVal.height)<1})()") is True
     if screenshots:
         browser.evaluate("document.querySelector('.promoter-card').scrollIntoView({block:'start'})")
         browser.screenshot(screenshots / "promoter-landscape.png")
@@ -1424,11 +1491,11 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
               chips:[...legend.querySelectorAll('.legend-chip')].length};})()""")
     assert isinstance(legend, dict), legend
     assert legend["collapsible"] is True, "the legend cannot be collapsed"
-    assert legend["chips"] == 7, legend["chips"]
+    assert legend["chips"] == len(legend["rows"]), legend["chips"]
     # Every row of the map is named in the legend, in the order the map draws them.
     assert legend["rows"] == ["Reference / TSS", "Design windows", "CpG islands",
                               "Regulatory build", "TF motif matches", "Passing targets",
-                              "Excluded targets"], legend["rows"]
+                              "Excluded targets", "Existing saRNAs"], legend["rows"]
     stray = [s for s in legend["swatches"] if s not in legend["declared"]]
     assert not stray, (
         f"the legend shows {stray}, which is not in the map's colour table "

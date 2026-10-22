@@ -23,10 +23,13 @@ function setWorkspaceTab(tab, {focus=false, scroll=true} = {}) {
   if (focus) $(`workspace-${tab}`).focus({preventScroll:true});
 }
 function workflowBatch(batch) {
-  const changed = state.workspaceBatchId !== batch.id;
   state.workspaceBatchId = batch.id;
   workflowStatus();
-  if (changed && !state.result) setWorkspaceTab("candidates");
+  if (!state.workspaceTab) setWorkspaceTab(frozen ? "candidates" : "design", {scroll:false});
+  if (batch.status !== "running" && !frozen) {
+    $("design-ready").hidden = false;
+    $("design-ready-message").textContent = "Promoter comparison finished. Review the completed runs when you are ready.";
+  }
 }
 function renderExportSelection() {
   const host = $("export-selection");
@@ -74,7 +77,11 @@ function workflowRun(result) {
   }
   document.body.classList.add("workflow-review");
   renderShortlist(); workflowStatus();
-  if (changedRun || !state.workspaceTab) setWorkspaceTab("candidates");
+  if (changedRun || !state.workspaceTab) {
+    setWorkspaceTab(state.workspaceTab || (frozen ? "candidates" : "design"), {scroll:false});
+    $("design-ready").hidden = !!frozen;
+    $("design-ready-message").textContent = `Design ready: ${result.counts.passing} of ${result.counts.generated} targets pass the current gates. Your results are saved. Open Candidates when you are ready.`;
+  }
   if (state.selected) workflowCandidate(result.candidates.find(c=>c.id===state.selected));
 }
 function workflowStatus() {
@@ -306,5 +313,5 @@ $("history-compare").addEventListener("click",async()=>{
 const groupExportButtons = $("export-batch-json").parentElement;
 $("group-export-actions").append(groupExportButtons);
 if (frozen) { $("open-history").hidden=true; }
-setWorkspaceTab("design", {scroll:false});
+setWorkspaceTab(frozen ? "candidates" : "design", {scroll:false});
 if (state.result) workflowRun(state.result); else workflowStatus();

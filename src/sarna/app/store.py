@@ -45,6 +45,25 @@ class RunStore:
         self.path = path
         with self.connect() as connection:
             connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("CREATE TABLE IF NOT EXISTS sequence_comparisons "
+                               "(run_id TEXT PRIMARY KEY, records TEXT NOT NULL)")
+            comparison_columns = {
+                row["name"] for row in connection.execute("PRAGMA table_info(sequence_comparisons)")
+            }
+            if "revision" not in comparison_columns:
+                connection.execute(
+                    "ALTER TABLE sequence_comparisons ADD COLUMN "
+                    "revision INTEGER NOT NULL DEFAULT 0"
+                )
+            if "reference_records" not in comparison_columns:
+                connection.execute(
+                    "ALTER TABLE sequence_comparisons ADD COLUMN reference_records TEXT"
+                )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS sequence_comparison_history ("
+                "run_id TEXT NOT NULL, revision INTEGER NOT NULL, "
+                "records TEXT NOT NULL, reference_records TEXT, PRIMARY KEY(run_id,revision))"
+            )
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS runs ("
                 "id TEXT PRIMARY KEY, created TEXT NOT NULL, label TEXT NOT NULL, "
@@ -95,7 +114,7 @@ class RunStore:
                 "revision INTEGER NOT NULL, updated TEXT, entries TEXT NOT NULL, "
                 "FOREIGN KEY(run_id) REFERENCES runs(id))"
             )
-            connection.execute("PRAGMA user_version=6")
+            connection.execute("PRAGMA user_version=7")
             connection.execute(
                 "UPDATE screenings SET status='waiting', stage='Report retrieval needs retry' "
                 "WHERE status='error' AND request_id IS NOT NULL AND result IS NOT NULL "
@@ -267,8 +286,67 @@ class RunStore:
         if row is None or row["snapshot"] is None:
             raise KeyError(run_id)
         result: dict[str, Any] = json.loads(zlib.decompress(row["snapshot"]))
+        had_frozen_references = 'sequence_comparisons' in result
+        if "promoter" not in result:
+            return result
+        with self.connect() as connection:
+            saved = connection.execute(
+                "SELECT records,revision,reference_records FROM sequence_comparisons "
+                "WHERE run_id=?",
+                (run_id,),
+            ).fetchone()
+        references = result.get('sequence_comparisons', [])
+        if saved and saved['reference_records'] is not None:
+            references = json.loads(saved['reference_records'])
+        result['sequence_comparisons'] = references + (
+            json.loads(saved['records']) if saved else []
+        )
+        result['sequence_comparison_revision'] = saved['revision'] if saved else 0
+        # Old snapshots remain readable; never invent historical predictions on a read.
+        if any('analysis_provenance' not in record for record in result['sequence_comparisons']):
+            result['sequence_comparison_notice'] = (
+                'Legacy comparison: original analysis software was not recorded. '
+                'Saved results are preserved; recalculate explicitly '
+                'to create a versioned analysis.'
+            )
+        elif not had_frozen_references and (not saved or saved['reference_records'] is None):
+            result['sequence_comparison_notice'] = (
+                'This historical run has no frozen control analysis. '
+                'Recalculate comparisons explicitly to add current references.'
+            )
         return result
 
+    def save_sequence_comparisons(
+        self, run_id: str, records: list[dict[str, Any]], revision: int,
+        reference_records: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any] | None:
+        """Atomically save a comparison only when its browser revision is still current."""
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            saved = connection.execute(
+                "SELECT revision,reference_records FROM sequence_comparisons WHERE run_id=?",
+                (run_id,),
+            ).fetchone()
+            current = saved['revision'] if saved else 0
+            if current != revision:
+                return None
+            retained_references = (
+                json.dumps(reference_records) if reference_records is not None
+                else saved['reference_records'] if saved else None
+            )
+            connection.execute(
+                "INSERT OR IGNORE INTO sequence_comparison_history "
+                "SELECT run_id,revision,records,reference_records FROM sequence_comparisons "
+                "WHERE run_id=?", (run_id,),
+            )
+            connection.execute(
+                "INSERT INTO sequence_comparisons(run_id,records,revision,reference_records) "
+                "VALUES (?,?,?,?) ON CONFLICT(run_id) DO UPDATE SET "
+                "records=excluded.records, revision=excluded.revision, "
+                "reference_records=excluded.reference_records",
+                (run_id, json.dumps(records), current + 1, retained_references),
+            )
+        return {'revision': current + 1, 'records': records}
 
     def reserve_screening(
         self, run_id: str, scope: str, candidates: list[str], backend: str = "ncbi",

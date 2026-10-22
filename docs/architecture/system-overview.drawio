@@ -1,0 +1,264 @@
+<mxfile host="65bd71144e">
+    <diagram id="overview" name="1 - System overview">
+        <mxGraphModel grid="1" page="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" pageScale="1" pageWidth="1600" pageHeight="1180" math="0" shadow="0">
+            <root>
+                <mxCell id="overview-0"/>
+                <mxCell id="1" parent="overview-0"/>
+                <mxCell id="p1t" parent="1" style="text;html=1;align=left;strokeColor=none;fillColor=none;fontSize=24;fontStyle=1;" value="What this program is, and where every byte comes from" vertex="1">
+                    <mxGeometry height="40" width="1500" x="40" y="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1s" parent="1" style="text;html=1;align=left;strokeColor=none;fillColor=none;fontSize=14;" value="One Python process on your own machine, a browser page talking to it over loopback, and four outside services it only calls when asked." vertex="1">
+                    <mxGeometry height="30" width="1500" x="40" y="72" as="geometry"/>
+                </mxCell>
+                <mxCell id="machine" parent="1" style="fillColor=none;strokeColor=#9a9a94;dashed=1;verticalAlign=top;align=left;spacingLeft=12;spacingTop=6;fontStyle=1;fontSize=15;" value="Your computer (nothing below this line is a server someone else runs)" vertex="1">
+                    <mxGeometry height="900" width="940" x="40" y="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="browser" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#e8eef7;strokeColor=#4a6fa5;" value="&lt;b&gt;Browser page, http://localhost:8001/&lt;/b&gt;&lt;br/&gt;index.html plus three classic scripts, no framework, no build step:&lt;br/&gt;app.js (setup, results, promoter map, duplex panel)&lt;br/&gt;offtarget.js (screening panel, shares app.js globals)&lt;br/&gt;workflow.js (the guided research flow)&lt;br/&gt;&lt;br/&gt;It only ever speaks JSON to the routes on page 3." vertex="1">
+                    <mxGeometry height="185" width="420" x="70" y="165" as="geometry"/>
+                </mxCell>
+                <mxCell id="server" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#e9f2ec;strokeColor=#4f7d5f;" value="&lt;b&gt;http.server.ThreadingHTTPServer&lt;/b&gt;&lt;br/&gt;Bound to 127.0.0.1 only, so nothing else on the&lt;br/&gt;network can reach it. The Host header is checked&lt;br/&gt;against 127.0.0.1:port, and bodies are size capped&lt;br/&gt;(200 kB, 2.8 MB for uploads and comparisons)." vertex="1">
+                    <mxGeometry height="125" width="420" x="70" y="390" as="geometry"/>
+                </mxCell>
+                <mxCell id="router" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#e9f2ec;strokeColor=#4f7d5f;" value="&lt;b&gt;AppRouter.dispatch(method, target, body)&lt;/b&gt;&lt;br/&gt;Plain function over bytes: no socket needed, which is how&lt;br/&gt;the tests drive every route offline.&lt;br/&gt;Validates with pydantic, then maps exceptions to status:&lt;br/&gt;422 bad input, 404 unknown, 409 offline cache miss or&lt;br/&gt;edit conflict, 502 upstream failure.&lt;br/&gt;&lt;br/&gt;Two thread pools: workers(2) for designs, screeners(2)&lt;br/&gt;for screenings, kept apart because a design finishes in&lt;br/&gt;under a second and a screening waits on NCBI for minutes." vertex="1">
+                    <mxGeometry height="215" width="420" x="70" y="555" as="geometry"/>
+                </mxCell>
+                <mxCell id="service" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#e9f2ec;strokeColor=#4f7d5f;" value="&lt;b&gt;DesignService&lt;/b&gt;&lt;br/&gt;Fetch, run, store. Every outside client arrives through an&lt;br/&gt;injectable factory (client_factory, gtex_factory,&lt;br/&gt;blast_factory, poll_sleep), which is what keeps the unit&lt;br/&gt;suite from touching the network at all." vertex="1">
+                    <mxGeometry height="125" width="420" x="70" y="810" as="geometry"/>
+                </mxCell>
+                <mxCell id="engine" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#e9f2ec;strokeColor=#4f7d5f;" value="&lt;b&gt;sarna.design.design_sarnas(promoter, config)&lt;/b&gt;&lt;br/&gt;The science. A pure function over plain objects: no HTTP,&lt;br/&gt;no UI, no global state, and pydantic is its only dependency.&lt;br/&gt;Four stages, detailed on page 4.&lt;br/&gt;&lt;br/&gt;Around it: sarna.rules (the rule catalogue and provenance),&lt;br/&gt;sarna.thermo (nearest-neighbour tables), sarna.sequence,&lt;br/&gt;sarna.genome (coordinates, strands, promoters),&lt;br/&gt;sarna.regulatory (CpG, motifs, chromatin),&lt;br/&gt;sarna.offtarget, sarna.expression, sarna.view." vertex="1">
+                    <mxGeometry height="215" width="420" x="520" y="555" as="geometry"/>
+                </mxCell>
+                <mxCell id="storage" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f4efe3;strokeColor=#8a7a4e;" value="&lt;b&gt;~/.sarna-designer/ (set by --data-dir)&lt;/b&gt;&lt;br/&gt;runs.sqlite3: runs, batches, batch_runs, screenings,&lt;br/&gt;shortlists, sequence_comparisons plus their history.&lt;br/&gt;WAL mode, PRAGMA user_version=7, one connection per&lt;br/&gt;operation so background jobs never share one.&lt;br/&gt;references/: the optional local BLAST+ index.&lt;br/&gt;&lt;br/&gt;.cache/ensembl and .cache/gtex hold recorded replies.&lt;br/&gt;Note: that cache path is relative to the directory you&lt;br/&gt;start the app in, unless SARNA_CACHE_DIR is set." vertex="1">
+                    <mxGeometry height="195" width="420" x="520" y="810" as="geometry"/>
+                </mxCell>
+                <mxCell id="bundled" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f0eaf6;strokeColor=#7a5fa5;" value="&lt;b&gt;Data shipped inside the wheel (no download, ever)&lt;/b&gt;&lt;br/&gt;jaspar_core_selection.json: JASPAR CORE matrices, CC BY 4.0&lt;br/&gt;vondervoort_2026_chapter4.csv: 125 assayed targets&lt;br/&gt;..._chapter4_coordinates.csv: recovered GRCh38 positions&lt;br/&gt;promoter_anchors.toml: literature-defined anchors&lt;br/&gt;cell_lines.toml: cell line and evidence axis registry&lt;br/&gt;view/template.html: the self-contained export page" vertex="1">
+                    <mxGeometry height="185" width="420" x="520" y="165" as="geometry"/>
+                </mxCell>
+                <mxCell id="af22" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f0eaf6;strokeColor=#7a5fa5;" value="&lt;b&gt;Optional local files: AF22 histone bigWigs&lt;/b&gt;&lt;br/&gt;GSE108506, six marks, read through pyBigWig from the&lt;br/&gt;folder named by SARNA_AF22_DIR. Absent by default." vertex="1">
+                    <mxGeometry height="125" width="420" x="520" y="390" as="geometry"/>
+                </mxCell>
+                <mxCell id="outside" parent="1" style="fillColor=none;strokeColor=#9a9a94;dashed=1;verticalAlign=top;align=left;spacingLeft=12;spacingTop=6;fontStyle=1;fontSize=15;" value="Outside your computer, and only when you ask" vertex="1">
+                    <mxGeometry height="830" width="520" x="1020" y="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="ensembl" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f9eaea;strokeColor=#a85a5a;" value="&lt;b&gt;Ensembl REST, rest.ensembl.org&lt;/b&gt;&lt;br/&gt;Called on gene lookup and when promoter DNA is needed.&lt;br/&gt;GET /lookup/symbol/homo_sapiens/{symbol}?expand=0&lt;br/&gt;GET /lookup/id/{gene}?expand=1;mane=1&lt;br/&gt;GET /sequence/region/homo_sapiens/{region}&lt;br/&gt;GET /overlap/region/homo_sapiens/{region}?feature=...&lt;br/&gt;&lt;br/&gt;Sent: a gene symbol, then coordinates. Replies are&lt;br/&gt;cached, so the second lookup of a gene needs no network." vertex="1">
+                    <mxGeometry height="185" width="460" x="1050" y="170" as="geometry"/>
+                </mxCell>
+                <mxCell id="gtex" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f9eaea;strokeColor=#a85a5a;" value="&lt;b&gt;GTEx Portal, gtexportal.org&lt;/b&gt;&lt;br/&gt;A separate request on purpose, so a GTEx outage cannot&lt;br/&gt;take gene lookup down. Dataset gtex_v10.&lt;br/&gt;GET /api/v2/reference/gene, /dataset/tissueSiteDetail,&lt;br/&gt;/expression/medianTranscriptExpression" vertex="1">
+                    <mxGeometry height="145" width="460" x="1050" y="385" as="geometry"/>
+                </mxCell>
+                <mxCell id="blast" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f9eaea;strokeColor=#a85a5a;" value="&lt;b&gt;NCBI BLAST URL API, blast.ncbi.nlm.nih.gov/Blast.cgi&lt;/b&gt;&lt;br/&gt;Only when you press the off-target button.&lt;br/&gt;POST CMD=Put with the 19 nt candidates as FASTA,&lt;br/&gt;then CMD=Get polling on the returned request id.&lt;br/&gt;Transcript scope: DATABASE=refseq_rna, human by&lt;br/&gt;ENTREZ_QUERY. Genomic scope:&lt;br/&gt;GPIPE/9606/current/ref_top_level, no ENTREZ_QUERY,&lt;br/&gt;MEGABLAST=off, EXPECT=1000 so a 16 of 19 match is&lt;br/&gt;still visible. Genome searches are an errand to&lt;br/&gt;collect, not something to wait on." vertex="1">
+                    <mxGeometry height="195" width="460" x="1050" y="560" as="geometry"/>
+                </mxCell>
+                <mxCell id="refsetup" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f9eaea;strokeColor=#a85a5a;" value="&lt;b&gt;Only during optional reference setup&lt;/b&gt;&lt;br/&gt;ftp.ncbi.nlm.nih.gov, RefSeq annotation release 110&lt;br/&gt;github.com/BenLangmead/bowtie releases (the indexer)&lt;br/&gt;Checksummed, resumable, and never started on install." vertex="1">
+                    <mxGeometry height="125" width="460" x="1050" y="785" as="geometry"/>
+                </mxCell>
+                <mxCell id="e1" edge="1" parent="1" source="browser" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#5d6b66;strokeWidth=2;fontSize=11;labelBackgroundColor=#ffffff;" target="server" value="fetch(), JSON">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e2" edge="1" parent="1" source="server" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#5d6b66;strokeWidth=2;fontSize=11;labelBackgroundColor=#ffffff;" target="router" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e3" edge="1" parent="1" source="router" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#5d6b66;strokeWidth=2;fontSize=11;labelBackgroundColor=#ffffff;" target="service" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e4" edge="1" parent="1" source="service" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#5d6b66;strokeWidth=2;fontSize=11;labelBackgroundColor=#ffffff;" target="engine" value="promoter + config">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e5" edge="1" parent="1" source="service" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#5d6b66;strokeWidth=2;fontSize=11;labelBackgroundColor=#ffffff;" target="storage" value="snapshots">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e6" edge="1" parent="1" source="engine" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#5d6b66;strokeWidth=2;fontSize=11;labelBackgroundColor=#ffffff;dashed=1;" target="bundled" value="reads">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e7" edge="1" parent="1" source="engine" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#5d6b66;strokeWidth=2;fontSize=11;labelBackgroundColor=#ffffff;dashed=1;" target="af22" value="if switched on">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e8" edge="1" parent="1" source="service" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#5d6b66;strokeWidth=2;fontSize=11;labelBackgroundColor=#ffffff;" target="ensembl" value="on lookup">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e9" edge="1" parent="1" source="service" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#5d6b66;strokeWidth=2;fontSize=11;labelBackgroundColor=#ffffff;dashed=1;" target="gtex" value="if asked">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e10" edge="1" parent="1" source="service" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#5d6b66;strokeWidth=2;fontSize=11;labelBackgroundColor=#ffffff;dashed=1;" target="blast" value="on the button">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e11" edge="1" parent="1" source="storage" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#5d6b66;strokeWidth=2;fontSize=11;labelBackgroundColor=#ffffff;dashed=1;" target="refsetup" value="if you set it up">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1n" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f7f7f5;strokeColor=#9a9a94;dashed=1;" value="&lt;b&gt;The one sentence version&lt;/b&gt;&lt;br/&gt;The gene you are working on is the research question, so the program is built so that only Ensembl learns it, and NCBI only if you decide an off-target screen is worth telling it. Everything else, the rules, the thermodynamics, the 125 assayed sequences, the motif matrices, the saved runs and every export, is already on your disk. Set SARNA_OFFLINE and the program refuses outside calls entirely and answers from cache." vertex="1">
+                    <mxGeometry height="90" width="1500" x="40" y="1040" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="sources" name="2 - Data sources">
+        <mxGraphModel dx="1548" dy="1548" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1560" pageHeight="1110" math="0" shadow="0">
+            <root>
+                <mxCell id="sources-0"/>
+                <mxCell id="1" parent="sources-0"/>
+                <mxCell id="p2t" parent="1" style="text;html=1;align=left;strokeColor=none;fillColor=none;fontSize=24;fontStyle=1;" value="Each source: what is sent, what returns, and what happens offline" vertex="1">
+                    <mxGeometry height="40" width="1500" x="40" y="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2s" parent="1" style="text;html=1;align=left;strokeColor=none;fillColor=none;fontSize=14;" value="Four of these are network calls. Five are files that ship with the program or sit in a folder you chose." vertex="1">
+                    <mxGeometry height="30" width="1500" x="40" y="72" as="geometry"/>
+                </mxCell>
+                <mxCell id="c1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f9eaea;strokeColor=#a85a5a;" value="&lt;b&gt;Ensembl REST (required for a gene)&lt;/b&gt;&lt;br/&gt;&lt;i&gt;Sent&lt;/i&gt;: a human gene symbol or Ensembl gene ID, then genomic coordinates.&lt;br/&gt;&lt;i&gt;Returns&lt;/i&gt;: gene identity, every annotated transcript with its MANE and canonical&lt;br/&gt;flags, TSS coordinates, and promoter DNA for a requested region.&lt;br/&gt;&lt;i&gt;Cached&lt;/i&gt;: yes, under .cache/ensembl, so a repeated gene needs no network.&lt;br/&gt;&lt;i&gt;Offline&lt;/i&gt;: a cache miss is a 409 with code offline-cache-miss, and the page&lt;br/&gt;offers an explicit online retry. SARNA_OFFLINE makes that refusal permanent.&lt;br/&gt;&lt;i&gt;Why live calls are tested&lt;/i&gt;: two Ensembl behaviours, mane=1 being required and a&lt;br/&gt;400 rather than a 404 for an unknown symbol, were invisible to recorded payloads." vertex="1">
+                    <mxGeometry height="190" width="720" x="40" y="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="c2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f9eaea;strokeColor=#a85a5a;" value="&lt;b&gt;NCBI BLAST (opt in, never automatic)&lt;/b&gt;&lt;br/&gt;&lt;i&gt;Sent&lt;/i&gt;: the 19 nt candidate sequences of one run, in batches you choose&lt;br/&gt;(1, 5, 10, 15, 25 or all; 15 by default).&lt;br/&gt;&lt;i&gt;Returns&lt;/i&gt;: alignments per candidate, kept as a bounded best-of by bit score,&lt;br/&gt;with mismatch positions taken from BLAST&#39;s own Hsp_midline.&lt;br/&gt;&lt;i&gt;Reported, never filtered&lt;/i&gt;: hit counts, Wang&#39;s 80% homology count (16 of 19),&lt;br/&gt;the matched bases, and for genomic hits a signed distance to the nearest TSS.&lt;br/&gt;&lt;i&gt;If patience runs out&lt;/i&gt;: the screening becomes status waiting, keeps NCBI&#39;s&lt;br/&gt;request id, survives a restart, and is finished later rather than resubmitted." vertex="1">
+                    <mxGeometry height="190" width="720" x="800" y="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="c3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f9eaea;strokeColor=#a85a5a;" value="&lt;b&gt;GTEx Portal (evidence, not ranking)&lt;/b&gt;&lt;br/&gt;&lt;i&gt;Sent&lt;/i&gt;: an Ensembl gene ID and its transcript IDs.&lt;br/&gt;&lt;i&gt;Returns&lt;/i&gt;: median transcript expression across 54 sample groups, which the&lt;br/&gt;program folds into 21 organs for display.&lt;br/&gt;&lt;i&gt;It never reorders the transcript picker&lt;/i&gt;, and a browser check asserts the order&lt;br/&gt;is identical before and after the evidence loads.&lt;br/&gt;&lt;i&gt;Caveat kept accurate&lt;/i&gt;: gtex_v10 does hold two cultured groups, fibroblasts and&lt;br/&gt;EBV-transformed lymphocytes. AF22 and HeLa are absent." vertex="1">
+                    <mxGeometry height="190" width="720" x="40" y="330" as="geometry"/>
+                </mxCell>
+                <mxCell id="c4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f9eaea;strokeColor=#a85a5a;" value="&lt;b&gt;Local BLAST+ references (optional, one time)&lt;/b&gt;&lt;br/&gt;&lt;i&gt;From&lt;/i&gt;: RefSeq annotation release 110 over NCBI FTP, plus a bowtie release&lt;br/&gt;from GitHub to build the index.&lt;br/&gt;&lt;i&gt;Why&lt;/i&gt;: it turns the screening from a remote errand into an interactive search.&lt;br/&gt;&lt;i&gt;How it behaves&lt;/i&gt;: nothing downloads on install, update or a status read.&lt;br/&gt;Downloads are checksummed and resumable, a paused setup keeps verified files, and a&lt;br/&gt;finished release is activated atomically.&lt;br/&gt;&lt;i&gt;Verified first&lt;/i&gt;: the native tools are checked against a tiny exhaustive oracle&lt;br/&gt;before any large download starts." vertex="1">
+                    <mxGeometry height="190" width="720" x="800" y="330" as="geometry"/>
+                </mxCell>
+                <mxCell id="c5" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f0eaf6;strokeColor=#7a5fa5;" value="&lt;b&gt;Chapter 4 dataset (bundled)&lt;/b&gt;&lt;br/&gt;125 assayed target sequences, 14 of which activated their gene, plus recovered GRCh38&lt;br/&gt;coordinates for 123 of them with 519 bp of context each.&lt;br/&gt;&lt;i&gt;This is the only thing here that can show a rule to be wrong&lt;/i&gt; rather than merely&lt;br/&gt;unconventional, and it has already refuted one preset.&lt;br/&gt;&lt;i&gt;Range restricted&lt;/i&gt;: every sequence was built to pass Wang&#39;s gate, so it can show a&lt;br/&gt;gate too strict, never one too permissive." vertex="1">
+                    <mxGeometry height="190" width="720" x="40" y="540" as="geometry"/>
+                </mxCell>
+                <mxCell id="c6" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f0eaf6;strokeColor=#7a5fa5;" value="&lt;b&gt;JASPAR CORE subset (bundled)&lt;/b&gt;&lt;br/&gt;Curated vertebrate matrices with their accessions, experiment types and versions,&lt;br/&gt;distributed under CC BY 4.0 and listed in NOTICE.&lt;br/&gt;&lt;i&gt;A motif prediction may not name a cell type.&lt;/i&gt; Sequence matching is cell-type&lt;br/&gt;agnostic by construction, so the code raises if one is attached.&lt;br/&gt;Relative-score cutoff 0.80, which is JASPAR&#39;s own convention, not a significance level." vertex="1">
+                    <mxGeometry height="190" width="720" x="800" y="540" as="geometry"/>
+                </mxCell>
+                <mxCell id="c7" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f0eaf6;strokeColor=#7a5fa5;" value="&lt;b&gt;AF22 histone tracks (your own files)&lt;/b&gt;&lt;br/&gt;GSE108506, six marks, read with pyBigWig from SARNA_AF22_DIR. Not shipped.&lt;br/&gt;&lt;i&gt;Presence is enrichment, never raw signal&lt;/i&gt;: these tracks have no input&lt;br/&gt;normalisation, so every mark reads about 1.0 everywhere. Presence is fold over a&lt;br/&gt;250-window same-contig background.&lt;br/&gt;&lt;i&gt;It never scores a candidate.&lt;/i&gt; It is context beside the result.&lt;br/&gt;Measured: 1 of the registry&#39;s 24 cell line by evidence axis pairs is available." vertex="1">
+                    <mxGeometry height="190" width="720" x="40" y="750" as="geometry"/>
+                </mxCell>
+                <mxCell id="c8" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f0eaf6;strokeColor=#7a5fa5;" value="&lt;b&gt;Rules, tables and anchors (in the code)&lt;/b&gt;&lt;br/&gt;Nearest-neighbour thermodynamic tables (Xia 1998 RNA, SantaLucia 1998 DNA, and the&lt;br/&gt;legacy kJ table kept for comparison), each reported side by side, never averaged.&lt;br/&gt;Promoter anchors from the literature in promoter_anchors.toml.&lt;br/&gt;Every rule carries a citation and every verdict carries its reason, which is the whole&lt;br/&gt;point of the project." vertex="1">
+                    <mxGeometry height="190" width="720" x="800" y="750" as="geometry"/>
+                </mxCell>
+                <mxCell id="p2n" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f7f7f5;strokeColor=#9a9a94;dashed=1;" value="&lt;b&gt;Three outcomes, not two&lt;/b&gt;&lt;br/&gt;A rule can pass, fail, or report not-applicable, which means it could not be evaluated and so neither excludes nor scores. A rule the preset omits produces no result at all. Omitted, could not be checked, and failed are three different statements about a candidate, and collapsing them is how a tool turns ignorance into a finding." vertex="1">
+                    <mxGeometry height="90" width="1480" x="40" y="970" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="api" name="3 - HTTP API">
+        <mxGraphModel dx="1548" dy="1548" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="860" math="0" shadow="0">
+            <root>
+                <mxCell id="api-0"/>
+                <mxCell id="1" parent="api-0"/>
+                <mxCell id="p3t" parent="1" style="text;html=1;align=left;strokeColor=none;fillColor=none;fontSize=24;fontStyle=1;" value="The HTTP API: every route the page can call" vertex="1">
+                    <mxGeometry height="40" width="1500" x="40" y="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3s" parent="1" style="text;html=1;align=left;strokeColor=none;fillColor=none;fontSize=14;" value="All of it is JSON over loopback. AppRouter.dispatch is the real entry point; the socket is just a way to reach it." vertex="1">
+                    <mxGeometry height="30" width="1500" x="40" y="72" as="geometry"/>
+                </mxCell>
+                <mxCell id="g1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#e9f2ec;strokeColor=#4f7d5f;" value="&lt;b&gt;Static files&lt;/b&gt;&lt;br/&gt;GET /  (index.html)&lt;br/&gt;GET /app.js   GET /offtarget.js   GET /workflow.js&lt;br/&gt;GET /app.css   GET /favicon.svg   GET /favicon.ico&lt;br/&gt;&lt;br/&gt;offtarget.js must also be inlined into a frozen export&lt;br/&gt;and listed here, or an archive loses its screening panel." vertex="1">
+                    <mxGeometry height="185" width="440" x="40" y="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="g2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#e9f2ec;strokeColor=#4f7d5f;" value="&lt;b&gt;Catalogue and genes&lt;/b&gt;&lt;br/&gt;GET /api/catalogue&lt;br/&gt;   every rule, preset and cell line, with provenance&lt;br/&gt;GET /api/genes/{symbol}?offline=true|false&lt;br/&gt;   Ensembl lookup: gene, transcripts, TSS groups&lt;br/&gt;GET /api/genes/{symbol}/expression?offline=...&lt;br/&gt;   GTEx, separate so a GTEx outage cannot block lookup&lt;br/&gt;Symbol is validated against [A-Za-z0-9_.-]{1,80}" vertex="1">
+                    <mxGeometry height="185" width="500" x="520" y="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="g3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#e9f2ec;strokeColor=#4f7d5f;" value="&lt;b&gt;Designing a run&lt;/b&gt;&lt;br/&gt;GET  /api/runs?q=&amp;status=&amp;offset=&amp;limit=&lt;br/&gt;POST /api/runs            202 {id}, work queued&lt;br/&gt;   the custom configuration is resolved first, so an&lt;br/&gt;   invalid one never becomes a job or a lookup&lt;br/&gt;GET  /api/runs/{id}       status, and on completion a&lt;br/&gt;   brief result: verdict arrays stay lazy, but saved&lt;br/&gt;   preference evidence for the top 15 is included&lt;br/&gt;GET  /api/runs/{id}/candidates/{candidate}" vertex="1">
+                    <mxGeometry height="185" width="480" x="1060" y="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="g4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#e9f2ec;strokeColor=#4f7d5f;" value="&lt;b&gt;Groups of references&lt;/b&gt;&lt;br/&gt;GET  /api/batches        POST /api/batches&lt;br/&gt;GET  /api/batches/{id}&lt;br/&gt;POST /api/batches/{id}/retry&lt;br/&gt;   requires {offline: false}, refuses while running,&lt;br/&gt;   refuses when SARNA_OFFLINE forces cache-only, and&lt;br/&gt;   reuses the runs that already completed&lt;br/&gt;GET  /api/batches/{id}/export.json | export.html" vertex="1">
+                    <mxGeometry height="185" width="440" x="40" y="320" as="geometry"/>
+                </mxCell>
+                <mxCell id="g5" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#e9f2ec;strokeColor=#4f7d5f;" value="&lt;b&gt;Off-target screening&lt;/b&gt;&lt;br/&gt;POST /api/runs/{id}/screenings     202 {id, reused,&lt;br/&gt;   scope, candidates}; backend local or ncbi; scope&lt;br/&gt;   transcript or genomic; batch size or an explicit&lt;br/&gt;   id list the route validates&lt;br/&gt;GET  /api/runs/{id}/screenings     all dated records&lt;br/&gt;GET  /api/screenings/{id}          poll one&lt;br/&gt;POST /api/screenings/{id}/resume   collect a waiting job&lt;br/&gt;POST /api/screenings/{id}/annotations  1 to 25 accessions" vertex="1">
+                    <mxGeometry height="185" width="500" x="520" y="320" as="geometry"/>
+                </mxCell>
+                <mxCell id="g6" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#e9f2ec;strokeColor=#4f7d5f;" value="&lt;b&gt;Exports&lt;/b&gt;&lt;br/&gt;GET /api/runs/{id}/export.json    full analysis snapshot&lt;br/&gt;GET /api/runs/{id}/export.html    self-contained page&lt;br/&gt;GET /api/runs/{id}/export.csv     core columns&lt;br/&gt;GET /api/runs/{id}/export.order.csv&lt;br/&gt;   the order-ready duplex: 19 nt RNA core plus dTdT on&lt;br/&gt;   both strands, in rank order, each row carrying its&lt;br/&gt;   own sanity report and its screening provenance&lt;br/&gt;GET /api/runs/{id}/export.screening.csv&lt;br/&gt;GET /api/runs/{id}/export.xlsx" vertex="1">
+                    <mxGeometry height="185" width="480" x="1060" y="320" as="geometry"/>
+                </mxCell>
+                <mxCell id="g7" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#e9f2ec;strokeColor=#4f7d5f;" value="&lt;b&gt;Notes and comparisons&lt;/b&gt;&lt;br/&gt;GET  /api/runs/{id}/shortlist&lt;br/&gt;POST /api/runs/{id}/shortlist&lt;br/&gt;GET  /api/runs/{id}/sequence-comparisons&lt;br/&gt;POST /api/runs/{id}/sequence-comparisons&lt;br/&gt;POST /api/runs/{id}/sequence-comparisons/recalculate&lt;br/&gt;POST /api/sequences/import  (base64, at most 2 MB)&lt;br/&gt;&lt;br/&gt;Every write carries a revision. A stale one gets 409 and&lt;br/&gt;the message keeps your pending input, rather than&lt;br/&gt;overwriting what another window saved." vertex="1">
+                    <mxGeometry height="185" width="440" x="40" y="520" as="geometry"/>
+                </mxCell>
+                <mxCell id="g8" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#e9f2ec;strokeColor=#4f7d5f;" value="&lt;b&gt;Local reference setup&lt;/b&gt;&lt;br/&gt;GET  /api/references        status and download plan&lt;br/&gt;POST /api/references/setup  202, refused when offline&lt;br/&gt;POST /api/references/pause  202, keeps verified files&lt;br/&gt;&lt;br/&gt;Setup is always an explicit request. Reading the status&lt;br/&gt;never starts a download." vertex="1">
+                    <mxGeometry height="185" width="500" x="520" y="520" as="geometry"/>
+                </mxCell>
+                <mxCell id="g9" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f7f7f5;strokeColor=#9a9a94;dashed=1;" value="&lt;b&gt;Status codes, and what each one means&lt;/b&gt;&lt;br/&gt;200  here it is&lt;br/&gt;202  accepted, queued, poll for it&lt;br/&gt;404  no such gene, run, candidate or route&lt;br/&gt;409  offline cache miss, or an edit conflict, or a group&lt;br/&gt;     still running, each with a code field&lt;br/&gt;422  bad input, with pydantic&#39;s own field locations&lt;br/&gt;502  an upstream service failed, or Ensembl is down" vertex="1">
+                    <mxGeometry height="185" width="480" x="1060" y="520" as="geometry"/>
+                </mxCell>
+                <mxCell id="p3n" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f7f7f5;strokeColor=#9a9a94;dashed=1;" value="&lt;b&gt;How requests actually move&lt;/b&gt;&lt;br/&gt;POST /api/runs returns 202 immediately with an id, the design runs on a worker thread, and the page polls GET /api/runs/{id}. Screening works the same way on its own pool. Nothing long-running blocks a response, which is why reading your candidates stays possible while a search sits in NCBI&#39;s queue." vertex="1">
+                    <mxGeometry height="90" width="1500" x="40" y="730" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="engine" name="4 - The design run">
+        <mxGraphModel dx="1548" dy="1548" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="790" math="0" shadow="0">
+            <root>
+                <mxCell id="engine-0"/>
+                <mxCell id="1" parent="engine-0"/>
+                <mxCell id="p4t" parent="1" style="text;html=1;align=left;strokeColor=none;fillColor=none;fontSize=24;fontStyle=1;" value="The design run: four stages, and all four populations kept" vertex="1">
+                    <mxGeometry height="40" width="1500" x="40" y="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4s" parent="1" style="text;html=1;align=left;strokeColor=none;fillColor=none;fontSize=14;" value="design_sarnas(promoter, config) is a plain function. Drive it from a notebook, a test or the API; it behaves identically." vertex="1">
+                    <mxGeometry height="30" width="1500" x="40" y="72" as="geometry"/>
+                </mxCell>
+                <mxCell id="s1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#e9f2ec;strokeColor=#4f7d5f;" value="&lt;b&gt;1. Generate&lt;/b&gt;&lt;br/&gt;Every window of the configured&lt;br/&gt;target length, from the first base.&lt;br/&gt;&lt;br/&gt;The original script started at&lt;br/&gt;index 3 and discarded three&lt;br/&gt;windows with no stated reason.&lt;br/&gt;That is defect B6, one of the 18&lt;br/&gt;catalogued in the legacy&lt;br/&gt;inventory." vertex="1">
+                    <mxGeometry height="230" width="350" x="40" y="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="s2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#e9f2ec;strokeColor=#4f7d5f;" value="&lt;b&gt;2. Evaluate&lt;/b&gt;&lt;br/&gt;Each selected rule against each&lt;br/&gt;candidate, producing pass, fail or&lt;br/&gt;not-applicable with the reason&lt;br/&gt;and the citation attached.&lt;br/&gt;&lt;br/&gt;CpG islands are found once for&lt;br/&gt;the whole promoter, and only if&lt;br/&gt;the configuration selected the&lt;br/&gt;island rule: per candidate would&lt;br/&gt;make the scan quadratic." vertex="1">
+                    <mxGeometry height="230" width="350" x="420" y="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4e1" edge="1" parent="1" source="s1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#5d6b66;strokeWidth=2;fontSize=11;labelBackgroundColor=#ffffff;" target="s2" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="s3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#e9f2ec;strokeColor=#4f7d5f;" value="&lt;b&gt;3. Gate&lt;/b&gt;&lt;br/&gt;Mandatory rules decide inclusion.&lt;br/&gt;&lt;br/&gt;A rejected candidate is kept,&lt;br/&gt;together with the rules that&lt;br/&gt;rejected it. A sequence that&lt;br/&gt;vanishes without explanation is&lt;br/&gt;exactly what this project exists&lt;br/&gt;to replace." vertex="1">
+                    <mxGeometry height="230" width="350" x="800" y="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4e2" edge="1" parent="1" source="s2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#5d6b66;strokeWidth=2;fontSize=11;labelBackgroundColor=#ffffff;" target="s3" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="s4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#e9f2ec;strokeColor=#4f7d5f;" value="&lt;b&gt;4. Rank&lt;/b&gt;&lt;br/&gt;Survivors ordered by how many&lt;br/&gt;preferences they met, ties broken&lt;br/&gt;on duplex end asymmetry and then&lt;br/&gt;on position.&lt;br/&gt;&lt;br/&gt;A count of criteria, never a&lt;br/&gt;weighted sum: a weight nobody&lt;br/&gt;measured would invent precision.&lt;br/&gt;&lt;br/&gt;Ranking returns copies, so&lt;br/&gt;result.ranked carries ranks and&lt;br/&gt;result.generated does not." vertex="1">
+                    <mxGeometry height="230" width="350" x="1180" y="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4e3" edge="1" parent="1" source="s3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#5d6b66;strokeWidth=2;fontSize=11;labelBackgroundColor=#ffffff;" target="s4" value="">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="inv" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f7f7f5;strokeColor=#9a9a94;dashed=1;" value="&lt;b&gt;Invariants that keep the output honest&lt;/b&gt;&lt;br/&gt;&lt;b&gt;Positions inside a sequence are 1-based; genomic intervals are 0-based half-open.&lt;/b&gt;&lt;br/&gt;Table 1 speaks of nucleotide 18, so base_at matches the paper. The two conventions never meet.&lt;br/&gt;&lt;b&gt;TSS positions have no zero.&lt;/b&gt; +1 is the first transcribed base, -1 the base before it.&lt;br/&gt;&lt;b&gt;Promoters are held 5&#39; to 3&#39; in the transcript&#39;s own orientation.&lt;/b&gt; A minus-strand&lt;br/&gt;reference is flipped once, at the boundary, after which the engine is strand-agnostic.&lt;br/&gt;All strand arithmetic lives in three methods on Promoter plus the Ensembl client that mirrors them.&lt;br/&gt;&lt;b&gt;Target sites are DNA; duplex strands are RNA.&lt;/b&gt; CpG content is a property of the DNA locus,&lt;br/&gt;so cpg_count refuses to answer for an RNA sequence." vertex="1">
+                    <mxGeometry height="230" width="740" x="40" y="390" as="geometry"/>
+                </mxCell>
+                <mxCell id="out" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f7f7f5;strokeColor=#9a9a94;dashed=1;" value="&lt;b&gt;What a finished run holds&lt;/b&gt;&lt;br/&gt;The promoter and its coordinates, the resolved configuration with every departure from the&lt;br/&gt;frozen baseline recorded, every generated candidate with its full verdict list, the ranked&lt;br/&gt;survivors, the CpG islands if they were sought, guide-strand predictions from all three&lt;br/&gt;thermodynamic tables side by side, and the engine version that produced it.&lt;br/&gt;&lt;br/&gt;&lt;b&gt;Guide prediction reports every table, never an average.&lt;/b&gt; On 13% of candidates the&lt;br/&gt;tables disagree about which strand becomes the guide, and the most useful thing the tool can&lt;br/&gt;say about a legacy design is that corrected parameters disagree with it.&lt;br/&gt;&lt;br/&gt;&lt;b&gt;Ranking does not beat chance on the assayed data&lt;/b&gt; (AUC 0.41 to 0.53), and the tests say&lt;br/&gt;so. The exploratory preset scores highest because two of its rules were fitted to that very&lt;br/&gt;data, and a test asserts that too, so the circularity stays visible rather than flattering." vertex="1">
+                    <mxGeometry height="230" width="720" x="820" y="390" as="geometry"/>
+                </mxCell>
+                <mxCell id="p4n" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f7f7f5;strokeColor=#9a9a94;dashed=1;" value="&lt;b&gt;Why the engine has no framework in it&lt;/b&gt;&lt;br/&gt;ADR 0005. The engine depends on nothing heavier than pydantic, so the rules and the whole regression suite run with no network, no bigWigs and no web server present. The browser is a thin client over it, and an exported page is the same result frozen. Verified, not assumed: the suite passes under unshare -rn, with no network namespace at all." vertex="1">
+                    <mxGeometry height="90" width="1500" x="40" y="650" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="install" name="5 - Installation">
+        <mxGraphModel grid="1" page="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" pageScale="1" pageWidth="1600" pageHeight="1040" math="0" shadow="0">
+            <root>
+                <mxCell id="install-0"/>
+                <mxCell id="1" parent="install-0"/>
+                <mxCell id="p5t" parent="1" style="text;html=1;align=left;strokeColor=none;fillColor=none;fontSize=24;fontStyle=1;" value="Installation: two routes, one pinned interpreter, nothing touched outside" vertex="1">
+                    <mxGeometry height="40" width="1500" x="40" y="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5s" parent="1" style="text;html=1;align=left;strokeColor=none;fillColor=none;fontSize=14;" value="The colleague installing this may not have Python at all. That constraint chose the whole approach." vertex="1">
+                    <mxGeometry height="30" width="1500" x="40" y="72" as="geometry"/>
+                </mxCell>
+                <mxCell id="i1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#e8eef7;strokeColor=#4a6fa5;" value="&lt;b&gt;Step 1: install uv&lt;/b&gt;&lt;br/&gt;Windows PowerShell or macOS Terminal, one command.&lt;br/&gt;Nothing else is needed first: not Python, not pip,&lt;br/&gt;not a compiler. On Windows, genuinely nothing." vertex="1">
+                    <mxGeometry height="120" width="440" x="40" y="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="i2a" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#e9f2ec;strokeColor=#4f7d5f;" value="&lt;b&gt;Route A: from a wheel you were sent&lt;/b&gt;&lt;br/&gt;uv tool install --python 3.11 \&lt;br/&gt;  &quot;...\sarna_designer-0.2.0-py3-none-any.whl[app]&quot;&lt;br/&gt;&lt;br/&gt;Needs no Git and no repository access. This is the&lt;br/&gt;route for someone outside the project." vertex="1">
+                    <mxGeometry height="120" width="500" x="520" y="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="i2b" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#e9f2ec;strokeColor=#4f7d5f;" value="&lt;b&gt;Route B: from the repository&lt;/b&gt;&lt;br/&gt;uv tool install --python 3.11 \&lt;br/&gt;  &quot;sarna-designer[app] @ git+https://github.com/...&quot;&lt;br/&gt;&lt;br/&gt;Needs Git on PATH and access to the repository.&lt;br/&gt;This is the route that can be upgraded in place." vertex="1">
+                    <mxGeometry height="120" width="480" x="1060" y="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="i3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#e9f2ec;strokeColor=#4f7d5f;" value="&lt;b&gt;Step 2: check, then start&lt;/b&gt;&lt;br/&gt;sarna-designer-check    proves the install, makes no network call unless asked, and prints&lt;br/&gt;the version, so a broken install says so plainly instead of failing later in a way that&lt;br/&gt;looks like a scientific problem.&lt;br/&gt;sarna-designer          prints the URL and the path to runs.sqlite3, then serves on 127.0.0.1.&lt;br/&gt;sarna-designer-replay   re-runs a saved snapshot against the current code." vertex="1">
+                    <mxGeometry height="120" width="1500" x="40" y="290" as="geometry"/>
+                </mxCell>
+                <mxCell id="i4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f0eaf6;strokeColor=#7a5fa5;" value="&lt;b&gt;Extras, and what each one is for&lt;/b&gt;&lt;br/&gt;&lt;b&gt;[app]&lt;/b&gt; adds httpx: the Ensembl and GTEx clients and the workbench. This is what&lt;br/&gt;almost everyone installs.&lt;br/&gt;&lt;b&gt;[genomics]&lt;/b&gt; adds pyBigWig, numpy and pyliftover for the AF22 histone tracks. On&lt;br/&gt;Windows this is the one piece that wants WSL.&lt;br/&gt;&lt;b&gt;no extras&lt;/b&gt; is the engine alone: the rules, the thermodynamics and the validation&lt;br/&gt;harness, installable with no network stack present at all." vertex="1">
+                    <mxGeometry height="160" width="740" x="40" y="450" as="geometry"/>
+                </mxCell>
+                <mxCell id="i5" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f7f7f5;strokeColor=#9a9a94;dashed=1;" value="&lt;b&gt;Updating, measured rather than assumed&lt;/b&gt;&lt;br/&gt;&lt;b&gt;Route B&lt;/b&gt;: uv tool upgrade sarna-designer tracks the &lt;b&gt;git commit&lt;/b&gt;, not the version&lt;br/&gt;number, so it updates even when the version string has not changed.&lt;br/&gt;&lt;b&gt;Route A&lt;/b&gt;: the same command is a no-op that prints &lt;i&gt;Nothing to upgrade&lt;/i&gt;, which a&lt;br/&gt;colleague reads as being up to date when they are not. Reinstall from the new wheel instead.&lt;br/&gt;&lt;b&gt;The open defect is the branch.&lt;/b&gt; A git install clones the &lt;i&gt;default&lt;/i&gt; branch, and&lt;br/&gt;main is behind the working branch, so upgrade faithfully reinstalls stale code.&lt;br/&gt;Saved runs are never touched by any of this." vertex="1">
+                    <mxGeometry height="160" width="720" x="820" y="450" as="geometry"/>
+                </mxCell>
+                <mxCell id="why1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f7f7f5;strokeColor=#9a9a94;dashed=1;" value="&lt;b&gt;Why uv and not pip&lt;/b&gt;&lt;br/&gt;The project is pinned to Python 3.11 (requires-python == 3.11.*). Windows and macOS&lt;br/&gt;normally ship something else, so pip install would simply refuse. uv fetches the right&lt;br/&gt;interpreter itself, into a private folder, so you never touch or change your system Python&lt;br/&gt;and nothing this program installs can affect other software on the machine.&lt;br/&gt;&lt;br/&gt;That pin is not fussiness. A saved run records its engine version and is replayable, and&lt;br/&gt;two runs produced by different code must not be able to report the same version." vertex="1">
+                    <mxGeometry height="180" width="740" x="40" y="650" as="geometry"/>
+                </mxCell>
+                <mxCell id="why2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f7f7f5;strokeColor=#9a9a94;dashed=1;" value="&lt;b&gt;Why a local program and not a website&lt;/b&gt;&lt;br/&gt;ADR 0014, 0015 and 0020, with the case for and against a hosted service set out in full.&lt;br/&gt;&lt;b&gt;The gene you are working on is the research question.&lt;/b&gt; Running locally means only&lt;br/&gt;Ensembl learns it, and NCBI only if you ask for a screen.&lt;br/&gt;It also works offline once a gene is cached, there is no server to maintain or to trust,&lt;br/&gt;no account, no upload, and a saved run is a file you own.&lt;br/&gt;&lt;br/&gt;The cost, recorded with the decision: every colleague installs it themselves, and there is&lt;br/&gt;no central place to see what anyone else designed." vertex="1">
+                    <mxGeometry height="180" width="720" x="820" y="650" as="geometry"/>
+                </mxCell>
+                <mxCell id="p5n" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;spacingRight=10;fontSize=12;fillColor=#f7f7f5;strokeColor=#9a9a94;dashed=1;" value="&lt;b&gt;Why this is the efficient shape for this particular job&lt;/b&gt;&lt;br/&gt;The work is bursty and small: a design finishes in under a second on one promoter, and the expensive parts are an outside service&#39;s queue and a one-time index build. Nothing here benefits from a shared server, and a shared server would add the one cost that actually matters, telling someone else which gene you are studying. So the heavy machinery is where the cost is (a resumable checksummed reference download, two small thread pools, a per-candidate alignment budget, a SQLite file with a schema version) and the rest is deliberately plain: the standard library&#39;s own HTTP server, three classic scripts with no build step, and an engine whose only dependency is pydantic." vertex="1">
+                    <mxGeometry height="120" width="1500" x="40" y="870" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

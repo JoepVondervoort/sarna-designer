@@ -1,4 +1,4 @@
-# Installing and updating saRNA Designer from GitHub on Windows
+g# Installing and updating saRNA Designer from GitHub on Windows
 
 Follow this guide if you have access to the private saRNA Designer GitHub repository.
 It works for a first installation and for replacing an installation from a `.whl` file.
