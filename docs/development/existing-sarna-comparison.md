@@ -45,9 +45,10 @@ configuration and candidate results are preserved.
 Curated reference coordinates are also shown in the whole-gene overview, so a
 reference remains locatable when the chosen promoter window excludes its site.
 The table distinguishes **Outside current promoter window** using the recorded
-assembly and chromosome. **Design around this reference** creates a new run
-(2 kb upstream, 500 bp downstream) at the SCN1A Long 2008 anchor or, for p21, the
-recorded nearby transcript reference. The previous run remains saved. A known
+assembly and chromosome. **Choose this promoter** selects the reference in
+Design and preserves your current criteria and upstream/downstream spans.
+Review the draft and submit when ready. Selecting a gene-map reference marker
+also selects a draft without starting a run. The previous run remains saved. A known
 coordinate is labelled as sequence-mapped repository evidence; it is not drawn
 as an exact match inside a different promoter window.
 
@@ -110,3 +111,33 @@ are present and has an always-visible summary of exact matches, including those
 excluded by current gates; rank, passing filters, export selection and off-target
 findings remain independent of control identity. Control names can be searched
 in the workbench.
+
+
+Comparison analysis is frozen when calculated. New runs retain control results
+inside the original snapshot; imported analyses are saved separately with model
+assessments, engine version, software fingerprint, calculation timestamp, and
+configuration fingerprint. Reopening a run and exporting it do not recalculate.
+**Recalculate comparisons with current software** explicitly creates a new
+revision; previous comparison revisions remain stored. Legacy analyses are
+preserved and labelled when their original software provenance is unavailable.
+Historical runs without frozen controls can add them through explicit recalculation.
+
+Sequence writes carry only supplied input fields and a revision number, rather
+than nested candidate results. A stale window receives a conflict and can
+**Reload saved sequences** before retrying; pending input remains visible.
+Adding a new input retains existing analyses under their original model versions.
+The HTTP import route accepts the base64 envelope for a 2 MB file without
+increasing the transport limit on unrelated routes. Excel worksheet order is
+resolved using workbook relationships, including renamed or deleted sheets.
+Map panning, zooming and resizing update only the map and preserve reference
+panel disclosures and focus.
+
+Browser regressions are available with:
+
+```bash
+.venv/bin/python scripts/verify_workbench_browser.py --chrome /path/to/chrome
+```
+
+They exercise explicit review navigation, real file uploads, repeated sequence
+additions, saved comparison reads, stale-window recovery, persistent strand
+panels, screening, exports, and offline reports without public screening calls.

@@ -102,8 +102,9 @@ class DesignRequest(BaseModel):
         """Validate roles, options and parameter relationships in the Python engine."""
         config = preset(self.preset_id).resolve(
             self.overrides,
-            role_overrides={key: None if value == "off" else value
-                            for key, value in self.roles.items()},
+            role_overrides={
+                key: None if value == "off" else value for key, value in self.roles.items()
+            },
             option_ids=self.options,
         )
         for rule_id, names in (
@@ -132,8 +133,43 @@ class BatchRequest(BaseModel):
         if any(request.source != "gene" for request in self.requests) or len(symbols) != 1:
             raise ValueError("A promoter batch requires one human gene shared by every request.")
         for request in self.requests:
-            if sum(reference is not None for reference in (
-                request.transcript_id, request.anchor_id, request.custom_reference,
-            )) != 1:
+            if (
+                sum(
+                    reference is not None
+                    for reference in (
+                        request.transcript_id,
+                        request.anchor_id,
+                        request.custom_reference,
+                    )
+                )
+                != 1
+            ):
                 raise ValueError("Choose an explicit promoter reference for every batch request.")
         return self
+
+
+class SequenceInput(BaseModel):
+    """Only supplied identity and metadata cross the browser write boundary."""
+
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(default="Imported saRNA", max_length=150)
+    sequence: str = Field(max_length=500)
+    antisense: str = Field(default="", max_length=500)
+    role: Literal["unknown", "target", "sense", "antisense"] = "unknown"
+    direction: Literal["5to3", "3to5"] = "5to3"
+    source: str = Field(default="", max_length=1000)
+
+
+class SequenceComparisonsRequest(BaseModel):
+    """Revision-checked replacement of compact imported sequence inputs."""
+
+    model_config = ConfigDict(extra="forbid")
+    revision: int = Field(ge=0, strict=True)
+    records: list[SequenceInput] = Field(max_length=200)
+
+
+class ComparisonRecalculationRequest(BaseModel):
+    """An explicit request to replace stored analyses with current calculations."""
+
+    model_config = ConfigDict(extra="forbid")
+    revision: int = Field(ge=0, strict=True)

@@ -3,11 +3,15 @@
 import csv
 import io
 import re
+from datetime import UTC, datetime
+from pathlib import PurePosixPath
 from typing import Any
 from xml.etree import ElementTree as ET
 from zipfile import BadZipFile, ZipFile
 
+from sarna import __version__
 from sarna.design.pipeline import DEFAULT_COMPARISON_TABLES
+from sarna.reproducibility import json_hash, software_identity
 from sarna.sequence.nucleic import NucleicSequence
 from sarna.thermo.guide import compare_asymmetry
 from sarna.validation.dataset import load_chapter4_dataset, load_chapter4_locations
@@ -80,6 +84,24 @@ def normalize(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def input_identity(row: dict[str, Any]) -> str:
+    """Identify supplied inputs without predictions, matches or browser-only fields."""
+    normalized = normalize(row)
+    return json_hash(
+        {
+            key: normalized[key]
+            for key in (
+                "name",
+                "sequence",
+                "antisense",
+                "role",
+                "direction",
+                "source",
+            )
+        }
+    )
+
+
 def file_rows(filename: str, content: bytes) -> list[dict[str, str]]:
     """Read text/CSV or first Excel sheet with strict archive and row limits."""
     if len(content) > 2_000_000:
@@ -95,15 +117,43 @@ def file_rows(filename: str, content: bytes) -> list[dict[str, str]]:
                         "".join(e.itertext())
                         for e in ET.fromstring(archive.read("xl/sharedStrings.xml"))
                     ]
-                sheet = ET.fromstring(archive.read("xl/worksheets/sheet1.xml"))
+                workbook = ET.fromstring(archive.read("xl/workbook.xml"))
+                sheets = workbook.find(NS + "sheets")
+                if sheets is None or not len(sheets):
+                    raise ValueError("Workbook has no worksheets.")
+                relation_id = sheets[0].get(
+                    "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
+                )
+                relations = ET.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+                relation = next((item for item in relations if item.get("Id") == relation_id), None)
+                if relation is None or relation.get("TargetMode") == "External":
+                    raise ValueError("The first worksheet must be stored in this workbook.")
+                target = relation.get("Target", "")
+                sheet_path = str(
+                    PurePosixPath(target.lstrip("/"))
+                    if target.startswith("/")
+                    else PurePosixPath("xl") / target
+                )
+                if ".." in PurePosixPath(sheet_path).parts:
+                    raise ValueError("Invalid worksheet path.")
+                sheet = ET.fromstring(archive.read(sheet_path))
                 table = []
                 for row in sheet.iter(NS + "row"):
                     values: dict[int, str] = {}
+                    column = 0
                     for cell in row:
-                        letters = re.sub("[^A-Z]", "", cell.get("r", "A1"))
-                        column = 0
-                        for letter in letters:
-                            column = column * 26 + ord(letter) - 64
+                        reference = cell.get("r")
+                        if reference is None:
+                            column += 1
+                        else:
+                            if not re.fullmatch(r"[A-Z]{1,3}[1-9][0-9]{0,6}", reference):
+                                raise ValueError("Invalid Excel cell reference.")
+                            letters = re.sub("[0-9]", "", reference)
+                            column = 0
+                            for letter in letters:
+                                column = column * 26 + ord(letter) - 64
+                        if column > 16384:
+                            raise ValueError("Excel column exceeds the worksheet limit.")
                         value = cell.findtext(NS + "v", "")
                         if cell.get("t") == "s":
                             value = strings[int(value)]
@@ -187,11 +237,28 @@ def references(symbol: str) -> list[dict[str, Any]]:
     return rows
 
 
-def compare(snapshot: dict[str, Any], rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def compare(
+    snapshot: dict[str, Any],
+    rows: list[dict[str, Any]],
+    *,
+    refresh_models: bool = False,
+) -> list[dict[str, Any]]:
     """Locate every exact match in transcript-oriented DNA and reuse saved rule verdicts."""
     promoter = snapshot["promoter"]["sequence"]
     candidates = {(c["offset"], c["target_site_dna"]): c for c in snapshot["candidates"]}
     output = []
+    provenance = (
+        {
+            "schema_version": 1,
+            "analyzed_at": datetime.now(UTC).isoformat(),
+            "engine_version": __version__,
+            "package_sha256": software_identity()["package_sha256"],
+            "configuration_sha256": json_hash(snapshot.get("configuration")),
+            "scope": "Paired cores; saved model assessments and inputs; overhangs excluded.",
+        }
+        if rows
+        else {}
+    )
     for row in rows:
         row = normalize(row) | {
             "reference": bool(row.get("reference")),
@@ -227,12 +294,17 @@ def compare(snapshot: dict[str, Any], rows: list[dict[str, Any]]) -> list[dict[s
                         "antisense": reverse(target).replace("T", "U"),
                         "thermodynamics": (
                             candidate["guide_prediction"]["assessments"]
-                            if candidate
+                            if candidate and not refresh_models
                             else [
                                 a.to_dict()
                                 for a in compare_asymmetry(
                                     NucleicSequence.parse(target),
                                     DEFAULT_COMPARISON_TABLES,
+                                    end_length=(
+                                        candidate["guide_prediction"].get("end_length_nt", 4)
+                                        if candidate
+                                        else 4
+                                    ),
                                 ).assessments
                             ]
                         ),
@@ -265,6 +337,7 @@ def compare(snapshot: dict[str, Any], rows: list[dict[str, Any]]) -> list[dict[s
             | {
                 "matches": matches,
                 "strand_analysis": analysis,
+                "analysis_provenance": provenance,
                 "status": (
                     "matched"
                     if matches

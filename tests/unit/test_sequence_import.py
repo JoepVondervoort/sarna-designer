@@ -9,6 +9,21 @@ import pytest
 from sarna.app.sequence_import import compare, core, file_rows, normalize, references
 
 
+def compact_input(record: dict[str, object]) -> dict[str, object]:
+    return {
+        key: record[key]
+        for key in (
+            "name",
+            "sequence",
+            "antisense",
+            "role",
+            "direction",
+            "source",
+        )
+        if key in record
+    }
+
+
 def test_rna_conversion_is_not_complementation():
     assert core("AUGC") == ("ATGC", "")
     snapshot = {"promoter": {"sequence": "GCATTTTGCAT"}, "candidates": []}
@@ -35,6 +50,17 @@ def test_csv_txt_and_sparse_excel():
     assert file_rows("s.csv", b"name,sequence,role\na,AUGC,antisense")[0]["role"] == "antisense"
     output = io.BytesIO()
     with ZipFile(output, "w") as archive:
+        archive.writestr(
+            "xl/workbook.xml",
+            '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+            'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            '<sheets><sheet name="Sequences" sheetId="1" r:id="rId1"/></sheets></workbook>',
+        )
+        archive.writestr(
+            "xl/_rels/workbook.xml.rels",
+            '<Relationships><Relationship Id="rId1" '
+            'Target="worksheets/sheet1.xml"/></Relationships>',
+        )
         archive.writestr(
             "xl/worksheets/sheet1.xml",
             """<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row><c r="A1" t="inlineStr"><is><t>name</t></is></c><c r="C1" t="inlineStr"><is><t>sequence</t></is></c></row><row><c r="A2" t="inlineStr"><is><t>test</t></is></c><c r="C2" t="inlineStr"><is><t>AUGC</t></is></c></row></sheetData></worksheet>""",  # noqa: E501
@@ -80,7 +106,9 @@ def test_import_save_reopen_and_exports(tmp_path: Path):
         status, _, data = router.dispatch(
             "POST",
             f"/api/runs/{run_id}/sequence-comparisons",
-            json.dumps({"records": imported["records"]}).encode(),
+            json.dumps(
+                {"revision": 0, "records": [compact_input(r) for r in imported["records"]]}
+            ).encode(),
         )
         assert status == 200
         assert json.loads(data)["records"][0]["matches"][0]["offset"] == 0
@@ -455,7 +483,9 @@ def test_existing_reference_displays_candidate_style_roles_without_expanding():
     records = compare({"promoter": {"sequence": "A" * 40}, "candidates": []}, references("SCN1A"))
     program = (
         """
-const nodes={'sequence-import-controls':{},'sequence-records':{innerHTML:''}};
+const nodes={'sequence-import-controls':{},
+ 'sequence-records':{innerHTML:'',querySelectorAll:()=>[]},
+ 'sequence-analysis-notice':{},'sequence-recalculate':{}};
 const $=id=>nodes[id], escapeHTML=String,fmt=String,frozen=null;
 const state={result:{configuration:{rules:[]}},sequenceRecords:RECORDS};
 const renderSequenceDetail=()=>{};
@@ -471,7 +501,7 @@ if(!html.includes('ladder-row guide')||!html.includes('ladder-row passenger'))pr
 if(!html.includes('Models disagree'))process.exit(3);
 if(!html.includes('SCN1A-7 · guide &amp; passenger prediction'))process.exit(4);
 const main=html.indexOf('reference-duplex');
-const more=html.indexOf('<details class="reference-strand-disclosure">');
+const more=html.indexOf('<details class="reference-strand-disclosure"');
 if(main<0||more<main)process.exit(5);
 if(html.includes('3 prime dTdT overhang'))process.exit(6);
 """

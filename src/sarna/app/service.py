@@ -17,6 +17,7 @@ from sarna.app.references import (
     custom_anchor_record,
     gene_overview,
 )
+from sarna.app.sequence_import import compare, references
 from sarna.app.store import RunStore
 from sarna.design.candidate import Candidate
 from sarna.design.duplicates import identical_duplex_groups
@@ -627,6 +628,9 @@ class DesignService:
             "notices": notices, "rating_note": "Criteria met, not a probability of activation.",
             "available_rules": [ResolvedRule(rule).to_dict() for rule in CATALOGUE],
         }
+        payload["sequence_comparisons"] = compare(
+            payload, references(gene.symbol) if gene is not None else [],
+        )
         payload["reproducibility"] = run_manifest(
             payload, client.observations[observation_start:], software,
         )

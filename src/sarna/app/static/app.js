@@ -912,6 +912,9 @@ function showResult(result) {
   $("map-orientation").textContent = result.promoter.contig ? `chr${result.promoter.contig}:${fmt(result.promoter.start)}–${fmt(result.promoter.end)} (0-based, half-open) · DNA strand ${result.promoter.strand} · plotted 5′ → 3′ in transcript orientation` : "Plotted 5′ → 3′ as supplied · no genomic location assigned";
   $("candidate-detail").innerHTML = '<p class="hint">Select a candidate in the table or promoter map to inspect its sequences, strand prediction, and every rule verdict.</p>';
   state.sequenceRecords = result.sequence_comparisons || [];
+  state.sequenceRevision = result.sequence_comparison_revision || 0;
+  $("sequence-conflict-recovery").hidden=true;
+  renderSequenceRecords();
   $("sequence-status").textContent="";
   if (result.candidates.some(candidate=>candidateControlMatches(candidate,result).length)) $("candidate-inspection").open=true;
   renderMap(); renderTable();
@@ -1023,6 +1026,7 @@ async function selectCandidate(id, {reveal=true} = {}) {
     const full = candidate.rules ? candidate : await api(`/api/runs/${run.app.run_id}/candidates/${id}`);
     if (state.result!==run || state.selected!==id) return;
     Object.assign(candidate,full);
+    renderSequenceDetail();
     const primary = full.guide_prediction.assessments.find(a=>a.table===full.rating.guide_model);
     const sequenceBox = (name,sequence) => `<div class="sequence-box"><div><span>${name} · 5′ → 3′</span><button type="button" data-copy="${escapeHTML(sequence)}">Copy</button></div><code>${escapeHTML(sequence)}</code></div>`;
     $("candidate-detail").innerHTML = `<div class="detail-heading"><div><h3>${id} <span class="muted">${full.rank?`Rank ${full.rank}`:"Excluded by gates"}</span></h3><p class="hint">${escapeHTML(positionText(full))} ${full.tss_span?"relative to reference TSS":"in supplied sequence"} · ${full.target_site_dna.length} nt core · ${full.gc_percent}% GC${full.genomic?` · genomic ${escapeHTML(full.genomic.strand)} strand`:""}</p></div><span class="tag">${ratingText(full)} PREFERENCES</span></div>${candidateControlBadges(full,run)}${duplexPanel(run,full)}<div class="detail-body"><div>${sequenceBox("Promoter target DNA",full.target_site_dna)}${sequenceBox("Sense RNA core",full.sense_strand_rna)}${sequenceBox("Antisense RNA core",full.antisense_strand_rna)}<p class="hint">The cores above are the 19 nt RNA the rules are evaluated against, without overhangs. The duplex panel at the top is what you order. ${escapeHTML(screeningSentence(id))}</p>${twinNote(full)}</div><div><div class="guide-summary"><strong>Predicted RNA guide: ${escapeHTML(full.rating.guide || "unknown")}</strong><p>${escapeHTML(tableNames[full.rating.guide_model] || full.rating.guide_model)} · ${escapeHTML(full.guide_prediction.summary)}</p><p class="hint">This predicts duplex loading, not the identity of a promoter-associated target RNA, and not activation.</p></div><table class="model-table"><thead><tr><th>Parameter model</th><th>Guide</th><th>End difference</th></tr></thead><tbody>${full.guide_prediction.assessments.map(a=>`<tr data-tip="${escapeHTML(a.explanation)}" tabindex="0"><td>${escapeHTML(tableNames[a.table] || a.table)}</td><td>${escapeHTML(a.predicted_guide)}</td><td>${a.difference.toFixed(2)} ${escapeHTML(a.unit)}</td></tr>`).join("")}</tbody></table><details class="verdict"><summary>How the selected model reaches this prediction</summary><p>${escapeHTML(primary?.explanation || "The selected model was not assessed.")}</p></details></div></div>${full.excluded_by.length?`<p class="hint">${escapeHTML(full.rejection_summary)}</p>`:""}<div class="rule-verdicts"><h3>Every rule, explained</h3>${full.rules.map(r=>ruleVerdict(r,run.configuration)).join("")}</div>`;
@@ -1234,6 +1238,9 @@ const TRACK_COLOURS = {
   // candidates rather than a different kind of thing -- and colour is only one of the three
   // channels separating them: they are also full lane height and numbered.
   topCandidate: {fill:"#0b4f57", edge:"#063136"},
+  referencePositive: {fill:"#7954a1", edge:"#7954a1"},
+  referenceDown: {fill:"#b43f63", edge:"#b43f63"},
+  imported: {fill:"#167a79", edge:"#167a79"},
 };
 
 // Rank 1 to TOP_MARKED as one hue getting paler, so the ten read as *ordered* at a glance.
@@ -1287,6 +1294,11 @@ const TRACKS = [
   {key:"excluded", y:273, name:"Excluded targets",
    help:"Targets with at least one failed mandatory rule, coloured by the first rule that excluded each. Hover or select to see which checks failed.",
    swatches:[]},
+  {key:"existing", y:340, name:"Existing saRNAs",
+   help:"Exact sequence placements of curated and imported duplex cores. Effects describe the cited experimental setting, not new predictions of efficacy.",
+   swatches:[{colour:TRACK_COLOURS.referencePositive, name:"activating reference"},
+             {colour:TRACK_COLOURS.referenceDown, name:"downregulating (researcher reported)"},
+             {colour:TRACK_COLOURS.imported, name:"imported, effect unassigned"}]},
 ];
 
 // One colour per factor, so the motif row says *which* factor is where rather than only that
@@ -1515,14 +1527,14 @@ function existingSaRNATrack(records,start,end,left,width,focused) {
     lanes[lane]=item.hi;item.lane=lane;
   }
   const laneCount=Math.max(1,lanes.length), bottom=326+laneCount*48;
-  let markup=`<rect x="${left}" y="316" width="${width}" height="${bottom-316}" rx="8" fill="#f7f9fc" stroke="#e4e9f0"/><text class="track-label" x="12" y="340">Known / imported</text><text class="track-label" x="12" y="354">saRNAs</text>`;
+  let markup=`<rect class="map-decoration" aria-hidden="true" x="${left}" y="316" width="${width}" height="${bottom-316}" rx="8" fill="#f7f9fc" stroke="#e4e9f0"/>`;
   if (!items.length) markup+=`<text x="${left+14}" y="344" font-size="12" fill="#61767a">No existing saRNA sites in this view. See their locations in the table above.</text>`;
   for (const item of items) {
     const {record,index,j,style,text,markerLeft,markerRight,pillWidth,x}=item;
     const y=326+item.lane*48, center=(markerLeft+markerRight)/2;
     const selected=focused?.record===index && (focused.match || 0)===j;
     const help=`${record.name}: ${style.description} ${record.source}`;
-    markup+=`<g class="existing-sarna-mark" role="button" tabindex="0" aria-label="${escapeHTML(help)}" data-tip="${escapeHTML(help)}" data-sequence="${index}" data-match="${j}"><rect x="${markerLeft}" y="${y}" width="${Math.max(3,markerRight-markerLeft)}" height="7" rx="2" fill="${style.color}"/><line x1="${center}" x2="${center}" y1="${y+7}" y2="${y+13}" stroke="${style.color}"/><rect x="${x}" y="${y+13}" width="${pillWidth}" height="25" rx="7" fill="${style.pale}" stroke="${style.color}" stroke-width="${selected?2:1}"/><text x="${x+12}" y="${y+30}" font-size="12" font-weight="600" fill="${style.color}">${escapeHTML(text)}</text></g>`;
+    markup+=`<g class="existing-sarna-mark" role="button" tabindex="0" aria-label="${escapeHTML(help)}" data-tip="${escapeHTML(help)}" data-sequence="${index}" data-match="${j}"><rect x="${markerLeft}" y="${y}" width="${Math.max(3,markerRight-markerLeft)}" height="7" rx="2" fill="${style.color}"/><line x1="${center}" x2="${center}" y1="${y+7}" y2="${y+13}" stroke="${style.color}"/><rect class="map-decoration" aria-hidden="true" x="${x}" y="${y+13}" width="${pillWidth}" height="25" rx="7" fill="${style.pale}" stroke="${style.color}" stroke-width="${selected?2:1}"/><text x="${x+12}" y="${y+30}" font-size="12" font-weight="600" fill="${style.color}">${escapeHTML(text)}</text></g>`;
   }
   markup+=`<text x="${left+2}" y="${bottom+20}" font-size="11" fill="#7954a1">↑ Activating reference</text><text x="${left+160}" y="${bottom+20}" font-size="11" fill="#b43f63">↓ Downregulating · researcher reported</text><text x="${left+425}" y="${bottom+20}" font-size="11" fill="#167a79">Imported · effect unassigned</text>`;
   return {markup,height:bottom+34};
@@ -1621,11 +1633,11 @@ function renderMap() {
   const existingTrack=existingSaRNATrack(state.sequenceRecords || [],state.start,state.end,left,width,sequenceFocus);
   parts.push(existingTrack.markup);
   svg.setAttribute("viewBox", `0 0 ${mapWidth} ${existingTrack.height}`);
+  svg.style.height=`${existingTrack.height}px`;
   svg.innerHTML=parts.join("");
   // Only offer the grab cursor when there is somewhere to pan. At full extent the drag is a
   // no-op, and advertising it is a promise the map does not keep.
   svg.classList.toggle("pannable", state.start > 0 || state.end < p.length);
-  renderSequenceRecords();
   renderRejectionLegend(r);
   renderLegend(r);
   const note = $("unevaluated-note");
@@ -2439,8 +2451,12 @@ initialize();
 // Existing duplexes retain their supplied identity; Python owns strand matching and predictions.
 function renderSequenceRecords() {
   const records = state.sequenceRecords || [];
+  const opened=new Set([...$("sequence-records").querySelectorAll('details[data-record-key][open]')].map(node=>node.dataset.recordKey));
+  $("sequence-analysis-notice").textContent=state.result?.sequence_comparison_notice || '';
+  $("sequence-recalculate").hidden=!!frozen;
   $("sequence-import-controls").hidden = !!frozen;
-  $("sequence-records").innerHTML = records.length ? `<div class="table-scroll"><table><thead><tr><th>Reference / import</th><th>Placement</th><th>Source / observation</th><th></th></tr></thead><tbody>${records.map((r,i)=>`<tr><td><button type="button" data-sequence="${i}">${escapeHTML(r.name)}</button>${r.reference?' · reference':''}<br>${sequenceEffectBadge(r)}</td><td>${r.matches.length?r.matches.map((m,j)=>`<button type="button" data-sequence="${i}" data-match="${j}">Bases ${m.offset+1}–${m.end}</button>`).join(' '):escapeHTML(r.status)}${!r.matches.length&&r.known_location?`<br><small>Known site: chr${escapeHTML(r.known_location.contig)}:${fmt(r.known_location.start+1)}–${fmt(r.known_location.end)} · ${escapeHTML(r.known_location.assembly)} · ${escapeHTML(r.known_location.strand)} strand (1-based)</small>${!frozen?`<br><button type="button" data-sarna-region="${escapeHTML(r.name)}">Design around this reference</button>`:''}`:''}${r.matches.length>1?' · multiple matches':''}</td><td>${escapeHTML(r.source)}</td><td>${!r.reference&&!frozen?`<button type="button" data-sequence-remove="${i}">Remove</button>`:''}</td></tr><tr class="reference-analysis-row"><td colspan="4">${referenceDuplexPanel(r)}<details class="reference-strand-disclosure"><summary>Analyse both strands · ${escapeHTML(r.name)}</summary>${strandAnalysisPanel(r)}</details></td></tr>`).join('')}</tbody></table></div>` : '<p class="hint">No existing saRNAs added for this run.</p>';
+  $("sequence-records").innerHTML = records.length ? `<div class="table-scroll"><table><thead><tr><th>Reference / import</th><th>Placement</th><th>Source / observation</th><th></th></tr></thead><tbody>${records.map((r,i)=>`<tr><td><button type="button" data-sequence="${i}">${escapeHTML(r.name)}</button>${r.reference?' · reference':''}<br>${sequenceEffectBadge(r)}</td><td>${r.matches.length?r.matches.map((m,j)=>`<button type="button" data-sequence="${i}" data-match="${j}">Bases ${m.offset+1}–${m.end}</button>`).join(' '):escapeHTML(r.status)}${!r.matches.length&&r.known_location?`<br><small>Known site: chr${escapeHTML(r.known_location.contig)}:${fmt(r.known_location.start+1)}–${fmt(r.known_location.end)} · ${escapeHTML(r.known_location.assembly)} · ${escapeHTML(r.known_location.strand)} strand (1-based)</small>${!frozen?`<br><button type="button" data-sarna-region="${escapeHTML(r.name)}">Choose this promoter</button>`:''}`:''}${r.matches.length>1?' · multiple matches':''}</td><td>${escapeHTML(r.source)}</td><td>${!r.reference&&!frozen?`<button type="button" data-sequence-remove="${i}">Remove</button>`:''}</td></tr><tr class="reference-analysis-row"><td colspan="4">${referenceDuplexPanel(r)}<details class="reference-strand-disclosure" data-record-key="${escapeHTML(JSON.stringify([r.name,r.sequence,r.role]))}"><summary>Analyse both strands · ${escapeHTML(r.name)}</summary>${strandAnalysisPanel(r)}</details></td></tr>`).join('')}</tbody></table></div>` : '<p class="hint">No existing saRNAs added for this run.</p>';
+  for (const node of $("sequence-records").querySelectorAll('details[data-record-key]')) node.open=opened.has(node.dataset.recordKey);
   renderSequenceDetail();
 }
 function renderSequenceDetail() {
@@ -2449,7 +2465,7 @@ function renderSequenceDetail() {
   const match = record.matches[sequenceFocus.match || 0];
   const selected = state.result?.candidates.find(c=>c.id===state.selected);
   const duplex = (name,sense,antisense)=>`<h4>${escapeHTML(name)}</h4><p>Sense 5′ <code>${escapeHTML(sense)}</code> 3′<br>Antisense 5′ <code>${escapeHTML(antisense)}</code> 3′</p>`;
-  $("sequence-detail").innerHTML = `<h3>${escapeHTML(record.name)} ${sequenceEffectBadge(record)}</h3><p class="hint">Original: ${escapeHTML(record.sequence)} · ${escapeHTML(record.role)} · ${escapeHTML(record.direction)}. ${record.partner_inferred?'Complementary partner inferred.':'Both cores supplied and complementarity checked.'} Overhang: ${escapeHTML(record.overhang || 'unknown')}; partner overhang: ${escapeHTML(record.partner_overhang || 'unknown')}.</p>` + (match ? duplex('Located duplex',match.sense,match.antisense) + `<p class="hint">Input orientation: ${escapeHTML(match.input_orientation)}. ${match.candidate?`Current run: ${escapeHTML(match.candidate.id)} · rank ${match.candidate.rank ?? 'excluded'} · preferences ${match.candidate.rating.met}/${match.candidate.rating.evaluated} · excluded by ${escapeHTML(match.candidate.excluded_by?.join(', ') || 'none')}`:'No candidate of this length in the current run; rule rating unavailable.'}</p><div class="table-scroll"><table><thead><tr><th>Model</th><th>Predicted guide</th><th>Predicted passenger</th><th>End difference</th></tr></thead><tbody>${match.thermodynamics.map(a=>`<tr title="${escapeHTML(a.explanation)}"><td>${escapeHTML(a.table_name)}</td><td>${escapeHTML(a.predicted_guide)}</td><td>${a.predicted_guide==='antisense'?'sense':a.predicted_guide==='sense'?'antisense':'undetermined'}</td><td>${a.difference.toFixed(2)} ${escapeHTML(a.unit)}</td></tr>`).join('')}</tbody></table></div><p class="hint">Predictions use paired cores; matched candidates retain the run’s model settings. Other lengths use four-base ends. Different model predictions remain separate. They do not establish activation or measured strand loading.</p>` + (selected ? duplex('Selected new design: '+selected.id, selected.sense_strand_rna,selected.antisense_strand_rna) + `<p>Predicted guide: ${escapeHTML(selected.rating.guide)} · preferences ${selected.rating.met}/${selected.rating.evaluated}. Target overlap: ${Math.max(0,Math.min(match.end,selected.offset+selected.target_site_dna.length)-Math.max(match.offset,selected.offset))} bases. GC: existing ${(100*(match.target.match(/[GC]/g)||[]).length/match.target.length).toFixed(1)}%, selected ${selected.gc_percent}%. Aligned core differences: ${match.target.length===selected.target_site_dna.length?[...match.target].filter((base,i)=>base!==selected.target_site_dna[i]).length:"different lengths"}.</p>` : '<p class="hint">Select a new candidate on the map or in the table to compare its duplex here.</p>') + '<button type="button" id="sequence-nearby">Find overlapping / nearby designs</button>' : `<p>${escapeHTML(record.status)}. ${record.known_location?`Known site: chr${escapeHTML(record.known_location.contig)}:${fmt(record.known_location.start+1)}–${fmt(record.known_location.end)} (${escapeHTML(record.known_location.assembly)}, 1-based). ${escapeHTML(record.known_location.source)}. The current map covers a different region; choose “Design around this reference” to load its promoter.`:'The sequence may lie outside this region or differ from the reference. No location is assumed.'}</p>`);
+  $("sequence-detail").innerHTML = `<h3>${escapeHTML(record.name)} ${sequenceEffectBadge(record)}</h3><p class="hint">Original: ${escapeHTML(record.sequence)} · ${escapeHTML(record.role)} · ${escapeHTML(record.direction)}. ${record.partner_inferred?'Complementary partner inferred.':'Both cores supplied and complementarity checked.'} Overhang: ${escapeHTML(record.overhang || 'unknown')}; partner overhang: ${escapeHTML(record.partner_overhang || 'unknown')}.</p>` + (match ? duplex('Located duplex',match.sense,match.antisense) + `<p class="hint">Input orientation: ${escapeHTML(match.input_orientation)}. ${match.candidate?`Current run: ${escapeHTML(match.candidate.id)} · rank ${match.candidate.rank ?? 'excluded'} · preferences ${match.candidate.rating.met}/${match.candidate.rating.evaluated} · excluded by ${escapeHTML(match.candidate.excluded_by?.join(', ') || 'none')}`:'No candidate of this length in the current run; rule rating unavailable.'}</p><div class="table-scroll"><table><thead><tr><th>Model</th><th>Predicted guide</th><th>Predicted passenger</th><th>End difference</th></tr></thead><tbody>${match.thermodynamics.map(a=>`<tr title="${escapeHTML(a.explanation)}"><td>${escapeHTML(a.table_name)}</td><td>${escapeHTML(a.predicted_guide)}</td><td>${a.predicted_guide==='antisense'?'sense':a.predicted_guide==='sense'?'antisense':'undetermined'}</td><td>${a.difference.toFixed(2)} ${escapeHTML(a.unit)}</td></tr>`).join('')}</tbody></table></div><p class="hint">Predictions use paired cores; matched candidates retain the run’s model settings. Other lengths use four-base ends. Different model predictions remain separate. They do not establish activation or measured strand loading.</p>` + (selected ? duplex('Selected new design: '+selected.id, selected.sense_strand_rna,selected.antisense_strand_rna) + `<p>Predicted guide: ${escapeHTML(selected.rating.guide)} · preferences ${selected.rating.met}/${selected.rating.evaluated}. Target overlap: ${Math.max(0,Math.min(match.end,selected.offset+selected.target_site_dna.length)-Math.max(match.offset,selected.offset))} bases. GC: existing ${(100*(match.target.match(/[GC]/g)||[]).length/match.target.length).toFixed(1)}%, selected ${selected.gc_percent}%. Aligned core differences: ${match.target.length===selected.target_site_dna.length?[...match.target].filter((base,i)=>base!==selected.target_site_dna[i]).length:"different lengths"}.</p>` : '<p class="hint">Select a new candidate on the map or in the table to compare its duplex here.</p>') + '<button type="button" id="sequence-nearby">Find overlapping / nearby designs</button>' : `<p>${escapeHTML(record.status)}. ${record.known_location?`Known site: chr${escapeHTML(record.known_location.contig)}:${fmt(record.known_location.start+1)}–${fmt(record.known_location.end)} (${escapeHTML(record.known_location.assembly)}, 1-based). ${escapeHTML(record.known_location.source)}. The current map covers a different region; use “Choose this promoter” to update your draft, then submit the design when ready.`:'The sequence may lie outside this region or differ from the reference. No location is assumed.'}</p>`);
   $("sequence-detail").insertAdjacentHTML("beforeend",referenceDuplexPanel(record,match)+strandAnalysisPanel(record,match));
   $("sequence-nearby")?.addEventListener('click',()=>{
     const nearby = state.result.candidates.filter(c=>Math.abs(c.offset-match.offset)<=100).sort((a,b)=>Math.abs(a.offset-match.offset)-Math.abs(b.offset-match.offset)).slice(0,10);
@@ -2465,14 +2481,59 @@ function previewSequences(records,errors=[]) {
     catch(e) { $("sequence-status").textContent=e.message; }
   });
 }
-async function saveSequenceRecords(records) {
-  const id=state.result.app.run_id;
-  const data=await api(`/api/runs/${id}/sequence-comparisons`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({records})});
-  if (state.result.app.run_id!==id) return;
-  state.sequenceRecords=[...(state.sequenceRecords||[]).filter(r=>r.reference),...data.records];
-  state.result.sequence_comparisons=state.sequenceRecords;renderMap();renderTable();
-  $("sequence-status").textContent='Comparison saved with this run.';
+function sequenceInputs(records) {
+  return records.map(record=>Object.fromEntries(['name','sequence','antisense','role','direction','source']
+    .filter(key=>record[key]!==undefined).map(key=>[key,record[key]])));
 }
+function applySavedSequences(data) {
+  state.sequenceRecords=[...data.references,...data.records];
+  state.sequenceRevision=data.revision;
+  state.result.sequence_comparisons=state.sequenceRecords;
+  state.result.sequence_comparison_revision=data.revision;
+  state.result.sequence_comparison_notice=data.notice || '';
+  sequenceFocus=null;
+  renderSequenceRecords();renderMap();renderTable();
+}
+async function saveSequenceRecords(records) {
+  if (state.sequenceSaving) throw new Error('A sequence save is already in progress. Retry when it finishes.');
+  const id=state.result.app.run_id;
+  state.sequenceSaving=true;
+  try {
+    const data=await api(`/api/runs/${id}/sequence-comparisons`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:state.sequenceRevision,records:sequenceInputs(records)})});
+    if (state.result.app.run_id!==id) throw new Error('The run changed while saving. Sequences were saved to the original run; pending input is retained.');
+    applySavedSequences(data);
+    $("sequence-conflict-recovery").hidden=true;
+    $("sequence-status").textContent='Comparison saved with this run.';
+  } catch (failure) {
+    if (failure.code==='sequence-comparison-conflict' && state.result.app.run_id===id) $("sequence-conflict-recovery").hidden=false;
+    throw failure;
+  } finally {state.sequenceSaving=false;}
+}
+$("sequence-reload").addEventListener('click',async()=>{
+  const id=state.result.app.run_id;
+  try {
+    const data=await api(`/api/runs/${id}/sequence-comparisons`);
+    if (state.result.app.run_id!==id) return;
+    applySavedSequences(data);
+    $("sequence-conflict-recovery").hidden=true;
+    $("sequence-status").textContent='Saved sequences reloaded. Pending input is retained; add it again when ready.';
+  } catch (failure) {$("sequence-status").textContent=failure.message;}
+});
+$("sequence-recalculate").addEventListener('click',async()=>{
+  const id=state.result.app.run_id;
+  if (state.sequenceSaving) return;
+  state.sequenceSaving=true;
+  $("sequence-recalculate").disabled=true;
+  try {
+    const data=await api(`/api/runs/${id}/sequence-comparisons/recalculate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:state.sequenceRevision})});
+    if (state.result.app.run_id!==id) return;
+    applySavedSequences(data);
+    $("sequence-status").textContent='Comparisons recalculated explicitly with current software. The prior revision remains recorded.';
+  } catch (failure) {
+    if (failure.code==='sequence-comparison-conflict') $("sequence-conflict-recovery").hidden=false;
+    $("sequence-status").textContent=failure.message;
+  } finally {state.sequenceSaving=false;$("sequence-recalculate").disabled=false;}
+});
 $("sequence-add").addEventListener('click',async()=>{
   try {
     const lines=$("sequence-input").value.trim().split(/\n/).filter(Boolean);
@@ -2499,7 +2560,7 @@ document.addEventListener('click',async(event)=>{
   const remove=event.target.closest('[data-sequence-remove]');
   if(remove){try{await saveSequenceRecords(state.sequenceRecords.filter((r,i)=>!r.reference&&i!==Number(remove.dataset.sequenceRemove)));}catch(e){$("sequence-status").textContent=e.message;}return;}
   const button=event.target.closest('[data-sequence]');
-  if(button){sequenceFocus={record:Number(button.dataset.sequence),match:Number(button.dataset.match||0)};const match=state.sequenceRecords[sequenceFocus.record].matches[sequenceFocus.match];if(match){setViewport(match.offset-60,Math.max(160,match.end-match.offset+120));renderMap();}else renderSequenceDetail();}
+  if(button){sequenceFocus={record:Number(button.dataset.sequence),match:Number(button.dataset.match||0)};const match=state.sequenceRecords[sequenceFocus.record].matches[sequenceFocus.match];if(match){setViewport(match.offset-60,Math.max(160,match.end-match.offset+120));renderMap();}renderSequenceDetail();}
   const candidateButton=event.target.closest('#sequence-detail [data-candidate]');
   if(candidateButton) await selectCandidate(candidateButton.dataset.candidate);
   if(event.target.closest('[data-candidate]'))setTimeout(renderSequenceDetail,0);
@@ -2516,23 +2577,23 @@ async function designAroundSaRNA(name) {
   const record=records.find(r=>r.name===name && r.known_location);
   if (!record) return;
   try {
-    if (state.result && state.result.gene?.symbol===state.gene?.symbol) restoreDraft(state.result);
     if (!state.gene?.sarna_references) await lookup();
     const location=record.known_location;
     let key=location.anchor_id?`anchor:${location.anchor_id}`:`transcript:${location.nearest_transcript}`;
     if (![...$("reference").options].some(option=>option.value===key)) await lookup();
     if (![...$("reference").options].some(option=>option.value===key)) {
-      const available=promoterSaRNACoverage(state.gene,state.customReferences,2000,500)
+      const available=promoterSaRNACoverage(state.gene,state.customReferences,Number($("upstream").value),Number($("downstream").value))
         .find(row=>row.contains.some(reference=>reference.name===name)
           && [...$("reference").options].some(option=>option.value===row.key));
       if (available) key=available.key;
     }
     if (![...$("reference").options].some(option=>option.value===key)) throw new Error('The reference promoter is unavailable in the current annotation. Select a reference near the displayed genomic site.');
     $("reference").value=key;
-    $("upstream").value=2000;$("downstream").value=500;
-    markDraft();
-    $("sequence-status").textContent=`Loading the promoter around ${name}; your previous run remains saved.`;
-    await design();
+    chooseOverviewReference(key);
+    if (typeof setWorkspaceTab==='function') setWorkspaceTab('design',{scroll:false});
+    $("sequence-status").textContent=`Reference for ${name} selected. Current criteria and window sizes are retained; submit the design when ready.`;
+    $("job-status").hidden=false;
+    $("job-status").textContent=`Reference for ${name} selected. Review your settings, then click Design saRNAs.`;
   } catch (failure) {$("sequence-status").textContent=failure.message;error(failure.message);}
 }
 document.addEventListener('click',event=>{

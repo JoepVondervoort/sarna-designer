@@ -515,7 +515,7 @@ def test_store_migrates_existing_runs_and_preserves_their_snapshot(tmp_path: Pat
     assert store.status("old")["error_code"] is None
     with store.connect() as connection:
         # Researcher shortlists are separate from frozen runs in schema 6.
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 6
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 7
         screening_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(screenings)")
         }
