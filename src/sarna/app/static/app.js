@@ -10,6 +10,8 @@ const frozen = window.SARNA_FROZEN || null;
 const state = {catalogue:null, source:"gene", gene:null, draft:{}, base:{}, result:null, selected:null,
   checked:new Set(), filter:"passing", page:0, sort:"rank", descending:false, start:0, end:0, busy:false, retry:null,
   customReferences:{}, basket:[], batch:null, editingReference:null, expression:null};
+let sequencePending = [];
+let sequenceFocus = null;
 const roleName = {mandatory:"Gate", preference:"Preference", tiebreak:"Tiebreak", off:"Off"};
 const tableNames = {"rna-xia-1998":"RNA · Xia 1998", "dna-santalucia-1998":"DNA · SantaLucia 1998", "legacy-dna-kj":"Legacy DNA · defective"};
 
@@ -158,7 +160,40 @@ function populateGene(gene, selected = "") {
   $("custom-reference-locus").textContent = `GRCh38 · chr${gene.contig || "?"} · gene strand ${gene.strand}. Enter a 1-based genomic coordinate, not a TSS-relative position.`;
   renderGeneOverview(); renderBasket(); renderExpression();
 }
+function promoterSaRNACoverage(gene, custom, upstream, downstream) {
+  if (!gene) return [];
+  const known=(gene.sarna_references || []).filter(r=>r.known_location);
+  const references=[...(gene.transcripts || []).map(t=>({key:`transcript:${t.id}`,label:t.id,tss:t.tss})),
+    ...(gene.anchors || []).map(a=>({key:`anchor:${a.id}`,label:a.id,tss:a.reference_point})),
+    ...Object.values(custom).map(a=>({key:`custom:${a.id}`,label:a.name,tss:a.tss_position-1}))];
+  return references.map(reference=>{
+    const start=reference.tss===null?null:gene.strand==='-'?reference.tss-downstream+1:reference.tss-upstream;
+    const end=reference.tss===null?null:gene.strand==='-'?reference.tss+upstream+1:reference.tss+downstream;
+    const contains=known.filter(r=>{
+      const site=r.known_location;
+      return start!==null && end!==null && site.assembly===gene.assembly && site.contig===gene.contig
+        && site.strand===gene.strand && site.start>=start && site.end<=end;
+    });
+    return {...reference,start,end,contains};
+  });
+}
+function renderKnownSaRNAPromoters() {
+  const gene=state.gene, host=$("known-sarna-promoters"), note=$("known-sarna-selection");
+  const known=gene?.sarna_references || [];
+  if (!gene || !known.length) {host.innerHTML='';note.textContent='';return;}
+  const coverage=promoterSaRNACoverage(gene,state.customReferences,Number($("upstream").value),Number($("downstream").value));
+  for (const option of $("reference").options) {
+    option.dataset.baseLabel ||= option.textContent;
+    const row=coverage.find(r=>r.key===option.value);
+    option.textContent=option.dataset.baseLabel+(row?.contains.length?` · known saRNAs: ${row.contains.map(r=>r.name).join(', ')}`:'');
+  }
+  const selected=coverage.find(r=>r.key===$("reference").value);
+  note.textContent=selected?.contains.length?`This window contains known sites: ${selected.contains.map(r=>r.name).join(', ')}.`:'No curated saRNA sites in the selected window. See “Known saRNAs by promoter region” in the gene overview.';
+  const rows=coverage.filter(r=>r.contains.length);
+  host.innerHTML=`<section class="known-sarna-promoters"><h3>Known saRNAs by promoter region</h3><p class="hint">Shown before design for the current ${fmt(Number($("upstream").value))} bp upstream / ${fmt(Number($("downstream").value))} bp downstream window. Coverage uses recorded genomic sites; exact sequence matching follows when the promoter is loaded.</p><p>${known.map(r=>`<strong>${escapeHTML(r.name)}</strong>: chr${escapeHTML(r.known_location.contig)}:${fmt(r.known_location.start+1)}–${fmt(r.known_location.end)} (1-based)`).join(' · ')}</p><div class="table-scroll"><table><thead><tr><th>Promoter reference</th><th>Known saRNAs in window</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr class="${r.key===$("reference").value?'selected':''}"><td>${escapeHTML(r.label)}</td><td>${r.contains.map(s=>escapeHTML(s.name)).join(', ')}</td><td>${!frozen?`<button type="button" data-known-promoter="${escapeHTML(r.key)}">${r.key===$("reference").value?'Selected':'Choose this promoter'}</button>`:''}</td></tr>`).join('') || '<tr><td colspan="3">No available reference window fully contains these known sites. Increase the window or choose a reference near the recorded sites.</td></tr>'}</tbody></table></div><p class="hint">Curated references are not a complete catalogue of assayed saRNAs. Their presence does not establish promoter activity in your cell.</p></section>`;
+}
 function renderGeneOverview() {
+  renderKnownSaRNAPromoters();
   const gene = state.gene;
   const groups = gene?.tss_groups || [];
   if (!gene || !Number.isFinite(gene.start) || !Number.isFinite(gene.end)) { $("gene-overview").hidden = true; return; }
@@ -166,8 +201,9 @@ function renderGeneOverview() {
   $("gene-overview-meta").textContent = frozen ? "FROZEN REFERENCE CHOICES" : "DRAFT REFERENCE CHOICES";
   $("gene-overview-description").textContent = `${gene.symbol} · ${groups.length} annotated start coordinate(s) across ${(gene.transcripts || []).length} transcripts. Click a start-site group to inspect its transcripts below.`;
   const anchors = gene.anchors || [], custom = Object.values(state.customReferences);
-  const lo = Math.min(gene.start,...anchors.map(a=>a.start),...custom.map(a=>a.tss_position-1));
-  const hi = Math.max(gene.end,...anchors.map(a=>a.end),...custom.map(a=>a.tss_position));
+  const knownSaRNAs = (gene.sarna_references || state.result?.sequence_comparisons || []).filter(r=>r.reference && r.known_location && r.known_location.contig===gene.contig);
+  const lo = Math.min(gene.start,...anchors.map(a=>a.start),...custom.map(a=>a.tss_position-1),...knownSaRNAs.map(r=>r.known_location.start));
+  const hi = Math.max(gene.end,...anchors.map(a=>a.end),...custom.map(a=>a.tss_position),...knownSaRNAs.map(r=>r.known_location.end));
   const span = Math.max(1,hi-lo), left=130, right=966;
   const scale = n=>left+(gene.strand === "-" ? hi-1-n : n-lo)/span*(right-left);
   const tip = value=>`data-tip="${escapeHTML(value)}" tabindex="0" aria-label="${escapeHTML(value)}"`;
@@ -191,7 +227,14 @@ function renderGeneOverview() {
   });
   parts.push('<text x="12" y="145" fill="#61767a" font-size="10">Your references</text>');
   custom.forEach((a,i)=>parts.push(`<circle cx="${scale(a.tss_position-1)}" cy="${135+(i%2)*9}" r="4" fill="#8e7bb9" ${tip(`${a.name} · chr${gene.contig}:${a.tss_position} (1-based) · researcher supplied, inferred. Source: ${a.source}. ${a.note}`)} data-reference="custom:${escapeHTML(a.id)}"/>`));
-  parts.push(`<text x="${right}" y="173" text-anchor="end" fill="#61767a" font-size="10">chr${escapeHTML(gene.contig)} · 1-based genomic coordinates · gene strand ${escapeHTML(gene.strand)} · 5′ → 3′</text>`);
+  parts.push('<text x="12" y="180" fill="#61767a" font-size="10">Reference saRNAs</text>');
+  knownSaRNAs.forEach((record,index)=>{
+    const location=record.known_location, x=scale(location.start), y=166+(index%2)*16, style=sequenceAppearance(record);
+    const help=`${record.name} · chr${location.contig}:${location.start+1}–${location.end} (1-based). ${location.source}`;
+    parts.push(`<circle cx="${x}" cy="${y}" r="4" fill="${style.color}" ${tip(help)} data-sarna-region="${escapeHTML(record.name)}"/><text x="${x+7}" y="${y+3}" font-size="10" fill="${style.color}" ${tip(help)} data-sarna-region="${escapeHTML(record.name)}">${escapeHTML(record.name)} · ${style.label}</text>`);
+  });
+  $("gene-overview-map").setAttribute('viewBox','0 0 1000 220');
+  parts.push(`<text x="${right}" y="213" text-anchor="end" fill="#61767a" font-size="10">chr${escapeHTML(gene.contig)} · 1-based genomic coordinates · gene strand ${escapeHTML(gene.strand)} · 5′ → 3′</text>`);
   $("gene-overview-map").innerHTML=parts.join("");
   $("tss-group-list").innerHTML=groups.map(g=>`<details><summary>Annotated +1 · ${escapeHTML(g.contig)}:${fmt(g.tss+1)} <span class="muted">${g.transcript_ids.length} transcript(s)${g.mane?" · MANE Select":""}</span></summary><p class="hint">Shared start coordinate, not a measurement of promoter activity.</p><div>${g.transcript_ids.map(id=>`<button type="button" class="text-button" data-choose-transcript="${escapeHTML(id)}">${escapeHTML(id)}</button>`).join("")}</div></details>`).join("");
 }
@@ -670,6 +713,7 @@ function requestFromDraft() {
 }
 async function design() {
   if (state.busy) return;
+  $("design-ready").hidden=true;
   loading("job-status", true, "Preparing design run…");
   error(""); state.busy = true; $("design-button").disabled = true; $("setup").inert = true; $("saved-runs").disabled = true;
   try {
@@ -691,6 +735,7 @@ async function design() {
   finally { loading("job-status", false); state.busy = false; $("design-button").disabled = false; $("setup").inert = false; $("saved-runs").disabled = false; }
 }
 function setBatchBusy(busy) {
+  if (busy) $("design-ready").hidden=true;
   loading("job-status", busy, busy ? "Preparing promoter comparison…" : undefined);
   state.busy=busy; $("setup").inert=busy; $("saved-runs").disabled=busy;
   $("design-button").disabled=busy; $("design-batch").disabled=busy; $("batch-retry-online").disabled=busy;
@@ -866,6 +911,9 @@ function showResult(result) {
   renderCellContext(result, cell);
   $("map-orientation").textContent = result.promoter.contig ? `chr${result.promoter.contig}:${fmt(result.promoter.start)}–${fmt(result.promoter.end)} (0-based, half-open) · DNA strand ${result.promoter.strand} · plotted 5′ → 3′ in transcript orientation` : "Plotted 5′ → 3′ as supplied · no genomic location assigned";
   $("candidate-detail").innerHTML = '<p class="hint">Select a candidate in the table or promoter map to inspect its sequences, strand prediction, and every rule verdict.</p>';
+  state.sequenceRecords = result.sequence_comparisons || [];
+  $("sequence-status").textContent="";
+  if (result.candidates.some(candidate=>candidateControlMatches(candidate,result).length)) $("candidate-inspection").open=true;
   renderMap(); renderTable();
   // A screening belongs to the run, not to the browser tab that started it, so a reopened run
   // rebuilds its merged panel from the stored records rather than reading as never screened.
@@ -904,7 +952,7 @@ function ruleName(id) {
 function ratingText(c) { return c.rating.evaluated ? `${c.rating.met}/${c.rating.evaluated}` : "Not evaluated"; }
 function filteredCandidates() {
   const search = $("candidate-search").value.trim().toUpperCase();
-  const values = state.result.candidates.filter(c => (state.filter==="all" || (state.filter==="passing" ? c.rank!==null : c.rank===null)) && (!search || c.id.toUpperCase().includes(search) || c.target_site_dna.includes(search)));
+  const values = state.result.candidates.filter(c => (state.filter==="all" || (state.filter==="passing" ? c.rank!==null : c.rank===null)) && (!search || c.id.toUpperCase().includes(search) || c.target_site_dna.includes(search) || candidateControlMatches(c).some(record=>record.name.toUpperCase().includes(search))));
   values.sort((a,b) => {
     const value = c => state.sort==="position"?c.offset:state.sort==="gc"?c.gc_percent:state.sort==="rating"?c.rating.met:(c.rank ?? Number.MAX_SAFE_INTEGER);
     return (value(a)-value(b))*(state.descending?-1:1) || a.offset-b.offset;
@@ -917,8 +965,10 @@ function renderTable() {
   state.page = Math.min(state.page,pages-1);
   const page = values.slice(state.page*50,(state.page+1)*50);
   const screeningById = new Map(typeof screenedDecisions === "function" ? screenedDecisions().map(d=>[d.candidate.id,d]) : []);
+  const controlCandidates=state.result.candidates.filter(candidate=>candidateControlMatches(candidate).length);
+  $("candidate-controls").innerHTML=controlCandidates.length?`<p class="hint">Known controls in this run · exact paired-core matches</p>${controlCandidates.map(candidate=>`<div class="candidate-control-summary"><strong>${escapeHTML(candidate.id)}</strong> ${candidateControlBadges(candidate)} <span>${candidate.rank===null?'Excluded by current gates':`Design rank ${candidate.rank}`}</span></div>`).join('')}` : '';
   $("visible-count").textContent = `· ${fmt(values.length)}`;
-  $("candidate-rows").innerHTML = page.length ? page.map(c => `<tr data-candidate="${c.id}" class="${state.selected===c.id?"selected":""}" tabindex="0" aria-label="Inspect ${c.id}"><td><input type="checkbox" data-check="${c.id}" ${state.checked.has(c.id)?"checked":""} aria-label="Select ${c.id} for export"></td><td>${c.rank || "n/a"}</td><td><span class="dna">${escapeHTML(c.target_site_dna)}</span><p class="candidate-id">${c.id}${c.rank===null?` · ${c.excluded_by.length} failed gates`:""}</p>${twinChip(c)}<div class="candidate-screening-note" data-candidate-screening="${c.id}">${typeof candidateScreeningSummary === "function" ? candidateScreeningSummary(screeningById.get(c.id)) : ""}</div></td><td>${escapeHTML(positionText(c))}</td><td>${c.gc_percent}%</td><td><div class="rating-cell"><b>${ratingText(c)}</b><span class="rating-bar"><i style="width:${c.rating.percent ?? 0}%"></i></span></div>${c.rating.unavailable?`<p class="candidate-id">${c.rating.unavailable} unavailable</p>`:""}${c.rating.unchecked_gates.length?`<p class="candidate-id">${c.rating.unchecked_gates.length} unchecked gates</p>`:""}${(c.rating.missed||[]).length?`<p class="missed-chip">missed: ${c.rating.missed.map(id=>escapeHTML(ruleName(id))).join(", ")}</p>`:""}</td><td><span class="guide-badge ${escapeHTML(c.rating.guide || "unknown")}">${escapeHTML(c.rating.guide || "unknown")}</span>${!c.rating.models_agree?'<p class="disagreement">Models disagree</p>':""}</td></tr>`).join("") : '<tr><td colspan="7" style="padding:30px;text-align:center;color:var(--muted)">No candidates match this view. Inspect excluded targets or adjust your criteria and run again.</td></tr>';
+  $("candidate-rows").innerHTML = page.length ? page.map(c => `<tr data-candidate="${c.id}" class="${state.selected===c.id?"selected":""}" tabindex="0" aria-label="Inspect ${c.id}"><td><input type="checkbox" data-check="${c.id}" ${state.checked.has(c.id)?"checked":""} aria-label="Select ${c.id} for export"></td><td>${c.rank || "n/a"}</td><td><span class="dna">${escapeHTML(c.target_site_dna)}</span><p class="candidate-id">${c.id}${c.rank===null?` · ${c.excluded_by.length} failed gates`:""}</p>${twinChip(c)}${candidateControlBadges(c)}<div class="candidate-screening-note" data-candidate-screening="${c.id}">${typeof candidateScreeningSummary === "function" ? candidateScreeningSummary(screeningById.get(c.id)) : ""}</div></td><td>${escapeHTML(positionText(c))}</td><td>${c.gc_percent}%</td><td><div class="rating-cell"><b>${ratingText(c)}</b><span class="rating-bar"><i style="width:${c.rating.percent ?? 0}%"></i></span></div>${c.rating.unavailable?`<p class="candidate-id">${c.rating.unavailable} unavailable</p>`:""}${c.rating.unchecked_gates.length?`<p class="candidate-id">${c.rating.unchecked_gates.length} unchecked gates</p>`:""}${(c.rating.missed||[]).length?`<p class="missed-chip">missed: ${c.rating.missed.map(id=>escapeHTML(ruleName(id))).join(", ")}</p>`:""}</td><td><span class="guide-badge ${escapeHTML(c.rating.guide || "unknown")}">${escapeHTML(c.rating.guide || "unknown")}</span>${!c.rating.models_agree?'<p class="disagreement">Models disagree</p>':""}</td></tr>`).join("") : '<tr><td colspan="7" style="padding:30px;text-align:center;color:var(--muted)">No candidates match this view. Inspect excluded targets or adjust your criteria and run again.</td></tr>';
   $("page-label").textContent = values.length ? `${fmt(state.page*50+1)}–${fmt(Math.min((state.page+1)*50,values.length))} of ${fmt(values.length)} · page ${state.page+1}/${pages}` : "0 candidates";
   $("page-previous").disabled = state.page===0; $("page-next").disabled = state.page>=pages-1;
   $("select-page").checked = page.length>0 && page.every(c=>state.checked.has(c.id));
@@ -975,7 +1025,7 @@ async function selectCandidate(id, {reveal=true} = {}) {
     Object.assign(candidate,full);
     const primary = full.guide_prediction.assessments.find(a=>a.table===full.rating.guide_model);
     const sequenceBox = (name,sequence) => `<div class="sequence-box"><div><span>${name} · 5′ → 3′</span><button type="button" data-copy="${escapeHTML(sequence)}">Copy</button></div><code>${escapeHTML(sequence)}</code></div>`;
-    $("candidate-detail").innerHTML = `<div class="detail-heading"><div><h3>${id} <span class="muted">${full.rank?`Rank ${full.rank}`:"Excluded by gates"}</span></h3><p class="hint">${escapeHTML(positionText(full))} ${full.tss_span?"relative to reference TSS":"in supplied sequence"} · ${full.target_site_dna.length} nt core · ${full.gc_percent}% GC${full.genomic?` · genomic ${escapeHTML(full.genomic.strand)} strand`:""}</p></div><span class="tag">${ratingText(full)} PREFERENCES</span></div>${duplexPanel(run,full)}<div class="detail-body"><div>${sequenceBox("Promoter target DNA",full.target_site_dna)}${sequenceBox("Sense RNA core",full.sense_strand_rna)}${sequenceBox("Antisense RNA core",full.antisense_strand_rna)}<p class="hint">The cores above are the 19 nt RNA the rules are evaluated against, without overhangs. The duplex panel at the top is what you order. ${escapeHTML(screeningSentence(id))}</p>${twinNote(full)}</div><div><div class="guide-summary"><strong>Predicted RNA guide: ${escapeHTML(full.rating.guide || "unknown")}</strong><p>${escapeHTML(tableNames[full.rating.guide_model] || full.rating.guide_model)} · ${escapeHTML(full.guide_prediction.summary)}</p><p class="hint">This predicts duplex loading, not the identity of a promoter-associated target RNA, and not activation.</p></div><table class="model-table"><thead><tr><th>Parameter model</th><th>Guide</th><th>End difference</th></tr></thead><tbody>${full.guide_prediction.assessments.map(a=>`<tr data-tip="${escapeHTML(a.explanation)}" tabindex="0"><td>${escapeHTML(tableNames[a.table] || a.table)}</td><td>${escapeHTML(a.predicted_guide)}</td><td>${a.difference.toFixed(2)} ${escapeHTML(a.unit)}</td></tr>`).join("")}</tbody></table><details class="verdict"><summary>How the selected model reaches this prediction</summary><p>${escapeHTML(primary?.explanation || "The selected model was not assessed.")}</p></details></div></div>${full.excluded_by.length?`<p class="hint">${escapeHTML(full.rejection_summary)}</p>`:""}<div class="rule-verdicts"><h3>Every rule, explained</h3>${full.rules.map(r=>ruleVerdict(r,run.configuration)).join("")}</div>`;
+    $("candidate-detail").innerHTML = `<div class="detail-heading"><div><h3>${id} <span class="muted">${full.rank?`Rank ${full.rank}`:"Excluded by gates"}</span></h3><p class="hint">${escapeHTML(positionText(full))} ${full.tss_span?"relative to reference TSS":"in supplied sequence"} · ${full.target_site_dna.length} nt core · ${full.gc_percent}% GC${full.genomic?` · genomic ${escapeHTML(full.genomic.strand)} strand`:""}</p></div><span class="tag">${ratingText(full)} PREFERENCES</span></div>${candidateControlBadges(full,run)}${duplexPanel(run,full)}<div class="detail-body"><div>${sequenceBox("Promoter target DNA",full.target_site_dna)}${sequenceBox("Sense RNA core",full.sense_strand_rna)}${sequenceBox("Antisense RNA core",full.antisense_strand_rna)}<p class="hint">The cores above are the 19 nt RNA the rules are evaluated against, without overhangs. The duplex panel at the top is what you order. ${escapeHTML(screeningSentence(id))}</p>${twinNote(full)}</div><div><div class="guide-summary"><strong>Predicted RNA guide: ${escapeHTML(full.rating.guide || "unknown")}</strong><p>${escapeHTML(tableNames[full.rating.guide_model] || full.rating.guide_model)} · ${escapeHTML(full.guide_prediction.summary)}</p><p class="hint">This predicts duplex loading, not the identity of a promoter-associated target RNA, and not activation.</p></div><table class="model-table"><thead><tr><th>Parameter model</th><th>Guide</th><th>End difference</th></tr></thead><tbody>${full.guide_prediction.assessments.map(a=>`<tr data-tip="${escapeHTML(a.explanation)}" tabindex="0"><td>${escapeHTML(tableNames[a.table] || a.table)}</td><td>${escapeHTML(a.predicted_guide)}</td><td>${a.difference.toFixed(2)} ${escapeHTML(a.unit)}</td></tr>`).join("")}</tbody></table><details class="verdict"><summary>How the selected model reaches this prediction</summary><p>${escapeHTML(primary?.explanation || "The selected model was not assessed.")}</p></details></div></div>${full.excluded_by.length?`<p class="hint">${escapeHTML(full.rejection_summary)}</p>`:""}<div class="rule-verdicts"><h3>Every rule, explained</h3>${full.rules.map(r=>ruleVerdict(r,run.configuration)).join("")}</div>`;
     if (typeof workflowCandidate === "function") workflowCandidate(candidate);
   } catch (e) {
     if (state.result!==run || state.selected!==id) return;
@@ -1340,7 +1390,7 @@ const MARKED_TOP = 230, MARKED_HEIGHT = 19, MARKED_LABEL_GAP = 9;
 function passingTip(c) {
   return `${c.id} · rank ${c.rank} · ${ratingText(c)} evaluated preferences · `
     + `${c.rating.guide || "unknown"} guide (${c.rating.guide_model}). `
-    + `Position ${positionText(c)}. Click for details.`;
+    + `Position ${positionText(c)}. ${candidateControlMatches(c).map(r=>`Same duplex core as ${r.name} (${sequenceAppearance(r).label})`).join("; ")} Click for details.`;
 }
 
 function drawPassing(parts, r, scale, tip, rect) {
@@ -1383,13 +1433,107 @@ function drawPassing(parts, r, scale, tip, rect) {
   }
 }
 
+function candidateControlMatches(candidate,result=state.result) {
+  if (!candidate || !result) return [];
+  const target=candidate.target_site_dna;
+  return (result.sequence_comparisons || []).filter(record=>{
+    if (!record.reference) return false;
+    const dna=record.dna;
+    if (!dna || dna.length!==target.length) return false;
+    const complement=dna.split('').reverse().map(base=>({A:'T',T:'A',C:'G',G:'C'})[base]).join('');
+    return target===dna || target===complement;
+  });
+}
+function candidateControlBadges(candidate,result=state.result) {
+  return candidateControlMatches(candidate,result).map(record=>{
+    const style=sequenceAppearance(record);
+    return `<span class="sequence-effect ${style.kind}" title="Exact paired-core sequence identity; overhangs and modifications may differ. ${escapeHTML(style.description)}">Same core as ${escapeHTML(record.name)} · ${style.label}</span>`;
+  }).join(' ');
+}
+function referenceDuplexPanel(record,match=null) {
+  const analysis=match?.strand_analysis || record.strand_analysis;
+  if (!analysis) return '<p class="hint">Locate this sequence or assign its strand role to display the duplex.</p>';
+  const models=analysis.models, matchedCandidate=match?.candidate || record.matches?.[0]?.candidate;
+  const configured=state.result?.configuration?.rules?.find(rule=>rule.id==='thermodynamic-asymmetry')
+    || state.result?.configuration?.rules?.find(rule=>rule.id==='asymmetry-margin');
+  const preferred=matchedCandidate?.rating.guide_model
+    || configured?.parameters?.find(parameter=>parameter.name==='nearest-neighbour-table')?.value
+    || 'rna-xia-1998';
+  const model=models.find(model=>model.table===preferred) || models[0];
+  if (!model) return '';
+  const roles=strandRoles(model.predicted_guide);
+  const sense=analysis.strands.find(strand=>strand.name==='sense').rna_5to3;
+  const anti=analysis.strands.find(strand=>strand.name==='antisense').rna_5to3;
+  const candidate={rating:{guide:model.predicted_guide,guide_model:model.table},guide_prediction:{
+    end_length_nt:matchedCandidate?.guide_prediction?.end_length_nt || 4, assessments:models}};
+  const tube=(name,sequence)=>`<div class="tube ${roles[name]}"><div class="tube-head"><span class="role-chip ${roles[name]}">Predicted ${roles[name]==='undecided'?'undetermined':roles[name]}</span><span>${name} · 5′ → 3′ · ${sequence.length} nt core</span><button type="button" data-copy="${escapeHTML(sequence)}">Copy</button></div><code>${escapeHTML(sequence)}</code><small>Complementary genomic DNA strand: ${escapeHTML(analysis.strands.find(strand=>strand.name===name).complementary_genomic_strand || 'unknown')}</small></div>`;
+  return `<div class="duplex-panel reference-duplex"><div class="duplex-head"><h4>${escapeHTML(record.name)} · guide &amp; passenger prediction</h4><p class="hint">${escapeHTML(model.table_name)}. ${models.some(other=>other.predicted_guide!==model.predicted_guide)?'Models disagree; strand loading is uncertain.':'Prediction describes strand loading, not measured binding.'} The diagram shows paired cores only; recorded overhangs are listed separately. ${record.partner_inferred?'The partner strand is inferred.':''}</p></div>${duplexLadder({sense_core_rna_5to3:sense,antisense_core_rna_5to3:anti,core_only:true},candidate)}${endEvidence(candidate)}<div class="tubes">${tube('sense',sense)}${tube('antisense',anti)}</div></div>`;
+}
+function strandAnalysisPanel(record,match=null) {
+  const analysis=match?.strand_analysis || record.strand_analysis;
+  if (!analysis) return '<p class="hint">Assign a strand role or locate this sequence to analyse sense/antisense orientation.</p>';
+  const strands=analysis.strands;
+  const bases=sequence=>`<div class="indexed-bases" aria-label="${escapeHTML(sequence)}">${[...sequence].map((base,i)=>`<span class="base-${base}"><small>${i+1}</small><b>${base}</b></span>`).join('')}</div>`;
+  const nucleotideCards=strands.map(strand=>`<article class="strand-analysis-card"><h4>${escapeHTML(strand.name)} RNA · 5′ → 3′</h4>${bases(strand.rna_5to3)}<p>${strand.length} nt · A ${strand.counts.A} · C ${strand.counts.C} · G ${strand.counts.G} · U ${strand.counts.U} · GC ${strand.gc_percent}%</p><p>Complementary DNA: genomic ${strand.complementary_genomic_strand?`<strong>${escapeHTML(strand.complementary_genomic_strand)}</strong> strand`:'strand unknown (no genomic orientation assigned)'}</p><div class="strand-pairing"><code>RNA 5′ ${escapeHTML(strand.rna_5to3)} 3′</code><code>DNA 3′ ${escapeHTML(strand.complementary_dna_aligned_3to5)} 5′</code></div><p class="hint">The DNA strand is shown antiparallel. Its 5′ → 3′ sequence is <code>${escapeHTML(strand.complementary_dna_5to3)}</code>.</p></article>`).join('');
+  const roleSequence=role=>strands.find(strand=>strand.name===role)?.rna_5to3 || '';
+  return `<section class="strand-analysis"><h4>Strand composition &amp; complementarity</h4><p class="hint">RNA cores only; overhangs are excluded. ${record.partner_inferred?'The complementary partner is inferred.':'Both cores were supplied.'}</p><div class="strand-analysis-grid">${nucleotideCards}</div><div class="table-scroll"><table><thead><tr><th>Model</th><th>Predicted guide · 5′ → 3′</th><th>Predicted passenger · 5′ → 3′</th><th>Guide complementary DNA strand</th></tr></thead><tbody>${analysis.models.map(model=>{
+    const guide=strands.find(strand=>strand.name===model.predicted_guide);
+    return `<tr><td title="${escapeHTML(model.explanation)}">${escapeHTML(model.table_name)}</td><td>${escapeHTML(model.predicted_guide)}<br><code>${escapeHTML(roleSequence(model.predicted_guide))}</code></td><td>${escapeHTML(model.predicted_passenger || 'undetermined')}<br><code>${escapeHTML(roleSequence(model.predicted_passenger))}</code></td><td>${guide?.complementary_genomic_strand?`Genomic ${escapeHTML(guide.complementary_genomic_strand)}`:'Undetermined'}</td></tr>`;
+  }).join('')}</tbody></table></div><p class="hint">${escapeHTML(analysis.scope)} A genomic +/− label describes reference orientation, independently of guide/passenger loading. Promoter DNA association and promoter-associated RNA targeting have experimental support in different settings; this app does not determine which substrate this duplex binds. <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC4797303/" target="_blank" rel="noopener">DNA-target evidence</a> · <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC4783471/" target="_blank" rel="noopener">saRNA/Ago2 promoter association</a>.</p></section>`;
+}
+function sequenceAppearance(record) {
+  if (record.reference && record.name === 'SCN1A-7') return {
+    color:'#b43f63', pale:'#fff0f4', label:'↓ Downregulating', kind:'down',
+    description:'Researcher-reported downregulation in HeLa and AF22 (qPCR); AF22 NES also RNA-seq.'
+  };
+  if (record.reference) return {color:'#7954a1',pale:'#f4effb',label:'↑ Activating',kind:'positive',
+    description:'Activation reported in the cited experimental setting.'};
+  return {color:'#167a79',pale:'#edf8f6',label:'Imported',kind:'imported',
+    description:'Imported sequence; experimental effect not assigned.'};
+}
+function sequenceEffectBadge(record) {
+  const style=sequenceAppearance(record);
+  return `<span class="sequence-effect ${style.kind}" title="${escapeHTML(style.description)}">${style.label}</span>`;
+}
+function existingSaRNATrack(records,start,end,left,width,focused) {
+  const scale=offset=>left+(offset-start)/(end-start)*width;
+  const items=[];
+  records.forEach((record,index)=>record.matches.forEach((match,j)=>{
+    if (match.end<=start || match.offset>=end) return;
+    const style=sequenceAppearance(record), text=`${record.name}${match.candidate?` = ${match.candidate.id}`:""} · ${style.label}`;
+    const markerLeft=scale(Math.max(start,match.offset)),markerRight=scale(Math.min(end,match.end));
+    const pillWidth=Math.min(width,Math.max(150,text.length*7+24));
+    const x=Math.max(left,Math.min(left+width-pillWidth,(markerLeft+markerRight-pillWidth)/2));
+    items.push({record,index,j,style,text,markerLeft,markerRight,pillWidth,x,
+      lo:Math.min(x,markerLeft),hi:Math.max(x+pillWidth,markerRight)});
+  }));
+  items.sort((a,b)=>a.lo-b.lo || a.index-b.index || a.j-b.j);
+  const lanes=[];
+  for (const item of items) {
+    let lane=lanes.findIndex(right=>right+14<=item.lo);
+    if (lane<0) lane=lanes.length;
+    lanes[lane]=item.hi;item.lane=lane;
+  }
+  const laneCount=Math.max(1,lanes.length), bottom=326+laneCount*48;
+  let markup=`<rect x="${left}" y="316" width="${width}" height="${bottom-316}" rx="8" fill="#f7f9fc" stroke="#e4e9f0"/><text class="track-label" x="12" y="340">Known / imported</text><text class="track-label" x="12" y="354">saRNAs</text>`;
+  if (!items.length) markup+=`<text x="${left+14}" y="344" font-size="12" fill="#61767a">No existing saRNA sites in this view. See their locations in the table above.</text>`;
+  for (const item of items) {
+    const {record,index,j,style,text,markerLeft,markerRight,pillWidth,x}=item;
+    const y=326+item.lane*48, center=(markerLeft+markerRight)/2;
+    const selected=focused?.record===index && (focused.match || 0)===j;
+    const help=`${record.name}: ${style.description} ${record.source}`;
+    markup+=`<g class="existing-sarna-mark" role="button" tabindex="0" aria-label="${escapeHTML(help)}" data-tip="${escapeHTML(help)}" data-sequence="${index}" data-match="${j}"><rect x="${markerLeft}" y="${y}" width="${Math.max(3,markerRight-markerLeft)}" height="7" rx="2" fill="${style.color}"/><line x1="${center}" x2="${center}" y1="${y+7}" y2="${y+13}" stroke="${style.color}"/><rect x="${x}" y="${y+13}" width="${pillWidth}" height="25" rx="7" fill="${style.pale}" stroke="${style.color}" stroke-width="${selected?2:1}"/><text x="${x+12}" y="${y+30}" font-size="12" font-weight="600" fill="${style.color}">${escapeHTML(text)}</text></g>`;
+  }
+  markup+=`<text x="${left+2}" y="${bottom+20}" font-size="11" fill="#7954a1">↑ Activating reference</text><text x="${left+160}" y="${bottom+20}" font-size="11" fill="#b43f63">↓ Downregulating · researcher reported</text><text x="${left+425}" y="${bottom+20}" font-size="11" fill="#167a79">Imported · effect unassigned</text>`;
+  return {markup,height:bottom+34};
+}
 function renderMap() {
   if (!state.result) return;
   const svg = $("promoter-map");
   // One SVG unit is one CSS pixel: widening the workspace adds plot space, not larger type.
   const mapWidth = Math.max(900, Math.round(svg.parentElement.clientWidth - 24));
   MAP_PLOT = mapWidth - MAP_LEFT - 26;
-  svg.setAttribute("viewBox", `0 0 ${mapWidth} 306`);
+  svg.setAttribute("viewBox", `0 0 ${mapWidth} 370`);
   svg.style.width = `${mapWidth}px`;
   const r = state.result, p = r.promoter, left = MAP_LEFT, right = left + MAP_PLOT;
   const width = MAP_PLOT;
@@ -1464,11 +1608,24 @@ function renderMap() {
     const c=r.candidates.find(c=>c.id===state.selected);
     rect(c.offset,c.offset+c.target_site_dna.length,c.rank===null?261:228,c.rank===null?19:25,"none",`${c.id} selected`,`stroke="#b97a2b" stroke-width="2" data-candidate="${c.id}"`);
   }
+  for (const candidate of r.candidates) {
+    const controls=candidateControlMatches(candidate,r);
+    if (!controls.length) continue;
+    const style=sequenceAppearance(controls[0]);
+    const y=candidate.rank===null?260:228;
+    rect(candidate.offset,candidate.offset+candidate.target_site_dna.length,y,20,
+      'none',`${candidate.id}: same duplex core as ${controls.map(c=>c.name+' · '+sequenceAppearance(c).label).join('; ')}`,
+      `stroke="${style.color}" stroke-width="2.5" data-candidate="${candidate.id}"`);
+  }
   parts.push('</g></g>');
+  const existingTrack=existingSaRNATrack(state.sequenceRecords || [],state.start,state.end,left,width,sequenceFocus);
+  parts.push(existingTrack.markup);
+  svg.setAttribute("viewBox", `0 0 ${mapWidth} ${existingTrack.height}`);
   svg.innerHTML=parts.join("");
   // Only offer the grab cursor when there is somewhere to pan. At full extent the drag is a
   // no-op, and advertising it is a promise the map does not keep.
   svg.classList.toggle("pannable", state.start > 0 || state.end < p.length);
+  renderSequenceRecords();
   renderRejectionLegend(r);
   renderLegend(r);
   const note = $("unevaluated-note");
@@ -1722,15 +1879,15 @@ function duplexLadder(order, candidate) {
   const antiCells = antiReversed.map((b, i) => cell(b, "b" + endClass(i)));
   const rungs = paired.map((ok, i) =>
     cell(ok ? "│" : "×", (ok ? "rung" : "rung mismatch") + endClass(i)));
-  const dT = () => [cell("dT", "ov"), cell("dT", "ov")];
-  const blank = () => [cell(" ", "pad"), cell(" ", "pad")];
+  const dT = () => order.core_only ? [] : [cell("dT", "ov"), cell("dT", "ov")];
+  const blank = () => order.core_only ? [] : [cell(" ", "pad"), cell(" ", "pad")];
   const row = (label, role, terminus5, cells, terminus3) =>
     `<div class="ladder-row ${role}">`
     + `<span class="ladder-label">${escapeHTML(label)}<i>${escapeHTML(role)}</i></span>`
     + `<span class="term">${terminus5}</span><span class="bases">${cells.join("")}</span>`
     + `<span class="term">${terminus3}</span></div>`;
   return `<div class="ladder" role="img" aria-label="${escapeHTML(
-      `Duplex: sense ${sense} paired with antisense ${anti}, each with a 3 prime dTdT overhang`)}">`
+      `Duplex: sense ${sense} paired with antisense ${anti}${order.core_only ? ", paired RNA cores; overhangs omitted" : ", each with a 3 prime dTdT overhang"}`)}">`
     // Sense reads 5'->3' left to right; its dTdT therefore sits on the right.
     + row("Sense", roles.sense, "5′", [...blank(), ...senseCells, ...dT()], "3′")
     + `<div class="ladder-row rungs"><span class="ladder-label"></span><span class="term"></span>`
@@ -1823,6 +1980,7 @@ function renderTopResult(result) {
     return;
   }
   const order = orderRowFor(result, best.id);
+  const controlBadges = candidateControlBadges(best,result);
   const met = best.rating.evaluated ? `${best.rating.met}/${best.rating.evaluated}` : "not evaluated";
   const roles = strandRoles(best.rating.guide);
   const line = (name, role, sequence) =>
@@ -1831,7 +1989,7 @@ function renderTopResult(result) {
     + `<span>${escapeHTML(name)} · 5′ → 3′</span><code>${escapeHTML(sequence)}</code></div>`
     + `<button type="button" data-copy="${escapeHTML(sequence)}">Copy</button></div>`;
   const duplex = order
-    ? `<div class="top-duplex">`
+    ? `${controlBadges}<div class="top-duplex">`
       + line("Sense", roles.sense, order.sense_order_5to3)
       + line("Antisense", roles.antisense, order.antisense_order_5to3)
       + `<p class="hint">Two ${order.ordered_length_nt}-mers: a ${order.core_length_nt} nt RNA core `
@@ -2129,7 +2287,7 @@ async function initialize() {
 $("design-form").addEventListener("submit",e=>{e.preventDefault();design();});
 $("lookup-gene").addEventListener("click",()=>{error("");lookup().catch(e=>error(e,"lookup"));});
 $("gene-symbol").addEventListener("input",()=>{state.gene=null;state.expression=null;$("expression").hidden=true;state.basket=[];state.customReferences={};resetCustomEditor();renderBasket();renderGeneOverview();$("reference").disabled=true;$("reference").innerHTML='<option value="">Look up this gene first</option>';$("gene-info").hidden=true;$("add-promoter").disabled=true;$("save-custom-reference").disabled=true;error("");});
-$("reference").addEventListener("change",()=>{$("add-promoter").disabled=!$("reference").value;renderExpression();});
+$("reference").addEventListener("change",()=>{$("add-promoter").disabled=!$("reference").value;renderExpression();renderKnownSaRNAPromoters();});
 $("cell-line").addEventListener("input",renderCellEvidence);
 $("add-promoter").addEventListener("click",()=>addPromoter());
 $("save-custom-reference").addEventListener("click",saveCustomReference);
@@ -2156,6 +2314,7 @@ function chooseOverviewReference(key) {
   if (frozen || !key) return;
   $("reference").value=key; $("add-promoter").disabled=!key; markDraft();
   renderExpression();   /* Setting .value in script fires no change event. */
+  renderKnownSaRNAPromoters();
   $("reference").focus();
 }
 $("tss-group-list").addEventListener("click",e=>{const button=e.target.closest("[data-choose-transcript]");if(button)chooseOverviewReference(`transcript:${button.dataset.chooseTranscript}`);});
@@ -2276,3 +2435,116 @@ document.addEventListener("click", event => {
 });
 document.addEventListener("pointermove",e=>tooltip(e.target,e));document.addEventListener("focusin",e=>tooltip(e.target));document.addEventListener("focusout",()=>{$("tooltip").hidden=true;});document.addEventListener("scroll",()=>{$("tooltip").hidden=true;},true);
 initialize();
+
+// Existing duplexes retain their supplied identity; Python owns strand matching and predictions.
+function renderSequenceRecords() {
+  const records = state.sequenceRecords || [];
+  $("sequence-import-controls").hidden = !!frozen;
+  $("sequence-records").innerHTML = records.length ? `<div class="table-scroll"><table><thead><tr><th>Reference / import</th><th>Placement</th><th>Source / observation</th><th></th></tr></thead><tbody>${records.map((r,i)=>`<tr><td><button type="button" data-sequence="${i}">${escapeHTML(r.name)}</button>${r.reference?' · reference':''}<br>${sequenceEffectBadge(r)}</td><td>${r.matches.length?r.matches.map((m,j)=>`<button type="button" data-sequence="${i}" data-match="${j}">Bases ${m.offset+1}–${m.end}</button>`).join(' '):escapeHTML(r.status)}${!r.matches.length&&r.known_location?`<br><small>Known site: chr${escapeHTML(r.known_location.contig)}:${fmt(r.known_location.start+1)}–${fmt(r.known_location.end)} · ${escapeHTML(r.known_location.assembly)} · ${escapeHTML(r.known_location.strand)} strand (1-based)</small>${!frozen?`<br><button type="button" data-sarna-region="${escapeHTML(r.name)}">Design around this reference</button>`:''}`:''}${r.matches.length>1?' · multiple matches':''}</td><td>${escapeHTML(r.source)}</td><td>${!r.reference&&!frozen?`<button type="button" data-sequence-remove="${i}">Remove</button>`:''}</td></tr><tr class="reference-analysis-row"><td colspan="4">${referenceDuplexPanel(r)}<details class="reference-strand-disclosure"><summary>Analyse both strands · ${escapeHTML(r.name)}</summary>${strandAnalysisPanel(r)}</details></td></tr>`).join('')}</tbody></table></div>` : '<p class="hint">No existing saRNAs added for this run.</p>';
+  renderSequenceDetail();
+}
+function renderSequenceDetail() {
+  const record = (state.sequenceRecords || [])[sequenceFocus?.record];
+  if (!record) { $("sequence-detail").innerHTML=''; return; }
+  const match = record.matches[sequenceFocus.match || 0];
+  const selected = state.result?.candidates.find(c=>c.id===state.selected);
+  const duplex = (name,sense,antisense)=>`<h4>${escapeHTML(name)}</h4><p>Sense 5′ <code>${escapeHTML(sense)}</code> 3′<br>Antisense 5′ <code>${escapeHTML(antisense)}</code> 3′</p>`;
+  $("sequence-detail").innerHTML = `<h3>${escapeHTML(record.name)} ${sequenceEffectBadge(record)}</h3><p class="hint">Original: ${escapeHTML(record.sequence)} · ${escapeHTML(record.role)} · ${escapeHTML(record.direction)}. ${record.partner_inferred?'Complementary partner inferred.':'Both cores supplied and complementarity checked.'} Overhang: ${escapeHTML(record.overhang || 'unknown')}; partner overhang: ${escapeHTML(record.partner_overhang || 'unknown')}.</p>` + (match ? duplex('Located duplex',match.sense,match.antisense) + `<p class="hint">Input orientation: ${escapeHTML(match.input_orientation)}. ${match.candidate?`Current run: ${escapeHTML(match.candidate.id)} · rank ${match.candidate.rank ?? 'excluded'} · preferences ${match.candidate.rating.met}/${match.candidate.rating.evaluated} · excluded by ${escapeHTML(match.candidate.excluded_by?.join(', ') || 'none')}`:'No candidate of this length in the current run; rule rating unavailable.'}</p><div class="table-scroll"><table><thead><tr><th>Model</th><th>Predicted guide</th><th>Predicted passenger</th><th>End difference</th></tr></thead><tbody>${match.thermodynamics.map(a=>`<tr title="${escapeHTML(a.explanation)}"><td>${escapeHTML(a.table_name)}</td><td>${escapeHTML(a.predicted_guide)}</td><td>${a.predicted_guide==='antisense'?'sense':a.predicted_guide==='sense'?'antisense':'undetermined'}</td><td>${a.difference.toFixed(2)} ${escapeHTML(a.unit)}</td></tr>`).join('')}</tbody></table></div><p class="hint">Predictions use paired cores; matched candidates retain the run’s model settings. Other lengths use four-base ends. Different model predictions remain separate. They do not establish activation or measured strand loading.</p>` + (selected ? duplex('Selected new design: '+selected.id, selected.sense_strand_rna,selected.antisense_strand_rna) + `<p>Predicted guide: ${escapeHTML(selected.rating.guide)} · preferences ${selected.rating.met}/${selected.rating.evaluated}. Target overlap: ${Math.max(0,Math.min(match.end,selected.offset+selected.target_site_dna.length)-Math.max(match.offset,selected.offset))} bases. GC: existing ${(100*(match.target.match(/[GC]/g)||[]).length/match.target.length).toFixed(1)}%, selected ${selected.gc_percent}%. Aligned core differences: ${match.target.length===selected.target_site_dna.length?[...match.target].filter((base,i)=>base!==selected.target_site_dna[i]).length:"different lengths"}.</p>` : '<p class="hint">Select a new candidate on the map or in the table to compare its duplex here.</p>') + '<button type="button" id="sequence-nearby">Find overlapping / nearby designs</button>' : `<p>${escapeHTML(record.status)}. ${record.known_location?`Known site: chr${escapeHTML(record.known_location.contig)}:${fmt(record.known_location.start+1)}–${fmt(record.known_location.end)} (${escapeHTML(record.known_location.assembly)}, 1-based). ${escapeHTML(record.known_location.source)}. The current map covers a different region; choose “Design around this reference” to load its promoter.`:'The sequence may lie outside this region or differ from the reference. No location is assumed.'}</p>`);
+  $("sequence-detail").insertAdjacentHTML("beforeend",referenceDuplexPanel(record,match)+strandAnalysisPanel(record,match));
+  $("sequence-nearby")?.addEventListener('click',()=>{
+    const nearby = state.result.candidates.filter(c=>Math.abs(c.offset-match.offset)<=100).sort((a,b)=>Math.abs(a.offset-match.offset)-Math.abs(b.offset-match.offset)).slice(0,10);
+    $("sequence-detail").insertAdjacentHTML('beforeend',`<p>Within 100 bases: ${nearby.map(c=>`<button type="button" data-candidate="${escapeHTML(c.id)}">${escapeHTML(c.id)}</button>`).join(' ') || 'No generated candidates'}</p>`);
+  });
+}
+function previewSequences(records,errors=[]) {
+  sequencePending=records;
+  $("sequence-status").textContent=errors.join(' ');
+  $("sequence-preview").innerHTML=records.length?`<p>${records.length} sequences ready to add:</p><ul>${records.map(r=>`<li>${escapeHTML(r.name)}: <code>${escapeHTML(r.sequence)}</code> · ${escapeHTML(r.role)}</li>`).join('')}</ul><button type="button" id="sequence-confirm">Add these sequences to this run</button>`:'';
+  $("sequence-confirm")?.addEventListener('click', async()=>{
+    try { await saveSequenceRecords([...(state.sequenceRecords||[]).filter(r=>!r.reference),...sequencePending]);sequencePending=[];$("sequence-preview").innerHTML='';$("sequence-input").value=''; }
+    catch(e) { $("sequence-status").textContent=e.message; }
+  });
+}
+async function saveSequenceRecords(records) {
+  const id=state.result.app.run_id;
+  const data=await api(`/api/runs/${id}/sequence-comparisons`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({records})});
+  if (state.result.app.run_id!==id) return;
+  state.sequenceRecords=[...(state.sequenceRecords||[]).filter(r=>r.reference),...data.records];
+  state.result.sequence_comparisons=state.sequenceRecords;renderMap();renderTable();
+  $("sequence-status").textContent='Comparison saved with this run.';
+}
+$("sequence-add").addEventListener('click',async()=>{
+  try {
+    const lines=$("sequence-input").value.trim().split(/\n/).filter(Boolean);
+    const role=$("sequence-role").value, direction=$("sequence-direction").value;
+    const text='name,sequence,role,direction\n'+lines.map((line,i)=>{const fields=line.split(',');return `${fields.length>1?fields[0]:'Sequence '+(i+1)},${fields.at(-1).trim()},${role},${direction}`;}).join('\n');
+    const bytes=new TextEncoder().encode(text);
+    const data=await api('/api/sequences/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:'manual.csv',content:btoa(String.fromCharCode(...bytes))})});
+    previewSequences(data.records,data.errors);
+  } catch(e) {$("sequence-status").textContent=e.message;}
+});
+$("sequence-file").addEventListener('change',async(event)=>{
+  try {
+    const file=event.target.files[0];if(!file)return;
+    if(file.size>2000000)throw new Error('Upload at most 2 MB.');
+    const bytes=new Uint8Array(await file.arrayBuffer());let binary='';for(const byte of bytes)binary+=String.fromCharCode(byte);
+    const data=await api('/api/sequences/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:file.name,content:btoa(binary)})});
+    previewSequences(data.records,data.errors);
+  } catch(e) {$("sequence-status").textContent=e.message;} finally {event.target.value='';}
+});
+$("sequence-template").addEventListener('click',()=>{
+  const link=document.createElement('a');link.href=URL.createObjectURL(new Blob(['name,sequence,role,direction,sense,antisense,source\nExample,CUUAACUCGCCUUCCAAAA,sense,5to3,,,Lab notebook\n'],{type:'text/csv'}));link.download='sarna-import-template.csv';link.click();URL.revokeObjectURL(link.href);
+});
+document.addEventListener('click',async(event)=>{
+  const remove=event.target.closest('[data-sequence-remove]');
+  if(remove){try{await saveSequenceRecords(state.sequenceRecords.filter((r,i)=>!r.reference&&i!==Number(remove.dataset.sequenceRemove)));}catch(e){$("sequence-status").textContent=e.message;}return;}
+  const button=event.target.closest('[data-sequence]');
+  if(button){sequenceFocus={record:Number(button.dataset.sequence),match:Number(button.dataset.match||0)};const match=state.sequenceRecords[sequenceFocus.record].matches[sequenceFocus.match];if(match){setViewport(match.offset-60,Math.max(160,match.end-match.offset+120));renderMap();}else renderSequenceDetail();}
+  const candidateButton=event.target.closest('#sequence-detail [data-candidate]');
+  if(candidateButton) await selectCandidate(candidateButton.dataset.candidate);
+  if(event.target.closest('[data-candidate]'))setTimeout(renderSequenceDetail,0);
+});
+
+$("promoter-map").addEventListener('keydown',event=>{
+  if ((event.key==='Enter'||event.key===' ')&&event.target.hasAttribute('data-sequence')) {event.preventDefault();event.target.dispatchEvent(new MouseEvent('click',{bubbles:true}));}
+});
+
+// A curated locus outside the loaded sequence needs a new promoter run, not local panning.
+async function designAroundSaRNA(name) {
+  if (frozen || state.busy) return;
+  const records=state.gene?.sarna_references || state.sequenceRecords || [];
+  const record=records.find(r=>r.name===name && r.known_location);
+  if (!record) return;
+  try {
+    if (state.result && state.result.gene?.symbol===state.gene?.symbol) restoreDraft(state.result);
+    if (!state.gene?.sarna_references) await lookup();
+    const location=record.known_location;
+    let key=location.anchor_id?`anchor:${location.anchor_id}`:`transcript:${location.nearest_transcript}`;
+    if (![...$("reference").options].some(option=>option.value===key)) await lookup();
+    if (![...$("reference").options].some(option=>option.value===key)) {
+      const available=promoterSaRNACoverage(state.gene,state.customReferences,2000,500)
+        .find(row=>row.contains.some(reference=>reference.name===name)
+          && [...$("reference").options].some(option=>option.value===row.key));
+      if (available) key=available.key;
+    }
+    if (![...$("reference").options].some(option=>option.value===key)) throw new Error('The reference promoter is unavailable in the current annotation. Select a reference near the displayed genomic site.');
+    $("reference").value=key;
+    $("upstream").value=2000;$("downstream").value=500;
+    markDraft();
+    $("sequence-status").textContent=`Loading the promoter around ${name}; your previous run remains saved.`;
+    await design();
+  } catch (failure) {$("sequence-status").textContent=failure.message;error(failure.message);}
+}
+document.addEventListener('click',event=>{
+  const button=event.target.closest('[data-sarna-region]');
+  if (button) designAroundSaRNA(button.dataset.sarnaRegion);
+});
+$("gene-overview-map").addEventListener('keydown',event=>{
+  if ((event.key==='Enter'||event.key===' ')&&event.target.hasAttribute('data-sarna-region')) {event.preventDefault();designAroundSaRNA(event.target.dataset.sarnaRegion);}
+});
+
+for (const id of ['upstream','downstream']) $(id).addEventListener('input',renderKnownSaRNAPromoters);
+$("known-sarna-promoters").addEventListener('click',event=>{
+  const button=event.target.closest('[data-known-promoter]');
+  if (button) chooseOverviewReference(button.dataset.knownPromoter);
+});

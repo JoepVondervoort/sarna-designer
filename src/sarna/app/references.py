@@ -69,6 +69,8 @@ def tss_groups(transcripts: tuple[Transcript, ...]) -> list[dict[str, Any]]:
 
 def gene_overview(gene: Gene, transcripts: tuple[Transcript, ...]) -> dict[str, Any]:
     """Freeze complete reference choices and their source beside every gene result."""
+    from sarna.app.sequence_import import references
+
     mane = [transcript for transcript in transcripts if transcript.is_mane_select]
     ordered = tuple(sorted(transcripts, key=reference_priority))
     return {
@@ -77,6 +79,7 @@ def gene_overview(gene: Gene, transcripts: tuple[Transcript, ...]) -> dict[str, 
         "contig": gene.contig, "start": gene.interval.start, "end": gene.interval.end,
         "transcripts": [transcript_record(transcript) for transcript in ordered],
         "tss_groups": tss_groups(ordered),
+        "sarna_references": references(gene.symbol),
         "default_transcript": mane[0].ensembl_id if len(mane) == 1 else None,
         "anchors": [anchor_record(anchor) for anchor in load_anchors().for_gene(gene.symbol)],
         "source": "Ensembl REST (cached responses reused when present)",

@@ -5,7 +5,7 @@ import io
 import json
 import logging
 import re
-from base64 import b64encode
+from base64 import b64decode, b64encode
 from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from concurrent.futures import ThreadPoolExecutor
@@ -232,6 +232,31 @@ class AppRouter:
                 self.workers.submit(self.service.run, run_id, request)
                 return self._json(202, {"id": run_id})
         parts = path.strip("/").split("/")
+        if method == "POST" and path == "/api/sequences/import":
+            from sarna.app.sequence_import import file_rows, normalize
+            if len(body) > 2_800_000:
+                raise ValueError("Upload at most 2 MB.")
+            payload = json.loads(body)
+            rows = file_rows(payload['filename'], b64decode(payload['content'], validate=True))
+            valid, errors = [], []
+            for number, imported_row in enumerate(rows, 1):
+                try:
+                    valid.append(normalize(imported_row))
+                except ValueError as exc:
+                    errors.append(f"Record {number}: {exc}")
+            return self._json(200, {'records': valid, 'errors': errors})
+        if (method == "POST" and len(parts) == 4 and parts[:2] == ['api', 'runs']
+                and parts[3] == 'sequence-comparisons'):
+            from sarna.app.sequence_import import compare
+            if len(body) > MAX_BODY:
+                raise ValueError("Request is too large.")
+            rows = json.loads(body)['records']
+            if not isinstance(rows, list) or len(rows) > 200:
+                raise ValueError("Keep at most 200 imported records per run.")
+            snapshot = self.service.store.snapshot(parts[2])
+            records = compare(snapshot, rows)
+            self.service.store.save_sequence_comparisons(parts[2], records)
+            return self._json(200, {'records': records})
         if (method == "POST" and len(parts) == 4
                 and parts[:2] == ["api", "runs"] and parts[3] == "shortlist"):
             if len(body) > MAX_BODY:

@@ -16,6 +16,8 @@ const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const elements=new Map(),listeners=new Map();
 const context={console,frozen:null,state:{result:null,checked:new Set()},
  escapeHTML:String,fmt:String,signed:String,error:()=>{},setTimeout,clearTimeout,
+ candidateControlBadges:c=>c.id==='c0'?'<span>SCN1A-10 · Activating</span>':
+   c.id==='c1'?'<span>SCN1A-7 · Downregulating</span>':'',
  renderTable:()=>{},document:{hidden:false,addEventListener:()=>{}},
  $:id=>{if(!elements.has(id))elements.set(id,{innerHTML:'',
  addEventListener:(kind,fn)=>listeners.set(id+':'+kind,fn)});return elements.get(id);}};
@@ -35,6 +37,10 @@ for(const scope of ['genomic','transcript']){
 renderScreenedShortlist();
 `,context);
 assert(context.$('screened-shortlist').innerHTML.includes('Review findings'));
+assert(context.$('screened-shortlist').innerHTML.includes(
+ '<strong>c0</strong><span>SCN1A-10 · Activating</span>'));
+assert(context.$('screened-shortlist').innerHTML.includes(
+ '<strong>c1</strong><span>SCN1A-7 · Downregulating</span>'));
 assert(!context.$('screened-shortlist').innerHTML.includes('No candidates meet'));
 listeners.get('screened-shortlist:click')({target:{id:'screened-use',closest:()=>null}});
 assert.deepEqual([...context.state.checked],Array.from({length:10},(_,i)=>'c'+i));

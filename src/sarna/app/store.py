@@ -45,6 +45,8 @@ class RunStore:
         self.path = path
         with self.connect() as connection:
             connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("CREATE TABLE IF NOT EXISTS sequence_comparisons "
+                               "(run_id TEXT PRIMARY KEY, records TEXT NOT NULL)")
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS runs ("
                 "id TEXT PRIMARY KEY, created TEXT NOT NULL, label TEXT NOT NULL, "
@@ -267,8 +269,25 @@ class RunStore:
         if row is None or row["snapshot"] is None:
             raise KeyError(run_id)
         result: dict[str, Any] = json.loads(zlib.decompress(row["snapshot"]))
+        from sarna.app.sequence_import import compare, references
+        if "promoter" not in result:
+            return result
+        with self.connect() as connection:
+            saved = connection.execute(
+                "SELECT records FROM sequence_comparisons WHERE run_id=?", (run_id,),
+            ).fetchone()
+        result['sequence_comparisons'] = compare(result, references(
+            (result.get('gene') or {}).get('symbol', '')
+        )) + (compare(result, json.loads(saved['records'])) if saved else [])
         return result
 
+    def save_sequence_comparisons(self, run_id: str, records: list[dict[str, Any]]) -> None:
+        """Save researcher comparisons separately from immutable scientific results."""
+        with self.connect() as connection:
+            connection.execute(
+                "INSERT INTO sequence_comparisons VALUES (?,?) ON CONFLICT(run_id) "
+                "DO UPDATE SET records=excluded.records", (run_id, json.dumps(records)),
+            )
 
     def reserve_screening(
         self, run_id: str, scope: str, candidates: list[str], backend: str = "ncbi",
