@@ -134,6 +134,69 @@ function referenceLabel(key) {
   const t = state.gene?.transcripts?.find(t=>t.id===id);
   return t ? `${t.id}${t.mane?" · MANE Select":""}` : id;
 }
+function literatureObservationHTML(record) {
+  const source=record.source || {};
+  const link=/^https:\/\/(doi\.org|pubmed\.ncbi\.nlm\.nih\.gov|patents\.google\.com)\//.test(source.url || '')
+    ? `<a href="${escapeHTML(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHTML(source.title || source.reference_label || record.publication_id)}</a>`
+    : escapeHTML(source.title || source.reference_label || record.publication_id) + '<br><small>Original-source URL unavailable in this release</small>';
+  const text=value=>escapeHTML(value || 'Not reported');
+  return `<tr><td><strong>${text(record.effect_reported)}</strong><br><small>As reported; endpoint and scale require source review</small></td><td>${text(record.cell_type_or_model_reported)}<br>${text(record.species_of_origin)}<br>Associated gene: ${text(record.target_gene_reported)}</td><td>Dose: ${text(record.concentration_or_dose_reported)}<br>Time: ${text(record.time_point_or_duration_reported)}<br>Delivery: ${text(record.transfection_or_delivery_method_reported)}<br>Chemistry: ${text(record.modifications_reported)}</td><td>${link}<br>${text(source.source_type)} · ${text(source.year)}<br>${text(source.patent_number)}<br>${text(record.name_in_reference)} · ${text(record.record_id)}<br>${text(record.comments)}<details><summary>Database placement</summary>${text(record.sequence_genomic_location)} · ${text(record.reference_genome_assembly)}<br>Database TSS-relative interval: ${text(record.sequence_location_relative_to_tss)}<p>Source/database annotation, not independently verified here. The database TSS may differ from your selected reference.</p></details></td></tr>`;
+}
+function renderLiteraturePanel(id,evidence) {
+  const host=$(id);
+  if (!host) return;
+  host._literature=evidence;
+  host.hidden=!evidence;
+  if (!evidence) {host.innerHTML='';return;}
+  host.dataset.page='0';
+  host.innerHTML=`<details class="literature-disclosure"><summary><strong>Previously reported sequences &amp; experimental results</strong> · ${evidence.record_count} observations / ${evidence.sequences.length} sequence pairs</summary><p class="hint">${escapeHTML(evidence.scope)}</p><p class="hint">Sušjan-Leite et al. · <a href="https://zenodo.org/records/21871232" target="_blank" rel="noopener noreferrer">saRNA Database ${escapeHTML(evidence.version)}</a> · CC BY 4.0. Matching uses full reported strands, or paired cores where dTdT overhangs are explicitly annotated. Unmarked terminal bases are retained; a missing match does not establish absence from the gene.</p><label>Search sequence, result, cell model, conditions or source<input type="search" data-literature-search maxlength="300"></label>${id==='literature-result'?'<label><input type="checkbox" data-literature-matched> Only sequences matched in this promoter window</label>':''}<div data-literature-body></div></details>`;
+  renderLiteratureBody(host);
+}
+function renderLiteratureBody(host,focusId=null) {
+  const evidence=host._literature;
+  if (!evidence) return;
+  const query=host.querySelector('[data-literature-search]').value.trim().toLowerCase();
+  const matched=host.querySelector('[data-literature-matched]')?.checked;
+  const groups=evidence.sequences.filter(group=>(!matched || group.matches?.length)
+    && (!query || JSON.stringify(group).toLowerCase().includes(query)));
+  const pageSize=20;
+  let page=Math.min(Number(host.dataset.page || 0),Math.max(0,Math.ceil(groups.length/pageSize)-1));
+  if (focusId) {const index=groups.findIndex(group=>group.sequence_id===focusId);if(index>=0)page=Math.floor(index/pageSize);}
+  host.dataset.page=String(page);
+  host.querySelector('[data-literature-body]').innerHTML=`<p class="hint">${groups.length} matching sequence pairs. Repeated observations are not necessarily independent replication. Missing information is unknown.</p>${groups.slice(page*pageSize,(page+1)*pageSize).map(group=>{
+    const matches=group.matches || [];
+    const names=[...new Set(group.observations.map(record=>record.name_in_reference).filter(Boolean))].slice(0,3).join(' / ');
+    const placement=matches.length?matches.map(match=>`<span>${escapeHTML(match.basis)} at bases ${match.offset+1}–${match.end} · observations ${escapeHTML(match.record_ids.join(', '))}${match.candidate_id?` · <button type="button" data-literature-candidate="${escapeHTML(match.candidate_id)}">${escapeHTML(match.candidate_id)}</button>`:''}</span>`).join('<br>'):group.matches?'No supported reported strand or annotated paired core matched in this promoter window.':'Placement will be checked after design.';
+    return `<details data-literature-sequence="${escapeHTML(group.sequence_id)}" ${group.sequence_id===focusId?'open':''}><summary><strong>${escapeHTML(names || group.sequence_id)}</strong> · ${escapeHTML(group.sequence_id)} · ${group.observations.length} reported observation(s)${matches.length?' · sequence matched':''}</summary><p>Reported sense 5′ → 3′: <code>${escapeHTML(group.sense)}</code><br>Reported antisense 5′ → 3′: <code>${escapeHTML(group.antisense)}</code></p><p>${placement}</p><div class="table-scroll"><table><thead><tr><th>Reported result</th><th>Experimental context</th><th>Conditions</th><th>Original source &amp; notes</th></tr></thead><tbody>${group.observations.map(literatureObservationHTML).join('')}</tbody></table></div></details>`;
+  }).join('') || '<p>No observations match this search. This does not establish that the gene or sequence has never been tested.</p>'}<div class="literature-pages"><button type="button" data-literature-page="-1" ${page===0?'disabled':''}>Previous</button><span>Page ${page+1} / ${Math.max(1,Math.ceil(groups.length/pageSize))}</span><button type="button" data-literature-page="1" ${(page+1)*pageSize>=groups.length?'disabled':''}>Next</button></div>`;
+}
+function openLiteratureSequence(id,hostId='literature-result') {
+  const host=$(hostId);
+  if (!host || host.hidden) return;
+  host.querySelector('.literature-disclosure').open=true;
+  host.querySelector('[data-literature-search]').value='';
+  const check=host.querySelector('[data-literature-matched]');
+  if(check)check.checked=false;
+  renderLiteratureBody(host,id);
+  host.querySelector(`[data-literature-sequence="${CSS.escape(id)}"]`)?.scrollIntoView({block:'center'});
+}
+document.addEventListener('input',event=>{
+  if (!event.target.matches('[data-literature-search],[data-literature-matched]')) return;
+  const host=event.target.closest('.literature-panel');host.dataset.page='0';renderLiteratureBody(host);
+});
+document.addEventListener('keydown',event=>{
+  if((event.key==='Enter' || event.key===' ') && event.target.matches('svg [data-literature-open]')) {
+    event.preventDefault();event.target.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+  }
+});
+document.addEventListener('click',event=>{
+  const page=event.target.closest('[data-literature-page]');
+  if(page){const host=page.closest('.literature-panel');host.dataset.page=String(Number(host.dataset.page)+Number(page.dataset.literaturePage));renderLiteratureBody(host);}
+  const open=event.target.closest('[data-literature-open]');
+  if(open)openLiteratureSequence(open.dataset.literatureOpen,open.closest('#gene-overview')?'literature-design':'literature-result');
+  const candidate=event.target.closest('[data-literature-candidate]');
+  if(candidate)selectCandidate(candidate.dataset.literatureCandidate);
+});
 function populateGene(gene, selected = "") {
   state.gene = gene; $("gene-symbol").value = gene.symbol;
   const transcripts = gene.transcripts || [], anchors = gene.anchors || [];
@@ -193,6 +256,7 @@ function renderKnownSaRNAPromoters() {
   host.innerHTML=`<section class="known-sarna-promoters"><h3>Known saRNAs by promoter region</h3><p class="hint">Shown before design for the current ${fmt(Number($("upstream").value))} bp upstream / ${fmt(Number($("downstream").value))} bp downstream window. Coverage uses recorded genomic sites; exact sequence matching follows when the promoter is loaded.</p><p>${known.map(r=>`<strong>${escapeHTML(r.name)}</strong>: chr${escapeHTML(r.known_location.contig)}:${fmt(r.known_location.start+1)}–${fmt(r.known_location.end)} (1-based)`).join(' · ')}</p><div class="table-scroll"><table><thead><tr><th>Promoter reference</th><th>Known saRNAs in window</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr class="${r.key===$("reference").value?'selected':''}"><td>${escapeHTML(r.label)}</td><td>${r.contains.map(s=>escapeHTML(s.name)).join(', ')}</td><td>${!frozen?`<button type="button" data-known-promoter="${escapeHTML(r.key)}">${r.key===$("reference").value?'Selected':'Choose this promoter'}</button>`:''}</td></tr>`).join('') || '<tr><td colspan="3">No available reference window fully contains these known sites. Increase the window or choose a reference near the recorded sites.</td></tr>'}</tbody></table></div><p class="hint">Curated references are not a complete catalogue of assayed saRNAs. Their presence does not establish promoter activity in your cell.</p></section>`;
 }
 function renderGeneOverview() {
+  renderLiteraturePanel('literature-design', state.gene?.literature);
   renderKnownSaRNAPromoters();
   const gene = state.gene;
   const groups = gene?.tss_groups || [];
@@ -202,8 +266,20 @@ function renderGeneOverview() {
   $("gene-overview-description").textContent = `${gene.symbol} · ${groups.length} annotated start coordinate(s) across ${(gene.transcripts || []).length} transcripts. Click a start-site group to inspect its transcripts below.`;
   const anchors = gene.anchors || [], custom = Object.values(state.customReferences);
   const knownSaRNAs = (gene.sarna_references || state.result?.sequence_comparisons || []).filter(r=>r.reference && r.known_location && r.known_location.contig===gene.contig);
-  const lo = Math.min(gene.start,...anchors.map(a=>a.start),...custom.map(a=>a.tss_position-1),...knownSaRNAs.map(r=>r.known_location.start));
-  const hi = Math.max(gene.end,...anchors.map(a=>a.end),...custom.map(a=>a.tss_position),...knownSaRNAs.map(r=>r.known_location.end));
+  const literatureSites=[];
+  for(const group of gene.literature?.sequences || []) {
+    const seen=new Set();
+    for(const record of group.observations) {
+      const match=/^chr([^:]+):(\d+)-(\d+)$/.exec(record.sequence_genomic_location || '');
+      if(!match || record.reference_genome_assembly!==gene.assembly || match[1]!==gene.contig || seen.has(record.sequence_genomic_location))continue;
+      const start=Number(match[2])-1,end=Number(match[3]);
+      if(start<0 || end<=start)continue;
+      seen.add(record.sequence_genomic_location);
+      literatureSites.push({start,end,group,record});
+    }
+  }
+  const lo = Math.min(gene.start,...anchors.map(a=>a.start),...custom.map(a=>a.tss_position-1),...knownSaRNAs.map(r=>r.known_location.start),...literatureSites.map(site=>site.start));
+  const hi = Math.max(gene.end,...anchors.map(a=>a.end),...custom.map(a=>a.tss_position),...knownSaRNAs.map(r=>r.known_location.end),...literatureSites.map(site=>site.end));
   const span = Math.max(1,hi-lo), left=130, right=966;
   const scale = n=>left+(gene.strand === "-" ? hi-1-n : n-lo)/span*(right-left);
   const tip = value=>`data-tip="${escapeHTML(value)}" tabindex="0" aria-label="${escapeHTML(value)}"`;
@@ -233,8 +309,14 @@ function renderGeneOverview() {
     const help=`${record.name} · chr${location.contig}:${location.start+1}–${location.end} (1-based). ${location.source}`;
     parts.push(`<circle cx="${x}" cy="${y}" r="4" fill="${style.color}" ${tip(help)} data-sarna-region="${escapeHTML(record.name)}"/><text x="${x+7}" y="${y+3}" font-size="10" fill="${style.color}" ${tip(help)} data-sarna-region="${escapeHTML(record.name)}">${escapeHTML(record.name)} · ${style.label}</text>`);
   });
-  $("gene-overview-map").setAttribute('viewBox','0 0 1000 220');
-  parts.push(`<text x="${right}" y="213" text-anchor="end" fill="#61767a" font-size="10">chr${escapeHTML(gene.contig)} · 1-based genomic coordinates · gene strand ${escapeHTML(gene.strand)} · 5′ → 3′</text>`);
+  parts.push('<text x="12" y="215" fill="#61767a" font-size="10">Literature sites</text>');
+  for(const site of literatureSites) {
+    const x1=scale(site.start),x2=scale(site.end-1);
+    const help=`${site.group.sequence_id} · database placement, not independently verified · ${site.record.sequence_genomic_location} · reported result: ${site.record.effect_reported} · ${site.record.cell_type_or_model_reported}. Click to inspect observations and original sources.`;
+    parts.push(`<rect x="${Math.min(x1,x2)}" y="202" width="${Math.max(3,Math.abs(x2-x1))}" height="14" fill="#657b89" ${tip(help)} data-literature-open="${escapeHTML(site.group.sequence_id)}"/>`);
+  }
+  $("gene-overview-map").setAttribute('viewBox','0 0 1000 250');
+  parts.push(`<text x="${right}" y="243" text-anchor="end" fill="#61767a" font-size="10">chr${escapeHTML(gene.contig)} · 1-based genomic coordinates · gene strand ${escapeHTML(gene.strand)} · 5′ → 3′</text>`);
   $("gene-overview-map").innerHTML=parts.join("");
   $("tss-group-list").innerHTML=groups.map(g=>`<details><summary>Annotated +1 · ${escapeHTML(g.contig)}:${fmt(g.tss+1)} <span class="muted">${g.transcript_ids.length} transcript(s)${g.mane?" · MANE Select":""}</span></summary><p class="hint">Shared start coordinate, not a measurement of promoter activity.</p><div>${g.transcript_ids.map(id=>`<button type="button" class="text-button" data-choose-transcript="${escapeHTML(id)}">${escapeHTML(id)}</button>`).join("")}</div></details>`).join("");
 }
@@ -886,6 +968,7 @@ function setSource(source) {
   renderBasket();
 }
 function showResult(result) {
+  renderLiteraturePanel('literature-result', result.literature);
   state.result = result; state.selected = null; state.checked.clear(); state.page = 0;
   state.screeningEvidence = null;
   state.start = 0; state.end = result.promoter.length;
@@ -1456,11 +1539,29 @@ function candidateControlMatches(candidate,result=state.result) {
     return target===dna || target===complement;
   });
 }
+function literatureCandidateBadges(candidate,result) {
+  if (!candidate) return '';
+  const evidence=result?.literature;
+  if (!evidence) return '';
+  literatureCandidateBadges.cache ||= new WeakMap();
+  let index=literatureCandidateBadges.cache.get(evidence);
+  if(!index) {
+    index=new Map();
+    for(const group of evidence.sequences)for(const id of new Set((group.matches || []).map(match=>match.candidate_id).filter(Boolean))) {
+      if(!index.has(id))index.set(id,[]);
+      index.get(id).push(group);
+    }
+    literatureCandidateBadges.cache.set(evidence,index);
+  }
+  const groups=index.get(candidate.id) || [];
+  if (!groups.length) return '';
+  return `<button type="button" class="sequence-effect imported" data-literature-open="${escapeHTML(groups[0].sequence_id)}" title="Reported strand or explicitly annotated paired-core match, allowing reverse complement and U/T normalization. Inspect matching observation IDs; experimental role and chemistry require source review.">Already reported · ${groups.length} sequence record(s) · inspect results</button>`;
+}
 function candidateControlBadges(candidate,result=state.result) {
   return candidateControlMatches(candidate,result).map(record=>{
     const style=sequenceAppearance(record);
     return `<span class="sequence-effect ${style.kind}" title="Exact paired-core sequence identity; overhangs and modifications may differ. ${escapeHTML(style.description)}">Same core as ${escapeHTML(record.name)} · ${style.label}</span>`;
-  }).join(' ');
+  }).join(' ') + literatureCandidateBadges(candidate,result);
 }
 function referenceDuplexPanel(record,match=null) {
   const analysis=match?.strand_analysis || record.strand_analysis;
@@ -1632,8 +1733,22 @@ function renderMap() {
   parts.push('</g></g>');
   const existingTrack=existingSaRNATrack(state.sequenceRecords || [],state.start,state.end,left,width,sequenceFocus);
   parts.push(existingTrack.markup);
-  svg.setAttribute("viewBox", `0 0 ${mapWidth} ${existingTrack.height}`);
-  svg.style.height=`${existingTrack.height}px`;
+  const literatureTop=existingTrack.height+8;
+  if(r.literature) {
+    parts.push(`<text x="${left}" y="${literatureTop+12}" font-size="12" fill="#526b7a">Literature · reported sequence matches · click a marker for results and sources</text>`);
+    let matched=0;
+    for(const group of r.literature.sequences)for(const match of group.matches || []) {
+      if(!inView(match.offset,match.end))continue;
+      matched++;
+      const x1=scale(Math.max(match.offset,state.start)),x2=scale(Math.min(match.end,state.end));
+      const help=`${group.sequence_id} · ${group.observations.length} reported observations. ${match.basis}; experimental role and chemistry require review. Results: ${[...new Set(group.observations.map(record=>record.effect_reported))].slice(0,5).join('; ')}.`;
+      parts.push(`<rect x="${x1}" y="${literatureTop+22}" width="${Math.max(3,x2-x1)}" height="14" rx="2" fill="#657b89" role="button" ${tip(help)} data-literature-open="${escapeHTML(group.sequence_id)}"/>`);
+    }
+    if(!matched)parts.push(`<text x="${left}" y="${literatureTop+34}" font-size="11" fill="#61767a">No reported sequences matched in this view.</text>`);
+  }
+  const mapHeight=r.literature?literatureTop+55:existingTrack.height;
+  svg.setAttribute("viewBox", `0 0 ${mapWidth} ${mapHeight}`);
+  svg.style.height=`${mapHeight}px`;
   svg.innerHTML=parts.join("");
   // Only offer the grab cursor when there is somewhere to pan. At full extent the drag is a
   // no-op, and advertising it is a promise the map does not keep.

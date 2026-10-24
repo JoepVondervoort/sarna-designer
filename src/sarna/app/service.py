@@ -631,6 +631,10 @@ class DesignService:
         payload["sequence_comparisons"] = compare(
             payload, references(gene.symbol) if gene is not None else [],
         )
+        if gene is not None:
+            from sarna.app.literature import locate
+
+            payload["literature"] = locate(payload["app"]["gene_overview"]["literature"], payload)
         payload["reproducibility"] = run_manifest(
             payload, client.observations[observation_start:], software,
         )

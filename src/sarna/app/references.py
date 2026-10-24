@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from sarna.app.literature import for_gene
 from sarna.app.models import CustomReference
 from sarna.genome.anchors import PromoterAnchor, ReferenceKind, load_anchors
 from sarna.genome.coordinates import GenomicInterval
@@ -80,6 +81,7 @@ def gene_overview(gene: Gene, transcripts: tuple[Transcript, ...]) -> dict[str, 
         "transcripts": [transcript_record(transcript) for transcript in ordered],
         "tss_groups": tss_groups(ordered),
         "sarna_references": references(gene.symbol),
+        "literature": for_gene(gene.ensembl_id),
         "default_transcript": mane[0].ensembl_id if len(mane) == 1 else None,
         "anchors": [anchor_record(anchor) for anchor in load_anchors().for_gene(gene.symbol)],
         "source": "Ensembl REST (cached responses reused when present)",

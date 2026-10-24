@@ -820,10 +820,43 @@ class AppRouter:
         ))
         data = write_workbook([
             candidates, run, rule_sheet, source_sheet, shortlist_sheet,
+            *self._literature_sheets(snapshot),
             *screening_sheets(run_id, selected, self._screening_records(run_id)),
         ])
         return 200, ("application/vnd.openxmlformats-officedocument."
                      "spreadsheetml.sheet"), data
+
+    @staticmethod
+    def _literature_sheets(snapshot: dict[str, Any]) -> list[Sheet]:
+        """Export saved observations and their scope without reloading the database."""
+        evidence = snapshot.get("literature")
+        if not evidence:
+            return []
+        fields = (
+            "record_id", "sequence_id", "name_in_reference", "target_gene_reported",
+            "sense_sequence_reported", "antisense_sequence_reported", "effect_reported",
+            "cell_type_or_model_reported", "species_of_origin",
+            "concentration_or_dose_reported", "time_point_or_duration_reported",
+            "transfection_or_delivery_method_reported", "modifications_reported",
+            "sequence_genomic_location", "reference_genome_assembly",
+            "sequence_location_relative_to_tss", "comments",
+        )
+        return [
+            Sheet("Literature observations", (*fields, "source title", "source type",
+                  "source URL", "patent number", "matched candidates"), tuple(
+                (*[record.get(field, "") for field in fields],
+                 record["source"]["title"], record["source"]["source_type"],
+                 record["source"]["url"], record["source"]["patent_number"],
+                 "; ".join(match["candidate_id"] for match in group.get("matches", [])
+                           if match["candidate_id"] and record["record_id"] in match["record_ids"]))
+                for group in evidence["sequences"] for record in group["observations"]
+            )),
+            Sheet("Literature provenance", ("field", "value"), tuple(
+                (key, evidence[key]) for key in (
+                    "version", "archive", "license", "records_sha256", "sources_sha256", "scope",
+                )
+            )),
+        ]
 
     def _order_csv(
         self, run_id: str, snapshot: dict[str, Any], query: dict[str, list[str]]

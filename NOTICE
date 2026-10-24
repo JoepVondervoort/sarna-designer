@@ -8,6 +8,22 @@ Apache License, Version 2.0. See LICENSE.
 Bundled third-party data
 ================================================================================
 
+saRNA Database v1.0.0
+  Files:    src/sarna/app/data/sarna_records_v1.csv
+            src/sarna/app/data/sarna_sources_v1.csv
+  Creators: P. Sušjan-Leite, P. Pečan, A. Godeša, F. R. Caldana, R. Jerala
+            National Institute of Chemistry, Slovenia
+  Source:   https://zenodo.org/records/21871232 (version 1.0.0)
+  Article:  https://doi.org/10.3390/molecules31183249
+  Retrieved: 2026-10-24
+  Licence:  Creative Commons Attribution 4.0 International (CC BY 4.0)
+            https://creativecommons.org/licenses/by/4.0/
+  Changes:  CSV tables redistributed unmodified. Runtime views select human
+            gene-associated observations, group sequence IDs, attach source links
+            and match full reported strands (U/T normalized) or explicitly
+            annotated complementary dTdT cores to the loaded window.
+            No activity thresholds, experimental roles or overhangs are inferred.
+
 The following datasets are redistributed inside this package. Each keeps its own
 licence; the Apache-2.0 licence above covers the software, not these data.
 

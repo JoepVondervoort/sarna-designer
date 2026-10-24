@@ -53,6 +53,7 @@ artifacts = [
     "src/sarna/regulatory/data/*.json",
     "src/sarna/view/*.html",
     "src/sarna/app/static/*",
+    "src/sarna/app/data/*",
     "src/sarna/genome/data/*.toml",
     "src/sarna/regulatory/data/*.toml",
 ]

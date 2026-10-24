@@ -1,5 +1,50 @@
 # Compare existing saRNAs
 
+## Published database observations
+
+Gene lookup now includes **Previously reported sequences & experimental results**, using
+the bundled [saRNA Database v1.0.0](https://zenodo.org/records/21871232) by Sušjan-Leite
+and colleagues (CC BY 4.0). Human observations are selected by Ensembl gene ID rather
+than guessed gene aliases. Search sequences, reported effects, cell models, conditions
+and source citations; observations remain grouped by the database's sequence identity.
+
+The gene overview marks database-reported GRCh38 sites on a separate literature lane.
+These coordinates have not been independently verified, and their database TSS may differ
+from the selected reference. Clicking a marker opens its observations and original sources.
+Sites on other assemblies remain visible in the observation details rather than being
+plotted on GRCh38.
+
+New gene design runs also locate complete reported nucleotide strands in the loaded
+promoter, allowing reverse complements and U/T normalization. A paired core can be matched
+after removing terminal TT only for observations explicitly annotated with a dTdT overhang,
+and only when the remaining sense/antisense cores are exact reverse complements. Unmarked
+terminal bases are never guessed away. Plain strands shorter than 12 or longer than 100
+bases and unsupported sequence notation remain browsable without automatic matching.
+
+Exact matches appear on the promoter map and as **Already reported** candidate badges,
+including excluded candidates. Badges describe sequence evidence, not proof of identical
+experimental treatment or verified targeting role. The observation IDs supporting each
+match are listed. The same sequence can have different results in different contexts.
+
+Effects retain their original values and scale. Numeric values are not automatically
+classified as activation or failure; qualitative values, controls, unknowns and conflicting
+observations remain visible. The release does not consistently provide structured RNA,
+protein, functional-rescue, statistical-support or replication fields, so those interpretations
+require review of the original source. A source without a resolvable identifier is explicitly
+labelled; papers link through DOI/PMID and patents through their publication number.
+
+Wang remains the default. Literature evidence does not change gates, preference points or
+ranking. Users can continue to adjust criteria deliberately through existing controls.
+This first integration does not infer new sequence-pattern recommendations.
+
+Literature observations, release identity and CSV hashes are frozen with new runs and
+preserved in JSON, offline HTML and dedicated Excel sheets. Historical runs are not enriched
+on reopening: make a new run to obtain the bundled database evidence. The database requires
+no runtime download. Absence of a record or match does not establish that a gene or sequence
+has never been tested.
+
+## Researcher imports and existing reference duplexes
+
 After completing a design run, open **Existing saRNAs & reference duplexes** in
 Candidates. Add one sequence per line, or `name,sequence`, select its strand role
 and direction, and preview before adding. Repeat to add more records. Uploads

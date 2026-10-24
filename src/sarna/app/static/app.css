@@ -620,3 +620,12 @@ body.frozen .export-live-only { display: none; }
 .candidate-control-summary { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:7px 0; font-size:12px; }
 .candidate-control-summary .sequence-effect { margin:0; }
 .screened-table td .sequence-effect { display:table; margin-top:6px; }
+.literature-panel { padding: 16px; margin-bottom: 18px; }
+.literature-panel summary { cursor: pointer; padding: 8px 0; }
+.literature-panel code { overflow-wrap: anywhere; }
+.literature-panel table { min-width: 760px; }
+.literature-panel td { vertical-align: top; white-space: normal; min-width: 150px; }
+.literature-panel td:last-child { min-width: 240px; }
+.literature-panel label { display: block; margin: 10px 0; }
+.literature-pages { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+[data-literature-open] { cursor: pointer; }

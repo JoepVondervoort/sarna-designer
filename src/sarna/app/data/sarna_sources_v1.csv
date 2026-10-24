@@ -1,0 +1,115 @@
+﻿publication_id,source_type,reference_label,title,doi,pmid,patent_number,related_patent_numbers,year,access_note,record_count
+PUB000001,journal_article,B.Wang2016,Small-Activating RNA Can Change Nucleosome Positioning in Human Fibroblasts,10.1177/1087057116637562,26993320,,,2016,,13
+PUB000002,journal_article,Li2006,Small dsRNAs induce transcriptional activation in human cells,10.1073/pnas.0607015103,17085592,,,2006,,17
+PUB000003,journal_article,Huang2010,RNAa is conserved in mammalian cells,10.1371/journal.pone.0008848,20107511,,,2010,,43
+PUB000004,journal_article,Yoon2016,Targeted Delivery of CEBP alpha saRNA by Pancreatic Ductal Adenocarcinoma-specific RNA Aptamers Inhibits Tumor Growth In Vivo,10.1038/mt.2016.60,26983359,,,2016,,2
+PUB000005,journal_article,C.Li2016,Enhancing DPYSL3 gene expression via a promoter-targeted small activating RNA approach suppresses cancer cell motility and metastasis,10.18632/oncotarget.8290,27014974,,,2016,,143
+PUB000006,journal_article,Wang2016,Targeted p53 activation by saRNA suppresses human bladder cancer cells growth and metastasis,10.1186/s13046-016-0329-8,27012825,,,2016,,7
+PUB000007,journal_article,Portnoy2016,saRNA-guided Ago2 targets the RITA complex to promoters to stimulate transcription,10.1038/cr.2016.22,26902284,,,2016,,14
+PUB000008,journal_article,Huan2016,C/EBP-alpha Short-Activating RNA Suppresses Metastasis of Hepatocellular Carcinoma through Inhibiting EGFR-beta Catenin Signaling Mediated EMT,10.1371/journal.pone.0153117,27050434,,,2016,,4
+PUB000009,journal_article,Ge2016,Overexpression of p53 activated by small activating RNA suppresses the growth of human prostate cancer cells,10.2147/OTT.S96710,26811691,,,2016,,4
+PUB000010,journal_article,C.Wang2015,Small activating RNA induces myogenic differentiation of rat adipose-derived stem cells by upregulating MyoD,10.1590/S1677-5538.IBJU.2014.0400,26401871,,,2015,,1
+PUB000011,journal_article,Huang2015,siRNA induces gelsolin gene transcription activation in human esophageal cancer cell,10.1038/srep07901,25600697,,,2015,,14
+PUB000012,journal_article,Zhao2015,Reactivation of HIC-1 gene by saRNA inhibits clonogenicity and invasiveness in breast cancer cells,10.3892/ol.2014.2633,25435951,,,2015,,4
+PUB000013,journal_article,Zhang2014,The role of antisense long noncoding RNA in small RNA-triggered gene activation,10.1261/rna.043968.113,25344398,,,2014,,56
+PUB000014,journal_article,Fan2014,Optimizations of siRNA design for the activation of gene transcription by targeting the TATA-box motif,10.1371/journal.pone.0108253,25250958,,,2014,,122
+PUB000015,journal_article,Dong2014,Small double-stranded RNA mediates the anti-cancer effects of p21WAF1/ClP1 transcriptional activation in a human glioma cell line,10.3349/ymj.2014.55.2.324,24532499,,,2014,,2
+PUB000016,journal_article,Zhao2014,Small activating RNA restores the activity of the tumor suppressor HIC-1 on breast cancer,10.1371/journal.pone.0086486,24489730,,,2014,,10
+PUB000017,journal_article,Ren2013,Targeted induction of endogenous NKX3-1 by small activating RNA inhibits prostate tumor growth,10.1002/pros.22709,23836514,,,2013,,21
+PUB000018,journal_article,Meng2016,Small activating RNA binds to the genomic target site in a seed-region-dependent manner,10.1093/nar/gkw076,26873922,,,2016,,76
+PUB000019,journal_article,Hu2012,Promoter-associated small double-stranded RNA interacts with heterogeneous nuclear ribonucleoprotein A2/B1 to induce transcriptional activation,10.1042/BJ20120256,23035981,,,2012,,8
+PUB000020,journal_article,Kosaka2012,Targeted p21WAF1/CIP1 activation by RNAa inhibits hepatocellular carcinoma cells,10.1089/nat.2012.0354,22909100,,,2012,,8
+PUB000021,journal_article,Wang2012,Induction of NANOG expression by targeting promoter sequence with small activating RNA antagonizes retinoic acid-induced differentiation,10.1042/BJ20111491,22339500,,,2012,,19
+PUB000022,journal_article,R.F.Place2012,Formulation of Small Activating RNA Into Lipidoid Nanoparticles Inhibits Xenograft Prostate Tumor Growth by Inducing p21 Expression,10.1038/mtna.2012.5,23343884,,,2012,,41
+PUB000023,journal_article,Qin2012,RNAa-mediated overexpression of WT1 induces apoptosis in HepG2 cells,10.1186/1477-7819-10-11,22244202,,,2012,,2
+PUB000024,journal_article,Place2012,Defining features and exploring chemical modifications to manipulate RNAa activity,10.2174/138920110791591463,20662764,,,2012,,23
+PUB000025,journal_article,Harris2016,Design and Experimental Validation of Small Activating RNAs Targeting an Exogenous Promoter in Human Cells,10.1021/acssynbio.6b00125,28033709,,,2016,,31
+PUB000026,journal_article,J.Wang2015,Inducing gene expression by targeting promoter sequences using small activating RNAs,10.14440/jbm.2015.39,25839046,,,2015,,3
+PUB000027,journal_article,Wang2015,Identification of small activating RNAs that enhance endogenous OCT4 expression in human mesenchymal stem cells,10.1089/scd.2014.0290,25232932,,,2015,,28
+PUB000028,journal_article,Chu2010,Involvement of argonaute proteins in gene silencing and activation by RNAs complementary to a non-coding transcript at the progesterone receptor promoter,10.1093/nar/gkq648,20675357,,,2010,,24
+PUB000029,journal_article,Morris2008,Bidirectional transcription directs both transcriptional gene activation and suppression in human cells,10.1371/journal.pgen.1000258,19008947,,,2008,,2
+PUB000030,journal_article,Chen2008,Antitumor effect of dsRNA-induced p21(WAF1/CIP1) gene activation in human bladder cancer cells,10.1158/1535-7163.MCT-07-2312,18347154,,,2008,,4
+PUB000031,journal_article,Fimiani2016,RNA activation of haploinsufficient Foxg1 gene in murine neocortex,10.1038/srep39311,27995975,,,2016,,12
+PUB000032,journal_article,H-L.Wu2016,Demystifying the mechanistic and functional aspects of p21 gene activation with double-stranded RNAs in human cancer cells,10.1186/s13046-016-0423-y,27639690,,,2016,,14
+PUB000033,journal_article,Li2016,Small activating ribonucleic acid reverses tyrosine kinase inhibitor resistance in epidermal growth factor receptor-mutant lung cancer by increasing the expression of phosphatase and tensin homolog,10.1111/1759-7714.12356,27385992,,,2016,,7
+PUB000034,journal_article,Matsui2013,Promoter RNA links transcriptional regulation of inflammatory pathway genes,10.1093/nar/gkt777,23999091,,,2013,,21
+PUB000035,journal_article,Matsui2011,Activation of LDL receptor expression by small RNAs complementary to a noncoding transcript that overlaps the LDLR promoter,10.1016/j.chembiol.2010.10.009,21168770,,,2011,,40
+PUB000036,journal_article,Wang2017,Specific up-regulation of p21 by a small active RNA sequence suppresses human colorectal cancer growth,10.18632/oncotarget.15918,28445988,,,2017,,7
+PUB000037,journal_article,Janowsky2007,Activating gene expression in mammalian cells with promoter targeted duplex RNAs,10.1038/nchembio860,17259978,,,2007,"Paper is behind a paywall, so supplementary figures could not be reached",68
+PUB000038,journal_article,Yue2014,Transcriptional regulation by small RNAs at sequences downstream from 3 gene termini,10.1038/nchembio.400,20581822,,,2014,,55
+PUB000039,journal_article,Yang2008,Up-regulation of p21WAF1/Cip1 by saRNA induces G1-phase arrest and apoptosis in T24 human bladder cancer cells,10.1016/j.canlet.2008.02.014,18358601,,,2008,,4
+PUB000040,journal_article,Wang2011,Prognostic value and function of KLF4 in prostate cancer: RNAa and vector-mediated overexpression identify KLF4 as an inhibitor of tumor cell growth and migration,10.1158/0008-5472.CAN-10-2414,21159640,,,2011,,11
+PUB000041,journal_article,Voutila2012,Gene Expression Profile Changes After Short-activating RNA-mediated Induction of Endogenous Pluripotency Factors in Human Mesenchymal Stem Cells,10.1038/mtna.2012.20,23344177,,,2012,,37
+PUB000042,journal_article,Sakurai2014,Upregulation of RECK gene expression by small double-stranded RNA targeting the promoter region,10.1038/cgt.2014.12,,,,2014,,46
+PUB000043,journal_article,Yang2014,Induction of TRPV5 expression by small activating RNA targeting gene promoter as a novel approach to regulate cellular calcium transportation,10.1016/j.lfs.2014.08.007,25139832,,,2014,,26
+PUB000044,journal_article,Yang2015,Upregulation of PAWR by small activating RNAs induces cell apoptosis in human prostate cancer cells,10.3892/or.2016.4582,26797252,,,2015,,10
+PUB000045,journal_article,Lopez2016,RNA Activation of the Vascular Endothelial Growth Factor Gene (VEGF) Promoter by Double-Stranded RNA and Hypoxia: Role of Noncoding VEGF Promoter Transcripts,10.1128/MCB.01096-15,26976645,,,2016,,7
+PUB000046,journal_article,Xie2017,"Up-regulation of VEZT by small activating RNA inhibits the proliferation, invasion and migration of gastric cancer cells",10.1016/j.bbrc.2016.11.071,27856244,,,2017,,17
+PUB000047,journal_article,Xia2016,Small activating RNA upregulates NIS expression: promising potential for hepatocellular carcinoma endoradiotherapy,10.1038/cgt.2016.36,27608773,,,2016,,44
+PUB000048,journal_article,Watts2010,Effect of chemical modifications on modulation of gene expression by duplex antigene RNAs that are complementary to non-coding transcripts at gene promoters,10.1093/nar/gkq258,20403811,,,2010,,348
+PUB000049,journal_article,Wang2014,saRNA guided iNOS up-regulation improves erectile function of diabetic rats,10.1016/j.juro.2013.03.043,23523927,,,2014,,6
+PUB000050,journal_article,Schwartz2008,Antisense transcripts are targets for activating small RNAs,10.1038/nsmb.1444,18604220,,,2008,,16
+PUB000051,journal_article,Mao2008,Up-regulation of E-cadherin by small activating RNA inhibits cell invasion and migration in 5637 human bladder cancer cells,10.1016/j.bbrc.2008.08.059,18725195,,,2008,,4
+PUB000052,journal_article,Yang2016,Promoter-targeted double-stranded small RNAs activate PAWR gene expression in human cancer cells,10.1016/j.biocel.2013.03.022,23583662,,,2016,,30
+PUB000053,journal_article,Pan2013,Inactivation of tumor suppressor gene HIC1 in gastric cancer is reversed via small activating RNAs,10.1016/j.gene.2013.05.034,23769968,,,2013,,14
+PUB000054,journal_article,Guo2016,Upregulation of VEGF by small activating RNA and its implications in preeclampsia,10.1016/j.placenta.2016.08.088,27697220,,,2016,,4
+PUB000055,journal_article,Wu2016,Transcriptional regulation of E-cadherin by small activating RNA: A new double-stranded RNA,10.3892/ijo.2016.3643,27498620,,,2016,,76
+PUB000056,patent,US9297008B2,Small Activating Rna Molecules And Methods Of Use,,,US9297008B2,,,,48
+PUB000057,patent,EP3594348A1,C/ebp Alpha Short Activating Rna Compositions And Methods Of Use,,,EP3594348A1,,,,192
+PUB000058,patent,WO2011112607A3,Nkx3-1 Sarna And Klf4 Sarna And Uses Thereof,,,WO2011112607A3,,,,46
+PUB000059,patent,US20130210146A1,Methods And Compositions For Generation Of Induced Pluripotent Stem Cells By RNAa,,,US20130210146A1,,,,45
+PUB000060,patent,WO2011053994A1,Modulation of LDL Receptor gene expression,,,WO2011053994A1,,,,163
+PUB000061,journal_article,Pineda2017,Altered expression and modulation of the two-pore-domain (K2P) mechanogated potassium channel TREK-1 in overactive human detrusor,10.1152/ajprenal.00638.2016,28827195,,,2017,,3
+PUB000062,journal_article,Voutila2017,"Development and Mechanism of Small Activating RNA Targeting CEBPA, a Novel Therapeutic in Clinical Trials for Liver Cancer",10.1016/j.ymthe.2017.07.018,28882451,,,2017,,39
+PUB000063,journal_article,Lin2017,Enhanced wild-type p53 expression by small activating RNA dsP53-285 induces cell cycle arrest and apoptosis in pheochromocytoma cell line PC12,10.3892/or.2017.5993,29048679,,,2017,,1
+PUB000064,journal_article,Dai2018,Up-regulation of E-cadherin by saRNA inhibits the migration and invasion of renal carcinoma cells,,31949665,,,2018,,4
+PUB000065,journal_article,Chen2018,Small RNA-induced INTS6 gene up-regulation suppresses castration-resistant prostate cancer cells by regulating β-catenin signaling,10.1080/15384101.2018.1475825,29895194,,,2018,,23
+PUB000066,journal_article,Zhou2018,Activation of KLF4 expression by small activating RNA promotes migration and invasion in colorectal epithelial cells,10.1002/cbin.10926,29274293,,,2018,,32
+PUB000067,journal_article,Zeng2018,SaRNA‑mediated activation of TRPV5 reduces renal calcium oxalate deposition in rat via decreasing urinary calcium excretion,10.1007/s00240-017-1004-z,28776078,,,2018,,6
+PUB000068,journal_article,Kang2018,Small activating RNA induced expression of VHL gene in renal cell carcinoma,10.1016/j.biocel.2018.02.002,29425832,,,2018,,15
+PUB000069,journal_article,Li2018,Upregulation of E‑cadherin expression mediated by a novel dsRNA suppresses the growth and metastasis of bladder cancer cells by inhibiting β-catenin/TCF target genes,10.3892/ijo.2018.4346,29620261,,,2018,,6
+PUB000070,journal_article,Choi2018,RNA activating-double stranded RNA targeting flt-1 promoter inhibits endothelial cell proliferation through soluble FLT-1 upregulation,10.1371/journal.pone.0193590,29509796,,,2018,,3
+PUB000071,journal_article,Wang2018,The reactivation of P53 by saRNA affects the biological behavior in vitro in gastric cancer cells,,31938445,,,2018,,4
+PUB000072,journal_article,Xu2018,RNAa and Vector-Mediated Overexpression of DIRAS1 Suppresses Tumor Growth and Migration in Renal Cell Carcinoma,10.1016/j.omtn.2018.07.019,30161023,,,2018,,10
+PUB000073,journal_article,Zhang2018,S-phase kinase-associated protein 2 impairs the inhibitory effects of miR-1236-3p on bladder tumors,,29636863,,,2018,,10
+PUB000074,journal_article,Zhang2020,Targeted p21 activation by a new double stranded RNA suppresses human prostate cancer cells growth and metastasis,,32913496,,,2020,,10
+PUB000075,journal_article,Wang2020,An autoregulatory feedback loop of miR-21/VMP1 is responsible for the abnormal expression of miR-21 in colorectal cancer cells,10.1038/s41419-020-03265-4,33318473,,,2020,,6
+PUB000076,journal_article,Ma2020,Mechanism of Notch1-saRNA-1480 reversing androgen sensitivity in human metastatic castration-resistant prostate cancer,10.3892/ijmm.2020.4597,32626918,,,2020,,4
+PUB000077,journal_article,Yan2020,PELP1 Suppression Inhibits Gastric Cancer Through Downregulation of c-Src-PI3K-ERK Pathway,10.3389/fonc.2019.01423,32117782,,,2020,,4
+PUB000078,journal_article,Yang2021,Antitumor Activity of Small Activating RNAs Induced PAWR Gene Activation in Human Bladder Cancer Cells,10.7150/ijms.60399,34220332,,,2021,,8
+PUB000079,journal_article,Jia2022,Small activating RNA-activated NIS gene promotes 131I uptake and inhibits thyroid cancer via AMPK/mTOR pathway,10.1016/j.prp.2021.153735,34922208,,,2022,,4
+PUB000080,journal_article,Zhang2022,Small activating RNA activation of ATOH1 promotes regeneration of human inner ear hair cells,10.1080/21655979.2022.2045835,35246011,,,2022,,32
+PUB000081,journal_article,Wang2022,Preparation of a miR‑155‑activating nucleic acid nanoflower to study the molecular mechanism of miR‑155 in inflammation,10.1186/s10020-022-00495-4,35715753,,,2022,,21
+PUB000082,journal_article,Xiong2022,Small Activating RNA Modulation of the G Protein-Coupled Receptor for Cancer Treatment,10.1002/advs.202200562,35712764,,,2022,,20
+PUB000083,journal_article,Zhu2022,SPOP Inhibition of Endometrial Carcinoma and Its Clinicopathological Relationship,10.1155/2022/5721630,35465183,,,2022,Retracted article. Associated records are retained for provenance and historical completeness.,2
+PUB000084,journal_article,Park2022,Targeted Induction of Endogenous VDUP1 by Small Activating RNA Inhibits the Growth of Lung Cancer Cells,10.3390/ijms23147743,35887091,,,2022,,9
+PUB000085,journal_article,M.Zhang2023,saKLK1-374 is more difficult to induce KLK1 expression in normal prostate cell lines than that in prostate cancer cell lines: Rethinking the universality of RNA activation,10.1016/j.bbrc.2022.12.075,36610381,,,2023,,102
+PUB000086,journal_article,Su2023,PPFIA1-targeting miR-181a mimic and saRNA overcome imatinib resistance in BCR-ABL1-independent chronic myeloid leukemia by suppressing leukemia stem cell regeneration,10.1016/j.omtn.2023.04.026,37234746,,,2023,,4
+PUB000087,journal_article,Zhang2023,p21CIP/WAF1 saRNA inhibits proliferative vitreoretinopathy in a rabbit model,10.1371/journal.pone.0282063,36821623,,,2023,,5
+PUB000088,patent,CN102657878A,Application of small activating RNA (Ribonucleic Acid) of INTS6 (Homo Sapiens Integrator Complex Subunit 6) gene to preparation of prostate cancer fighting medicament,,,CN102657878A,,,,4
+PUB000089,patent,US2015126578A1,Modified Small Activating RNA Molecules and Methods of Use,,,US2015126578A1,,,,65
+PUB000090,patent,WO2016145608A1,"SMALL ACTIVATING RNA, MANUFACTURING METHOD AND APPLICATION THEREOF / Small-activating RNA, preparation method and applications thereof",,,WO2016145608A1,CN106032532A,,,34
+PUB000091,patent,CN106244588A,"SaRNA for activating expression of RUNX3 in lung cancer cell, and application of saRNA",,,CN106244588A,,,,16
+PUB000092,patent,AU2019252204A1,Novel small activating RNA,,,AU2019252204A1,,,,469
+PUB000093,patent,US2022064642A1,OLIGOMERIC NUCLEIC ACID MOLECULE AND APPLICATION THEREOF,,,US2022064642A1,,,,157
+PUB000094,patent,US2022096350A1,OLIGONUCLEOTIDES FOR SKIN CARE,,,US2022096350A1,,,,124
+PUB000095,patent,US2022096516A1,OLIGONUCLEOTIDE MOLECULE AND APPLICATION THEREOF IN TUMOR THERAPY,,,US2022096516A1,,,,236
+PUB000096,patent,WO2022200810A1,TMEM173 SARNA COMPOSITIONS AND METHODS OF USE,,,WO2022200810A1,,,,57
+PUB000097,patent,WO2022215066A1,SMALL ACTIVATING RNA INCREASING SHANK EXPRESSION AND METHOD OF TREATING INTELLECTUAL DISABILITIES AND ASSOCIATED COMORBIDITIES ASSOCIATED WITH SHANK HAPLOINSUFFICIENCY,,,WO2022215066A1,,,,10
+PUB000098,patent,WO2023138502A1,OLIGONUCLEOTIDE MODULATORS ACTIVATING UTROPHIN EXPRESSION,,,WO2023138502A1,,,,398
+PUB000099,patent,WO2020221309A1,"OLIGOMERIC NUCLEIC ACID MOLECULE, AND APPLICATION THEREOF IN ACUTE INTERMITTENT PORPHYRIA TREATMENT",,,WO2020221309A1,,,,69
+PUB000100,patent,US2023212565A1,NUCLEIC ACID MOLECULE FOR TREATING THROMBOCYTOPENIA AND APPLICATION THEREOF,,,US2023212565A1,,,,442
+PUB000101,patent,WO2023170435A1,IL10 SARNA COMPOSITIONS AND METHODS OF USE,,,WO2023170435A1,,,,4
+PUB000102,journal_article,Weng-Lin2024,Targeting undruggable phosphatase overcomes trastuzumab resistance by inhibiting multi-oncogenic kinases,10.1016/j.drup.2024.101118,39094301,,,2024,,6
+PUB000103,journal_article,Su2024,Small RNA activation of CDH13 expression overcome BCR-ABL1-independent imatinib-resistance and their signaling pathway studies in chronic myeloid leukemia,10.1038/s41419-024-07006-9,39179585,,,2024,,4
+PUB000104,journal_article,Place2008,MicroRNA-373 induces expression of genes with complementary promoter sequences,10.1073/pnas.0707594105,18227514,,,2008,,5
+PUB000105,journal_article,Li-Ge2017,Effects of miR-1236-3p and miR-370-5p on activation of p21 in various tumors and its inhibition on the growth of lung cancer cells,10.1177/1010428317710824,28631573,,,2017,,2
+PUB000106,journal_article,Cai-Bai2024,Gene-Activating Framework Nucleic Acid-Targeted Upregulating Sirtuin-1 to Modulate Osteoimmune Microenvironment for Diabetic Osteoporosis Therapeutics,10.1021/acsnano.4c08727,39689347,,,2024,,1
+PUB000107,journal_article,Yang2024,Cardiomyocyte βII spectrin plays a critical role in maintaining cardiac function by regulating mitochondrial respiratory function,10.1093/cvr/cvae116,38832923,,,2024,,2
+PUB000108,journal_article,wing-Nam Chiu2026,Working So Hard: Double-Stranded RNAs That Can Perform Both Gene Activation and Gene Silencing,10.1002/cbic.70434,42376686,,,2026,,1
+PUB000109,preprint,Yang-Guan2026,Ginsenoside Ro ameliorates diabetic cardiomyopathy by maintaining ciliary homeostasis and enhancing antioxidation,10.64898/2026.06.22.733885,,,,2026,,1
+PUB000110,journal_article,Xu2026,Engineered biomimetic exosomes for small activating RNA delivery: Low-density lipoprotein receptor–related protein-1 targeted blood-brain barrier penetration and dual therapy in intracerebral Hemorrhage,10.1016/j.jconrel.2026.115112,42314989,,,2026,,1
+PUB000111,journal_article,Huang2026,Overexpression of HIF-1α via small activating RNA enhances CAR-T cell function in hypoxic microenvironments,10.1016/j.phrs.2026.108235,42105819,,,2026,,5
+PUB000112,journal_article,Yu2026,Biomimetic proteolipid vesicles delivering small activating RNA to activate the macrophage immunotherapy for the treatment of lung cancer,10.1186/s12951-026-04392-4,41992232,,,2026,,12
+PUB000113,journal_article,Cao-Liu2023,Biomimetic Macrophage Membrane-Camouflaged Nanoparticles Induce Ferroptosis by Promoting Mitochondrial Damage in Glioblastoma,10.1021/acsnano.3c07555,37991252,,,2023,,3
+PUB000114,patent,WO2020208361A1,SIRT1-saRNA compositions and methods of use,,,WO2020208361A1,EP3953473A1; US20220211740A1,2020,,27

@@ -77,6 +77,14 @@ independent, prospectively defined evaluation across relevant targets and cell c
 Read the [empirical evaluation](docs/scientific/empirical-validation.md) for methods and label
 caveats, and the [evidence guide](docs/scientific/evidence-guide.md) for interpretation.
 
+Gene lookup also provides experimental precedent from the bundled
+[saRNA Database v1.0.0](https://zenodo.org/records/21871232): reported sequences,
+effects, cell models, conditions and original-source links. Literature sites and exact
+sequence matches are marked for inspection, including candidates excluded by the current
+criteria. These heterogeneous observations remain separate from the benchmark and ranking;
+numeric effects are preserved on their original scale. See the
+[comparison guide](docs/development/existing-sarna-comparison.md).
+
 ## Engineering decisions that protect scientific interpretation
 
 - **Coordinate correctness:** explicit sequence, TSS and genomic coordinate conventions,
