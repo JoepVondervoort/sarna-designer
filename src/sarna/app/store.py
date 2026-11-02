@@ -114,7 +114,12 @@ class RunStore:
                 "revision INTEGER NOT NULL, updated TEXT, entries TEXT NOT NULL, "
                 "FOREIGN KEY(run_id) REFERENCES runs(id))"
             )
-            connection.execute("PRAGMA user_version=7")
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS investigations (run_id TEXT PRIMARY KEY, "
+                "revision INTEGER NOT NULL, updated TEXT, entries TEXT NOT NULL, "
+                "FOREIGN KEY(run_id) REFERENCES runs(id))"
+            )
+            connection.execute("PRAGMA user_version=8")
             connection.execute(
                 "UPDATE screenings SET status='waiting', stage='Report retrieval needs retry' "
                 "WHERE status='error' AND request_id IS NOT NULL AND result IS NOT NULL "
@@ -600,4 +605,33 @@ class RunStore:
                 (updated, json.dumps(entries), run_id, revision),
             ).rowcount
         return ({"revision": revision + 1, "updated": updated, "entries": entries}
+                if changed else None)
+
+    def investigation(self, run_id: str) -> dict[str, Any]:
+        """Read saved map annotations and motif selection independently of the design."""
+        self.status(run_id)
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT revision,updated,entries FROM investigations WHERE run_id=?", (run_id,),
+            ).fetchone()
+        return ({"revision": row["revision"], "updated": row["updated"],
+                 **json.loads(row["entries"])} if row else
+                {"revision": 0, "updated": None, "annotations": [], "motifs": None})
+
+    def save_investigation(
+        self, run_id: str, revision: int, entries: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Prevent concurrent browser edits from overwriting map investigations."""
+        self.status(run_id)
+        updated = datetime.now(UTC).isoformat()
+        with self.connect() as connection:
+            connection.execute(
+                "INSERT OR IGNORE INTO investigations VALUES(?,0,NULL,'{}')", (run_id,),
+            )
+            changed = connection.execute(
+                "UPDATE investigations SET revision=revision+1,updated=?,entries=? "
+                "WHERE run_id=? AND revision=?",
+                (updated, json.dumps(entries), run_id, revision),
+            ).rowcount
+        return ({"revision": revision + 1, "updated": updated, **entries}
                 if changed else None)

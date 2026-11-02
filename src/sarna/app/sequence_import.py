@@ -10,8 +10,11 @@ from xml.etree import ElementTree as ET
 from zipfile import BadZipFile, ZipFile
 
 from sarna import __version__
-from sarna.design.pipeline import DEFAULT_COMPARISON_TABLES
+from sarna.design.config import DesignConfig
+from sarna.design.pipeline import DEFAULT_COMPARISON_TABLES, evaluate_sequence_only
 from sarna.reproducibility import json_hash, software_identity
+from sarna.rules.resolved import ResolvedRule
+from sarna.rules.rule import Rule
 from sarna.sequence.nucleic import NucleicSequence
 from sarna.thermo.guide import compare_asymmetry
 from sarna.validation.dataset import load_chapter4_dataset, load_chapter4_locations
@@ -332,10 +335,27 @@ def compare(
                     ).assessments
                 ],
             )
+        sequence_only = []
+        if not matches and snapshot.get("configuration", {}).get("rules"):
+            config = DesignConfig(tuple(
+                ResolvedRule(Rule.model_validate(rule), overrides={
+                    parameter["name"]: parameter["value"] for parameter in rule["parameters"]
+                }) for rule in snapshot["configuration"]["rules"]
+            ))
+            if len(dna) == config.target_length:
+                for target in targets:
+                    assessment = evaluate_sequence_only(NucleicSequence.parse(target), config)
+                    sequence_only.append({
+                        "orientation": "same" if target == dna else "reverse complement",
+                        "scope": "Sequence only; no promoter placement, flanks, TSS "
+                                 "or CpG context.",
+                        "assessment": assessment.to_dict(),
+                    })
         output.append(
             row
             | {
                 "matches": matches,
+                "sequence_only": sequence_only,
                 "strand_analysis": analysis,
                 "analysis_provenance": provenance,
                 "status": (

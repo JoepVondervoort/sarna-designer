@@ -133,7 +133,8 @@ def check_expression(browser: Browser) -> None:
     order_before = browser.evaluate(
         "[...document.getElementById('reference').options].map(o=>o.value).join('|')")
     # The panel is filled by a request the lookup deliberately does not wait for.
-    browser.wait("!document.getElementById('expression').hidden")
+    browser.wait("state.expression && !state.expression.loading && "
+                 "!document.getElementById('expression').hidden")
     panel = browser.evaluate(r"""(()=>{
       const sidebar=document.getElementById('expression');
       const overview=document.getElementById('expression-overview');
@@ -352,6 +353,8 @@ def check_cell_evidence(browser: Browser) -> None:
         "no cell line has any available evidence axis, so the control carries nothing at all"
     )
 
+    browser.evaluate("document.getElementById('experimental-context').open=true")
+
     def panel(value: str) -> str:
         browser.evaluate(
             "(()=>{const box=document.getElementById('cell-line');"
@@ -503,10 +506,10 @@ def check_workspace_tabs(browser: Browser) -> None:
       window.tabsRun=state.result.app.run_id;
       document.getElementById('tab-export').click();
     })()""")
-    assert browser.evaluate("document.querySelectorAll('#export-selection tbody tr').length") == (
+    assert browser.evaluate("document.querySelectorAll('#export-preview tbody tr').length") == (
         browser.evaluate("state.checked.size"))
     browser.evaluate("state.checked=new Set();renderTable();setWorkspaceTab('export')")
-    assert browser.evaluate("document.querySelectorAll('#export-selection tbody tr').length") == 0
+    assert browser.evaluate("document.querySelectorAll('#export-preview tbody tr').length") == 0
     assert "No candidates selected" in str(browser.evaluate(
         "document.getElementById('export-selection').textContent"))
     browser.evaluate("state.checked=new Set(tabsChosen);renderTable()")
@@ -563,14 +566,15 @@ def check_workspace_tabs(browser: Browser) -> None:
 
 def check_local_reference_setup(browser: Browser, screenshots: Path | None) -> None:
     """Exercise setup, pause/resume and ready states without downloading a genome in Chromium."""
-    browser.evaluate("setWorkspaceTab('screening')")
+    browser.evaluate("setWorkspaceTab('screening');document.getElementById('local-reference-panel').open=true")
     browser.wait("REFERENCE_STATUS !== null")
     assert browser.evaluate("document.getElementById('screening-backend').value") == "local"
     assert browser.evaluate("document.getElementById('screen-transcript').disabled") is True
     plan = str(browser.evaluate("document.getElementById('reference-download-plan').innerText"))
     assert "972.9 MB" in plan and "132.9 MB" in plan and "56.9 MB" in plan, plan
     if screenshots:
-        browser.evaluate("document.getElementById('local-reference-panel').scrollIntoView()")
+        browser.evaluate("document.getElementById('local-reference-panel').open=false;"
+                         "document.getElementById('workspace-context').scrollIntoView()")
         browser.screenshot(screenshots / "local-reference-first-install.png")
     browser.evaluate("""(() => {
       window.referenceTestOriginal = {fetch:window.fetch, status:REFERENCE_STATUS, scroll:scrollY};
@@ -607,6 +611,21 @@ def check_local_reference_setup(browser: Browser, screenshots: Path | None) -> N
       loadReferenceStatus();
     })()""")
     browser.wait("REFERENCE_STATUS.ready && !document.getElementById('screen-transcript').disabled")
+    primary_calls = browser.evaluate("""(async()=>{
+      const originalStart=startScreening, originalChecked=state.checked;
+      const captured=[];
+      try {
+        state.checked=new Set([state.result.candidates.find(c=>c.rank!==null).id]);
+        renderTable();
+        startScreening=async(scope,mode)=>{captured.push({scope,mode,ids:[...state.checked]});};
+        document.getElementById('screen-selection').click();
+        await new Promise(resolve=>setTimeout(resolve,0));
+        return captured;
+      } finally {startScreening=originalStart;state.checked=originalChecked;renderTable();}
+    })()""")
+    assert isinstance(primary_calls, list) and len(primary_calls) == 2
+    assert {call['scope'] for call in primary_calls} == {'transcript', 'genomic'}
+    assert all(call['mode'] == 'selection' and len(call['ids']) == 1 for call in primary_calls)
     calls = cast(list[dict[str, Any]], browser.evaluate("referenceTestCalls"))
     actions = [call for call in calls if call["method"] == "POST"]
     assert len(actions) == 3 and all(call["type"] == "application/json" for call in actions)
@@ -1218,9 +1237,266 @@ def check_sequence_comparisons(browser: Browser) -> None:
           'stable zoom panels and stale-window recovery')
 
 
+def check_calm_hierarchy(browser: Browser, screenshots: Path | None) -> None:
+    """Primary tasks stay visible while scientific detail is opened explicitly."""
+    initial = browser.evaluate("""(()=>({
+      listVisible:document.getElementById('candidate-inspection').tagName==='SECTION',
+      rows:document.querySelectorAll('#candidate-rows tr[data-candidate]').length,
+      inspectorHidden:document.getElementById('candidate-detail').hidden,
+      openTools:document.querySelectorAll('.map-tool-panel[open]').length,
+      exportTasks:document.querySelectorAll('.primary-downloads > article').length,
+      moreClosed:!document.getElementById('more-downloads').open,
+      historyInHeader:document.querySelector('.top-actions #open-history')!==null,
+      quickOpenInHeader:document.querySelector('.top-actions #saved-runs')!==null,
+      optionsClosed:!document.getElementById('screening-options').open
+    }))()""")
+    assert isinstance(initial, dict) and initial['listVisible'] is True
+    assert 0 < initial['rows'] <= 10
+    assert initial['inspectorHidden'] is True and initial['openTools'] == 0
+    assert initial['exportTasks'] == 3 and initial['moreClosed'] is True
+    assert initial['historyInHeader'] is True and initial['quickOpenInHeader'] is False
+    assert initial['optionsClosed'] is True
+    if screenshots:
+        browser.evaluate("document.getElementById('workspace-context').scrollIntoView()")
+        browser.screenshot(screenshots / 'calm-candidates.png')
+    browser.evaluate("document.querySelector('[data-map-tool=map-search-tool]').click();"
+                     "document.getElementById('map-query').value='AAAA';"
+                     "document.querySelector('[data-map-tool=map-distance-tool]').click()")
+    assert browser.evaluate("document.getElementById('map-search-tool').open") is False
+    assert browser.evaluate("document.getElementById('map-query').value") == 'AAAA'
+    assert browser.evaluate("document.getElementById('map-distance-tool').open") is True
+    browser.evaluate("document.querySelector('[data-map-tool=map-distance-tool]').click();"
+                     "document.querySelector('#candidate-rows tr[data-candidate]').click()")
+    browser.wait("!document.getElementById('candidate-detail').hidden")
+    assert browser.evaluate(
+        "document.querySelectorAll('#candidate-detail [data-inspector-section][open]').length") == 0
+    browser.evaluate("document.querySelector('[data-inspector-section=models]').open=true")
+    browser.wait("state.inspectorExpanded?.has('models')")
+    browser.evaluate("renderScreeningStatus()")
+    assert browser.evaluate(
+        "document.querySelector('[data-inspector-section=models]').open") is True
+    browser.evaluate("document.querySelector('.inspector-close').click();setWorkspaceTab('export')")
+    assert browser.evaluate("document.getElementById('candidate-detail').hidden") is True
+    assert browser.evaluate("!document.getElementById('export-preview').open") is True
+    browser.evaluate("document.getElementById('export-preview').open=true;"
+                     "document.querySelector('#export-preview [data-export-inspect]').focus();"
+                     "renderExportSelection()")
+    assert browser.evaluate("document.getElementById('export-preview').open") is True
+    assert browser.evaluate("document.activeElement.hasAttribute('data-export-inspect')") is True
+    # A selected format can be inspected without opening the rest of the format catalogue.
+    if screenshots:
+        browser.evaluate("document.getElementById('export-preview').open=false;"
+                         "document.getElementById('workspace-context').scrollIntoView()")
+        browser.screenshot(screenshots / 'calm-export.png')
+    browser.evaluate("setWorkspaceTab('candidates');state.inspectorExpanded=new Set()")
+    print('    calm hierarchy: primary tasks, optional evidence, retained details and focus')
+
+
+def check_map_investigation(browser: Browser) -> None:
+    """Exercise exact search, durable regions, distances and standalone exports in Chromium."""
+    browser.evaluate("""(() => {
+      document.getElementById('map-query').value=state.result.promoter.sequence.slice(0,8);
+      document.getElementById('map-query-orientation').value='same';
+      document.getElementById('map-find').click();
+    })()""")
+    browser.wait("!document.getElementById('map-find').disabled")
+    assert browser.evaluate("state.mapSearchMatches[0].start") == 0
+    browser.evaluate("""(() => {
+      document.querySelector('[data-search-hit="0"]').click();
+      document.getElementById('annotation-name').value='Published <region>';
+      document.getElementById('annotation-source').value='Source & citation';
+      document.getElementById('annotation-save').click();
+    })()""")
+    browser.wait("!state.investigationSaving && state.investigation.annotations.length===1")
+    assert browser.evaluate(
+        "document.querySelectorAll('#promoter-map [data-annotation]').length") == 1
+    assert browser.evaluate("state.investigation.annotations[0].end") == 8
+    browser.evaluate("""(() => {
+      const region=state.distanceFeatures.findIndex(f=>f.name==='Region: Published <region>');
+      document.getElementById('distance-from').value=String(region);
+      document.getElementById('distance-to').value=String(region);
+      document.getElementById('distance-measure').click();
+    })()""")
+    assert '8 bp overlap' in str(browser.evaluate(
+        "document.getElementById('distance-result').textContent"))
+    browser.evaluate("document.getElementById('motifs-none').click()")
+    browser.wait("!state.investigationSaving && state.investigation.motifs?.length===0")
+    assert browser.evaluate("document.querySelectorAll('[data-motif-mark]').length") == 0
+    report = browser.evaluate("""(async()=>{
+      const run=await api(`/api/runs/${state.result.app.run_id}/export.json`);
+      const candidates=investigationSelection(run);
+      const alignment=alignmentDocument(run,candidates), summary=summaryDocument(run,candidates);
+      const dom=new DOMParser().parseFromString(summary,'text/html');
+      return {saved:run.workspace.investigation.annotations[0].name,
+        safe:alignment.includes('Published &lt;region&gt;'),
+        summary:dom.querySelector('h1').textContent,
+        sections:[...dom.querySelectorAll('h2')].map(n=>n.textContent),
+        start:alignedFeatures(run,candidates).find(a=>a.kind==='Researcher region').start};
+    })()""")
+    assert isinstance(report, dict) and report['safe'] is True
+    assert report['saved'] == 'Published <region>' and report['start'] == 0
+    assert report['summary'] == 'saRNA design summary'
+    assert 'Off-target evidence' in report['sections']
+    # Exercise the actual download handlers, capturing their Blobs before browser download.
+    downloads = browser.evaluate("""(async()=>{
+      const originalDownload=downloadBlob, captured=[];
+      downloadBlob=(blob,name)=>captured.push({blob,name});
+      try { for(const kind of ['summary','alignment','regions']) await exportInvestigation(kind);
+        return await Promise.all(captured.map(async item=>({
+          name:item.name,text:await item.blob.text()})));
+      } finally {downloadBlob=originalDownload;}
+    })()""")
+    assert isinstance(downloads, list) and len(downloads) == 3
+    assert 'promoter_start_0based' in downloads[2]['text']
+    coordinate_checks = browser.evaluate("""(()=>{
+      const html=regionTable({promoter:{start:100,end:120,strand:'-',contig:'7'}},[
+        {name:'minus',kind:'test',start:4,end:12,source:'',orientation:'same'}]);
+      const originalPromoter=state.result.promoter;
+      try {
+        state.result.promoter={...originalPromoter,tss_start:-10,length:40};
+        const tss=investigationFeatures().find(f=>f.point);
+        return {minus:html.includes('7:108\u2013116'),tss:tss.start};
+      } finally {state.result.promoter=originalPromoter;}
+    })()""")
+    assert coordinate_checks == {'minus': True, 'tss': 10}
+    # Remove fixtures so the broader workbench assertions retain their original context.
+    browser.evaluate("document.querySelector('[data-region-remove]').click()")
+    browser.wait("!state.investigationSaving && state.investigation.annotations.length===0")
+    browser.evaluate("document.getElementById('motifs-all').click()")
+    browser.wait("!state.investigationSaving && state.investigation.motifs===null")
+    browser.evaluate("state.mapSearchMatches=[];renderMap()")
+    print('    map investigation: search, saved regions, motif selection, distance and exports')
+
+
+def check_visual_layout(browser: Browser, screenshots: Path | None) -> None:
+    """Measure focused forms and map text across all workspaces and responsive widths."""
+    source = Path(__file__).with_name('visual_layout_audit.js').read_text(encoding='utf-8')
+    reports: list[dict[str, Any]] = []
+    # A long imported name checks reference-pill truncation, not only short curated labels.
+    browser.evaluate("""(async()=>{
+      await saveSequenceRecords([...(state.sequenceRecords || []).filter(r=>!r.reference),{
+        name:('Long researcher reference '+ 'W'.repeat(140)).slice(0,150),
+        sequence:state.result.promoter.sequence.slice(0,19),role:'target',direction:'5to3',
+        source:'Isolated visual audit fixture'
+      }]);
+    })()""")
+    scenes = {
+        'design': (
+            "setWorkspaceTab('design');document.querySelectorAll('#workspace-design det"
+            "ails').forEach(d=>d.open=false)"
+        ),
+        'design-details': (
+            "setWorkspaceTab('design');document.querySelectorAll('#workspace-design det"
+            "ails').forEach(d=>d.open=true)"
+        ),
+        'rules': (
+            "setWorkspaceTab('design');document.getElementById('advanced-design-setting"
+            "s').open=true;document.getElementById('open-settings').click();document.qu"
+            "erySelectorAll('#settings-dialog details').forEach(d=>d.open=true)"
+        ),
+        'candidates': (
+            "setWorkspaceTab('candidates');document.getElementById('candidate-detail')."
+            "hidden=true;document.getElementById('candidate-layout').classList.remove('"
+            "inspecting');document.querySelectorAll('#workspace-candidates details').fo"
+            'rEach(d=>d.open=false);sequenceFocus=null;renderMap()'
+        ),
+        'find-sequence': (
+            "setWorkspaceTab('candidates');document.querySelectorAll('.map-tool-panel')"
+            ".forEach(d=>d.open=false);document.getElementById('map-search-tool').open="
+            "true;document.getElementById('map-query').focus();renderMap()"
+        ),
+        'regions': (
+            "document.querySelectorAll('.map-tool-panel').forEach(d=>d.open=false);docu"
+            "ment.getElementById('map-regions-tool').open=true;document.getElementById("
+            "'annotation-name').value='Region with a long descriptive name';renderMap()"
+        ),
+        'motifs': (
+            "document.querySelectorAll('.map-tool-panel').forEach(d=>d.open=false);docu"
+            "ment.getElementById('map-motifs-tool').open=true;renderMap()"
+        ),
+        'distance': (
+            "document.querySelectorAll('.map-tool-panel').forEach(d=>d.open=false);docu"
+            "ment.getElementById('map-distance-tool').open=true;renderMap()"
+        ),
+        'references-literature': (
+            "document.querySelectorAll('.map-tool-panel').forEach(d=>d.open=false);docu"
+            "ment.getElementById('sequence-tool').open=true;document.getElementById('se"
+            "quence-import-controls').open=true;document.getElementById('reported-evide"
+            "nce').open=true;renderMap()"
+        ),
+        'inspector': (
+            "document.querySelectorAll('.map-tool-panel').forEach(d=>d.open=false);docu"
+            "ment.getElementById('reported-evidence').open=false;selectCandidate(state."
+            'result.candidates.find(c=>c.rank===1).id)'
+        ),
+        'screening': (
+            "setWorkspaceTab('screening');document.querySelectorAll('#workspace-screeni"
+            "ng details').forEach(d=>d.open=false)"
+        ),
+        'screening-details': (
+            "setWorkspaceTab('screening');document.querySelectorAll('#workspace-screeni"
+            "ng details').forEach(d=>d.open=true)"
+        ),
+        'export': (
+            "setWorkspaceTab('export');document.querySelectorAll('#workspace-export det"
+            "ails').forEach(d=>d.open=false)"
+        ),
+        'export-details': (
+            "setWorkspaceTab('export');document.querySelectorAll('#workspace-export det"
+            "ails').forEach(d=>d.open=true)"
+        ),
+        'history': (
+            "document.getElementById('open-history').click();document.querySelectorAll("
+            "'#history-dialog details').forEach(d=>d.open=true)"
+        ),
+    }
+    for width in (1920, 1440, 1280, 1024, 768, 390, 320):
+        browser.call('Emulation.setDeviceMetricsOverride', width=width, height=1000,
+                     deviceScaleFactor=1, mobile=width < 600)
+        browser.call('Input.dispatchKeyEvent', type='keyDown', key='Tab', code='Tab')
+        browser.call('Input.dispatchKeyEvent', type='keyUp', key='Tab', code='Tab')
+        for name, setup in scenes.items():
+            browser.evaluate("document.querySelectorAll('dialog[open]').forEach(d=>d.close())")
+            browser.evaluate(setup)
+            browser.evaluate("new Promise(resolve=>requestAnimationFrame("
+                             "()=>requestAnimationFrame(resolve)))")
+            if name == 'inspector':
+                browser.wait("!document.getElementById('candidate-detail').hidden")
+                browser.evaluate("document.querySelectorAll('#candidate-detail details')"
+                                 ".forEach(d=>d.open=true)")
+            browser.evaluate("if(!document.querySelector('dialog[open]')) "
+                             "document.querySelector('.workspace-panel:not([hidden])')"
+                             ".scrollIntoView({block:'start'})")
+            report = cast(dict[str, Any], browser.evaluate(source))
+            reports.append({'width': width, 'scene': name, **report})
+            if screenshots and (report['violations'] or (width in (1440, 390)
+                               and name in ('design', 'find-sequence', 'inspector', 'export'))):
+                if name == 'find-sequence':
+                    browser.evaluate("document.getElementById('map-query').scrollIntoView("
+                                     "{block:'center'});document.getElementById('map-query')"
+                                     ".focus({preventScroll:true})")
+                else:
+                    browser.evaluate("(document.querySelector('dialog[open]') || "
+                                     "document.querySelector('.workspace-panel:not([hidden])'))"
+                                     ".scrollIntoView({block:'start'})")
+                browser.screenshot(screenshots / f'layout-{width}-{name}.png')
+        browser.evaluate("document.querySelectorAll('dialog[open]').forEach(d=>d.close())")
+    if screenshots:
+        (screenshots / 'layout-audit.json').write_text(
+            json.dumps(reports, indent=2), encoding='utf-8',
+        )
+    failures = [r for r in reports if r['violations']]
+    assert not failures, json.dumps(failures, indent=2)
+    browser.call('Emulation.setDeviceMetricsOverride', width=1440, height=1100,
+                 deviceScaleFactor=1, mobile=False)
+    print(f"    visual geometry: {len(reports)} scenes, "
+          f"{sum(r['labelChecks'] for r in reports)} label/focus checks, "
+          f"{sum(r['svgLabels'] for r in reports)} SVG text checks")
+
+
 def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
              screenshots: Path | None, online: bool = False,
-             blast: StubBlast | None = None) -> None:
+             blast: StubBlast | None = None, visual_audit: bool = False) -> None:
     """Check draft preservation, rerun, explanations, persistence and an offline archive."""
     browser.call("Runtime.enable")
     browser.call("Emulation.setDeviceMetricsOverride", width=1440, height=1100,
@@ -1230,6 +1506,15 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     assert browser.evaluate("document.getElementById('gene-symbol').value") == ""
     forced = browser.evaluate("state.catalogue.data_access.offline_forced")
     assert browser.evaluate("document.getElementById('offline').disabled") is forced
+    assert browser.evaluate("!document.getElementById('experimental-context').open") is True
+    assert browser.evaluate("!document.getElementById('advanced-design-settings').open") is True
+    if screenshots:
+        browser.screenshot(screenshots / 'calm-design.png')
+    browser.evaluate("setWorkspaceTab('screening')")
+    assert browser.evaluate(
+        "getComputedStyle(document.getElementById('reference-compact')).display!=='none'") is True
+    assert browser.evaluate("!document.getElementById('local-reference-panel').open") is True
+    browser.evaluate("setWorkspaceTab('design')")
     check_cell_evidence(browser)
     if gene:
         browser.evaluate(f"document.getElementById('gene-symbol').value={json.dumps(gene)};"
@@ -1251,16 +1536,25 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     else:
         browser.evaluate("document.querySelector('[data-source=sequence]').click();"
                          f"document.getElementById('dna-sequence').value={json.dumps(DNA)}")
-    browser.evaluate("document.getElementById('motifs').checked=false;"
-                     "document.getElementById('regulatory').checked=false;"
+    scan_motifs = str(visual_audit).lower()
+    load_regulatory = str(visual_audit and bool(gene)).lower()
+    browser.evaluate(f"document.getElementById('motifs').checked={scan_motifs};"
+                     f"document.getElementById('regulatory').checked={load_regulatory};"
                      "document.getElementById('design-form').requestSubmit()")
     browser.wait("state.result && !state.busy && !document.getElementById('design-ready').hidden")
     assert browser.evaluate("state.workspaceTab") == 'design'
     browser.evaluate("document.querySelector('#design-ready [data-workspace-link]').click()")
     browser.wait("!document.getElementById('result-area').hidden")
     browser.wait("document.querySelector('#candidate-detail .sequence-box')!==null")
+    if visual_audit:
+        check_visual_layout(browser, screenshots)
+        assert not browser.exceptions, browser.exceptions
+        print(f"PASS: visual audit for {gene or 'pasted DNA'}")
+        return
+    check_calm_hierarchy(browser, screenshots)
     check_workspace_tabs(browser)
     check_sequence_comparisons(browser)
+    check_map_investigation(browser)
     before = browser.evaluate("document.getElementById('metric-passing').textContent")
     original = str(browser.evaluate("state.result.app.run_id"))
     browser.evaluate("setWorkspaceTab('design');document.getElementById('advanced-design-settings').open=true;document.getElementById('open-settings').click()")
@@ -1588,6 +1882,7 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
     # explanation -- the measured value, the citation, the rationale -- sat one invisible
     # click away. The affordance is now drawn, and this asserts the content behind it.
     opened = str(browser.evaluate("""(()=>{
+      document.querySelector('[data-inspector-section=rules]').open=true;
       // Scoped to the rule list: the guide-prediction disclosure shares the .verdict class.
       const rows=[...document.querySelectorAll('#candidate-detail .rule-verdicts .verdict')];
       if (!rows.length) return "NO RULE ROWS";
@@ -1834,7 +2129,17 @@ def exercise(browser: Browser, url: str, directory: Path, gene: str | None,
         archive.write_bytes(response.read())
     browser.call("Page.navigate", url=archive.as_uri())
     browser.wait("document.body?.classList.contains('frozen') && "
+                 "state.investigationRunId===state.result?.app.run_id && "
                  "document.querySelector('#candidate-detail .sequence-box')!==null")
+    browser.evaluate("document.getElementById('map-query').value=state.result.promoter.sequence.slice(0,8);"
+                     "document.getElementById('map-query-orientation').value='same';"
+                     "document.getElementById('map-find').click()")
+    browser.wait("!document.getElementById('map-find').disabled")
+    assert browser.evaluate("state.mapSearchMatches.length>0") is True, browser.evaluate(
+        "({status:document.getElementById('map-search-status').textContent,"
+        "ready:state.investigationRunId===state.result?.app.run_id})")
+    assert browser.evaluate("document.getElementById('annotation-save').disabled") is True
+    browser.evaluate("state.mapSearchMatches=[];renderMap()")
     browser.evaluate("state.screeningPlotLimit=15;renderOffTarget('genomic')")
     assert browser.evaluate("document.querySelectorAll('[data-comparison-plot]').length") == 3
     assert browser.evaluate("document.querySelectorAll('.criteria-heatmap tbody tr').length") == (
@@ -1917,6 +2222,8 @@ def main() -> None:
     parser.add_argument("--online", action="store_true",
                         help="Use a new empty cache and test explicit online recovery for --gene")
     parser.add_argument("--screenshots", type=Path)
+    parser.add_argument("--visual-audit", action="store_true",
+                        help="Measure focused labels, text collisions and overflow at seven widths")
     args = parser.parse_args()
     if args.online and (not args.gene or settings.is_offline()):
         parser.error("--online requires --gene and SARNA_OFFLINE unset/off")
@@ -1990,7 +2297,7 @@ def main() -> None:
                 pages = json.load(response)
             browser = Browser(pages[0]["webSocketDebuggerUrl"])
             exercise(browser, f"http://127.0.0.1:{server.server_port}/", directory,
-                     args.gene, args.screenshots, args.online, blast)
+                     args.gene, args.screenshots, args.online, blast, args.visual_audit)
         finally:
             if browser:
                 browser.socket.close()

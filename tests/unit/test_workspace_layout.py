@@ -70,3 +70,27 @@ def test_promoter_is_directly_visible_and_exports_have_format_descriptions() -> 
     for identifier in ["export-xlsx", "export-analysis", "export-order", "export-csv",
                        "export-json", "export-html", "export-plot"]:
         assert layout.panels[identifier] == "workspace-export"
+
+
+def test_task_hierarchy_keeps_decisions_visible_and_secondary_tools_optional() -> None:
+    source = Path("src/sarna/app/static/index.html").read_text()
+    layout = WorkspaceLayout(source)
+    assert '<section id="candidate-inspection"' in source
+    assert "hidden" in layout.nodes['candidate-detail']
+    for identifier in ['sequence-tool', 'map-search-tool', 'map-regions-tool',
+                       'map-motifs-tool', 'map-distance-tool', 'screening-options',
+                       'more-downloads', 'shortlist-card', 'ranking-details']:
+        assert 'open' not in layout.nodes[identifier]
+    # Setup is usable before results exist; the main screening action is outside options.
+    assert 'offtarget-card' not in layout.parents['reference-compact']
+    assert 'screening-options' not in layout.parents['screen-selection']
+    assert 'screening-options' in layout.parents['screening-backend']
+    # The selection is declared before downloads, with a separate optional preview below.
+    assert source.index('id="export-selection"') < source.index('id="export-workspace"')
+    assert source.index('id="export-workspace"') < source.index('id="export-preview-host"')
+    for identifier in ['export-order', 'export-summary', 'export-xlsx']:
+        assert 'more-downloads' not in layout.parents[identifier]
+    for identifier in ['export-json', 'export-html', 'export-regions', 'export-csv']:
+        assert 'more-downloads' in layout.parents[identifier]
+    assert 'history-dialog' in layout.parents['saved-runs']
+    assert 'ranking-details' not in layout.parents['unevaluated-note']

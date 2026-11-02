@@ -98,7 +98,7 @@ only visible to a freshly opened window.
 **Route A: from the file you were sent (recommended for colleagues).**
 
 **A. Save the attachment.** You need a **file**, called
-`sarna_designer-0.2.0-py3-none-any.whl`, in your **Downloads** folder.
+`sarna_designer-0.3.2-py3-none-any.whl`, in your **Downloads** folder.
 
 - If you received the `.whl` directly, use your email's **Save attachment** option. Do not
   open or extract it.
@@ -113,7 +113,7 @@ name extensions**). If the actual wheel file was renamed to `.whl.zip`, remove o
 **B. Check that the file is there.** Paste this whole line and press Enter:
 
 ```powershell
-Test-Path -LiteralPath "$env:USERPROFILE\Downloads\sarna_designer-0.2.0-py3-none-any.whl" -PathType Leaf
+Test-Path -LiteralPath "$env:USERPROFILE\Downloads\sarna_designer-0.3.2-py3-none-any.whl" -PathType Leaf
 ```
 
 It must print **`True`**. If it prints `False`, stop: the file is missing, is a folder, or has
@@ -125,7 +125,7 @@ only that filename in both commands with the one you received.
 and press Enter:
 
 ```powershell
-uv tool install --python 3.11 "$env:USERPROFILE\Downloads\sarna_designer-0.2.0-py3-none-any.whl[app]"
+uv tool install --python 3.11 "$env:USERPROFILE\Downloads\sarna_designer-0.3.2-py3-none-any.whl[app]"
 ```
 
 `$env:USERPROFILE` automatically uses your Windows user folder; leave it exactly as written.
@@ -204,7 +204,7 @@ Then close Terminal and open it again.
 From the file you were sent (Route A, and you can drag the `.whl` into Terminal to paste its path):
 
 ```bash
-uv tool install --python 3.11 "/Users/you/Downloads/sarna_designer-0.2.0-py3-none-any.whl[app]"
+uv tool install --python 3.11 "/Users/you/Downloads/sarna_designer-0.3.2-py3-none-any.whl[app]"
 ```
 
 Or from GitHub (Route B), if you have access to the repository and `git` installed:
@@ -352,13 +352,13 @@ Instead, ask for the new `.whl` file, save it to **Downloads** as before, and ru
 install command again with the new filename:
 
 ```
-uv tool install --python 3.11 "$env:USERPROFILE\Downloads\sarna_designer-0.2.0-py3-none-any.whl[app]"
+uv tool install --python 3.11 "$env:USERPROFILE\Downloads\sarna_designer-0.3.2-py3-none-any.whl[app]"
 ```
 
 On macOS or Linux, use the path to where you saved it:
 
 ```
-uv tool install --python 3.11 "/Users/you/Downloads/sarna_designer-0.2.0-py3-none-any.whl[app]"
+uv tool install --python 3.11 "/Users/you/Downloads/sarna_designer-0.3.2-py3-none-any.whl[app]"
 ```
 
 Installing over the top replaces the old version. You do not need to uninstall first.
@@ -469,7 +469,7 @@ in place of `[app]`:
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 # then, from a new terminal:
-uv tool install --python 3.11 "/path/to/sarna_designer-0.2.0-py3-none-any.whl[app,genomics]"
+uv tool install --python 3.11 "/path/to/sarna_designer-0.3.2-py3-none-any.whl[app,genomics]"
 ```
 
 **3. Point it at the tracks**, then start it:
@@ -503,13 +503,13 @@ From a checkout, on any platform:
 If that says `No module named build`, install it once with
 `.venv/bin/python -m pip install build`.
 
-It prints `Successfully built sarna_designer-0.2.0-py3-none-any.whl` and puts that one
+It prints `Successfully built sarna_designer-0.3.2-py3-none-any.whl` and puts that one
 file in the **`dist/`** folder next to the code.
 
 ### 2. Find it
 
 ```
-<your checkout>/dist/sarna_designer-0.2.0-py3-none-any.whl
+<your checkout>/dist/sarna_designer-0.3.2-py3-none-any.whl
 ```
 
 **If you develop inside WSL**, that path is inside Linux and Outlook cannot see it. Two ways
@@ -534,7 +534,7 @@ send a folder named `.whl`, and do not extract the wheel before packaging it.
 From the project folder, you can create the outer ZIP with:
 
 ```bash
-.venv/bin/python -m zipfile -c dist/sarna-designer-install.zip dist/sarna_designer-0.2.0-py3-none-any.whl
+.venv/bin/python -m zipfile -c dist/sarna-designer-install.zip dist/sarna_designer-0.3.2-py3-none-any.whl
 ```
 
 Open `dist` in Explorer as described above and attach `sarna-designer-install.zip`.
@@ -587,7 +587,7 @@ You do not need WSL for any of it.
 
 ```bash
 # From a wheel you were sent (works without Git or repository access):
-uv tool install --python 3.11 "./sarna_designer-0.2.0-py3-none-any.whl[app]"
+uv tool install --python 3.11 "./sarna_designer-0.3.2-py3-none-any.whl[app]"
 # Or, with access to the private repository and git on PATH:
 uv tool install --python 3.11 "sarna-designer[app] @ git+https://github.com/JoepVondervoort/sarna-designer"
 

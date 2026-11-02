@@ -85,6 +85,12 @@ criteria. These heterogeneous observations remain separate from the benchmark an
 numeric effects are preserved on their original scale. See the
 [comparison guide](docs/development/existing-sarna-comparison.md).
 
+Sequence investigation also supports exact promoter searches, cited map annotations,
+multiple motif display choices, interval measurements, a coordinate-aligned promoter export
+and a print-ready design summary. See the
+[sequence investigation guide](docs/development/sequence-investigation.md) and
+[interface guide](docs/development/interface-hierarchy.md).
+
 ## Engineering decisions that protect scientific interpretation
 
 - **Coordinate correctness:** explicit sequence, TSS and genomic coordinate conventions,
@@ -121,7 +127,7 @@ For a GitHub installation, update with `uv tool upgrade sarna-designer`.
 The [installation guide](INSTALL.md) covers Windows, macOS, Linux and troubleshooting.
 The [Windows GitHub walkthrough](docs/install-via-github.md) includes first-time authentication
 and local off-target reference setup. Colleagues without repository access can install a supplied
-`sarna_designer-0.2.0-py3-none-any.whl`; see the [wheel instructions](INSTALL.md#step-3-install-sarna-designer).
+`sarna_designer-0.3.2-py3-none-any.whl`; see the [wheel instructions](INSTALL.md#step-3-install-sarna-designer).
 
 Local screening references are a separate, explicit download of about 1.2 GB and need at least
 20 GiB of free disk space during preparation. Screening covers full-length 19-base cores with

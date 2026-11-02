@@ -111,6 +111,11 @@ function ruleEvidence(def) {
   return `<p class="hint"><b>Evidence scope:</b> ${escapeHTML(def.evidence_note || "Evidence scope was not recorded in this saved run; a citation alone does not validate activation prediction.")}</p><p class="hint">${escapeHTML(def.application_note || "Gate, preference and off describe software behavior, not evidence strength.")}</p>`;
 }
 function renderEditor() {
+  const active=document.activeElement;
+  const activeRule=active?.closest("[data-rule]")?.dataset.rule;
+  const activeField=active?.dataset.param?`[data-param="${CSS.escape(active.dataset.param)}"]`:active?.matches("[data-role]")?"[data-role]":active?.matches("[data-option]")?"[data-option]":null;
+  const expandedParameters=new Set([...$("rule-editor").querySelectorAll("details[data-rule-params][open]")].map(d=>d.dataset.ruleParams));
+  const expandedRules=new Set([...$("rule-editor").querySelectorAll("details[data-rule-help][open]")].map(d=>d.dataset.ruleHelp));
   $("rule-editor").innerHTML = state.catalogue.rules.map(def => {
     const d = state.draft[def.id], b = state.base[def.id];
     const params = def.parameters.map(p => {
@@ -120,8 +125,10 @@ function renderEditor() {
       return `<div><label>${escapeHTML(p.description)} ${p.unit?`(${escapeHTML(p.unit)})`:""}</label>${field}<p class="preset-baseline">Preset: ${escapeHTML(b.values[p.name])} · supported range ${escapeHTML(p.choices?.join(", ") || `${p.minimum} to ${p.maximum}`)}</p></div>`;
     }).join("");
     const selected = def.options.find(o => o.id === d.option);
-    return `<article class="rule-editor-item" data-rule="${def.id}"><div class="rule-editor-heading"><div><h3>${escapeHTML(def.name)}</h3><p class="source">${provenanceText(def.provenance)} <span>${escapeHTML(evidenceLabel(def))}</span></p><p class="preset-baseline">Role in selected preset: ${roleName[b.role]}</p></div><select data-role aria-label="Role for ${escapeHTML(def.name)}">${roleChoices(def).map(role => `<option value="${role}" ${role===d.role?"selected":""}>${roleName[role]}</option>`).join("")}</select></div><p>${escapeHTML(def.rationale)}</p>${ruleEvidence(def)}<p class="consequence"><b>Changing this:</b> ${escapeHTML(def.consequence)}</p>${def.options.length?`<label class="rule-option-label">Sourced parameter alternative</label><select data-option ${d.role==="off"?"disabled":""}><option value="">Preset / manual values</option>${def.options.map(o => `<option value="${o.id}" ${o.id===d.option?"selected":""}>${escapeHTML(o.label)}</option>`).join("")}</select><p class="option-note">${selected?`${provenanceText(selected.provenance)}. ${escapeHTML(selected.note)}`:"Manual values are recorded as researcher choices, without assigning a paper as their source."}</p>`:""}<div class="rule-parameters">${params}</div></article>`;
+    const changedParameters=def.parameters.filter(p=>d.values[p.name]!==b.values[p.name]).length;
+    return `<article class="rule-editor-item" data-rule="${def.id}"><div class="rule-editor-heading"><div><h3>${escapeHTML(def.name)}</h3><span class="rule-evidence-label">${escapeHTML(evidenceLabel(def))}</span><p class="preset-baseline">Preset role: ${roleName[b.role]}${changedParameters?` · ${changedParameters} parameter change(s)`:""}</p></div><select data-role aria-label="Role for ${escapeHTML(def.name)}">${roleChoices(def).map(role => `<option value="${role}" ${role===d.role?"selected":""}>${roleName[role]}</option>`).join("")}</select></div><details data-rule-help="${escapeHTML(def.id)}" ${expandedRules.has(def.id)?"open":""}><summary>Why this rule? · sources and consequences</summary><p class="source">${provenanceText(def.provenance)}</p><p>${escapeHTML(def.rationale)}</p>${ruleEvidence(def)}<p class="consequence"><b>Changing this:</b> ${escapeHTML(def.consequence)}</p>${def.options.length?`<label class="rule-option-label">Sourced parameter alternative</label><select data-option ${d.role==="off"?"disabled":""}><option value="">Preset / manual values</option>${def.options.map(o => `<option value="${o.id}" ${o.id===d.option?"selected":""}>${escapeHTML(o.label)}</option>`).join("")}</select><p class="option-note">${selected?`${provenanceText(selected.provenance)}. ${escapeHTML(selected.note)}`:"Manual values are recorded as researcher choices, without assigning a paper as their source."}</p>`:""}</details>${def.parameters.length?`<details class="rule-values" data-rule-params="${escapeHTML(def.id)}" ${expandedParameters.has(def.id)?"open":""}><summary>Parameters · ${def.parameters.length}</summary><div class="rule-parameters">${params}</div></details>`:""}</article>`;
   }).join("");
+  if(activeRule && activeField)$("rule-editor").querySelector(`[data-rule="${CSS.escape(activeRule)}"] ${activeField}`)?.focus({preventScroll:true});
   for (const article of $("rule-editor").querySelectorAll("[data-rule]")) {
     if (state.draft[article.dataset.rule].role === "off") for (const field of article.querySelectorAll("[data-param]")) field.disabled = true;
   }
@@ -177,6 +184,7 @@ function openLiteratureSequence(id,hostId='literature-result') {
   host.querySelector('[data-literature-search]').value='';
   const check=host.querySelector('[data-literature-matched]');
   if(check)check.checked=false;
+  if (typeof revealDisclosure === 'function') revealDisclosure(host);
   renderLiteratureBody(host,id);
   host.querySelector(`[data-literature-sequence="${CSS.escape(id)}"]`)?.scrollIntoView({block:'center'});
 }
@@ -736,6 +744,7 @@ function renderBasket() {
 function addPromoter(key = $("reference").value) {
   if (!key || !state.gene) return;
   if (!state.basket.some(entry=>entry.key===key)) state.basket.push({key,upstream:Number($("upstream").value),downstream:Number($("downstream").value),pinned:null});
+  $("promoter-comparison-tools").open=true;
   renderBasket(); markDraft();
 }
 function saveCustomReference() {
@@ -962,6 +971,7 @@ function restoreDraft(result) {
 }
 function setSource(source) {
   state.source = source;
+  $("gene-tools").hidden=source!=="gene";
   $("gene-inputs").hidden = source !== "gene"; $("sequence-inputs").hidden = source !== "sequence";
   for (const b of document.querySelectorAll("[data-source]")) b.classList.toggle("active", b.dataset.source===source);
   $("gene-overview").hidden=source!=="gene" || !state.gene?.tss_groups;
@@ -1035,7 +1045,7 @@ function ruleName(id) {
   return (rules.find(r => r.id === id) || {}).name || id;
 }
 
-function ratingText(c) { return c.rating.evaluated ? `${c.rating.met}/${c.rating.evaluated}` : "Not evaluated"; }
+function ratingText(c) { return `${c.rating.met}/${c.rating.evaluated} assessable · ${c.rating.total} configured`; }
 function filteredCandidates() {
   const search = $("candidate-search").value.trim().toUpperCase();
   const values = state.result.candidates.filter(c => (state.filter==="all" || (state.filter==="passing" ? c.rank!==null : c.rank===null)) && (!search || c.id.toUpperCase().includes(search) || c.target_site_dna.includes(search) || candidateControlMatches(c).some(record=>record.name.toUpperCase().includes(search))));
@@ -1047,15 +1057,15 @@ function filteredCandidates() {
 }
 function renderTable() {
   if (!state.result) return;
-  const values = filteredCandidates(), pages = Math.max(1,Math.ceil(values.length/50));
+  const values = filteredCandidates(), pages = Math.max(1,Math.ceil(values.length/10));
   state.page = Math.min(state.page,pages-1);
-  const page = values.slice(state.page*50,(state.page+1)*50);
+  const page = values.slice(state.page*10,(state.page+1)*10);
   const screeningById = new Map(typeof screenedDecisions === "function" ? screenedDecisions().map(d=>[d.candidate.id,d]) : []);
   const controlCandidates=state.result.candidates.filter(candidate=>candidateControlMatches(candidate).length);
   $("candidate-controls").innerHTML=controlCandidates.length?`<p class="hint">Known controls in this run · exact paired-core matches</p>${controlCandidates.map(candidate=>`<div class="candidate-control-summary"><strong>${escapeHTML(candidate.id)}</strong> ${candidateControlBadges(candidate)} <span>${candidate.rank===null?'Excluded by current gates':`Design rank ${candidate.rank}`}</span></div>`).join('')}` : '';
   $("visible-count").textContent = `· ${fmt(values.length)}`;
-  $("candidate-rows").innerHTML = page.length ? page.map(c => `<tr data-candidate="${c.id}" class="${state.selected===c.id?"selected":""}" tabindex="0" aria-label="Inspect ${c.id}"><td><input type="checkbox" data-check="${c.id}" ${state.checked.has(c.id)?"checked":""} aria-label="Select ${c.id} for export"></td><td>${c.rank || "n/a"}</td><td><span class="dna">${escapeHTML(c.target_site_dna)}</span><p class="candidate-id">${c.id}${c.rank===null?` · ${c.excluded_by.length} failed gates`:""}</p>${twinChip(c)}${candidateControlBadges(c)}<div class="candidate-screening-note" data-candidate-screening="${c.id}">${typeof candidateScreeningSummary === "function" ? candidateScreeningSummary(screeningById.get(c.id)) : ""}</div></td><td>${escapeHTML(positionText(c))}</td><td>${c.gc_percent}%</td><td><div class="rating-cell"><b>${ratingText(c)}</b><span class="rating-bar"><i style="width:${c.rating.percent ?? 0}%"></i></span></div>${c.rating.unavailable?`<p class="candidate-id">${c.rating.unavailable} unavailable</p>`:""}${c.rating.unchecked_gates.length?`<p class="candidate-id">${c.rating.unchecked_gates.length} unchecked gates</p>`:""}${(c.rating.missed||[]).length?`<p class="missed-chip">missed: ${c.rating.missed.map(id=>escapeHTML(ruleName(id))).join(", ")}</p>`:""}</td><td><span class="guide-badge ${escapeHTML(c.rating.guide || "unknown")}">${escapeHTML(c.rating.guide || "unknown")}</span>${!c.rating.models_agree?'<p class="disagreement">Models disagree</p>':""}</td></tr>`).join("") : '<tr><td colspan="7" style="padding:30px;text-align:center;color:var(--muted)">No candidates match this view. Inspect excluded targets or adjust your criteria and run again.</td></tr>';
-  $("page-label").textContent = values.length ? `${fmt(state.page*50+1)}–${fmt(Math.min((state.page+1)*50,values.length))} of ${fmt(values.length)} · page ${state.page+1}/${pages}` : "0 candidates";
+  $("candidate-rows").innerHTML = page.length ? page.map(c => `<tr data-candidate="${c.id}" class="${state.selected===c.id?"selected":""}" tabindex="0" aria-label="Inspect ${c.id}"><td><input type="checkbox" data-check="${c.id}" ${state.checked.has(c.id)?"checked":""} aria-label="Select ${c.id} for export"></td><td>${c.rank || "n/a"}</td><td><span class="dna">${escapeHTML(c.target_site_dna)}</span><p class="candidate-id">${c.id}${c.rank===null?` · ${c.excluded_by.length} failed gates`:""}</p>${twinChip(c)}${candidateControlBadges(c)}<div class="candidate-screening-note" data-candidate-screening="${c.id}">${typeof candidateScreeningSummary === "function" ? candidateScreeningSummary(screeningById.get(c.id)) : ""}</div></td><td>${escapeHTML(positionText(c))}</td><td>${c.gc_percent}%</td><td><div class="rating-cell"><b>${c.rating.met}/${c.rating.evaluated}</b><small title="Configured preferences">${c.rating.total} configured</small></div>${c.rating.unavailable?`<p class="candidate-id">${c.rating.unavailable} unavailable</p>`:""}${c.rating.unchecked_gates.length?`<p class="candidate-id">${c.rating.unchecked_gates.length} unchecked gates</p>`:""}${(c.rating.missed||[]).length?`<details class="missed-chip"><summary>${c.rating.missed.length} preferences missed</summary>${c.rating.missed.map(id=>escapeHTML(ruleName(id))).join("; ")}</details>`:""}</td><td><span class="guide-badge ${escapeHTML(c.rating.guide || "unknown")}">${escapeHTML(c.rating.guide || "unknown")}</span>${!c.rating.models_agree?'<p class="disagreement">Models disagree</p>':""}</td></tr>`).join("") : '<tr><td colspan="7" style="padding:30px;text-align:center;color:var(--muted)">No candidates match this view. Inspect excluded targets or adjust your criteria and run again.</td></tr>';
+  $("page-label").textContent = values.length ? `${fmt(state.page*10+1)}–${fmt(Math.min((state.page+1)*10,values.length))} of ${fmt(values.length)} · page ${state.page+1}/${pages}` : "0 candidates";
   $("page-previous").disabled = state.page===0; $("page-next").disabled = state.page>=pages-1;
   $("select-page").checked = page.length>0 && page.every(c=>state.checked.has(c.id));
   $("select-page").indeterminate = page.some(c=>state.checked.has(c.id)) && !$("select-page").checked;
@@ -1065,7 +1075,7 @@ function renderTable() {
 }
 function renderExportNote() {
   const selection = state.checked.size ? `${state.checked.size} checked candidates` : "all design-passing candidates (no explicit selection)";
-  $("export-note").textContent = `Excel and all three CSV downloads use ${selection}. JSON and HTML preserve the whole run and its screening history. SVG follows the screening plot’s range and sort controls. Each file’s contents are listed below.`;
+  $("export-note").textContent = `Sequence downloads, Excel, summary and alignment use ${selection}. Whole-run JSON and offline HTML include every candidate. Motif choices apply to regulatory exports; SVG follows the current screening plot.`;
   if (typeof workflowStatus === "function") workflowStatus();
   if (state.workspaceTab === "export" && typeof renderExportSelection === "function") renderExportSelection();
 }
@@ -1101,6 +1111,8 @@ async function selectCandidate(id, {reveal=true} = {}) {
   const run = state.result, candidate = run.candidates.find(c=>c.id===id);
   if (!candidate) return;
   state.selected = id; renderTable(); renderMap();
+  $("candidate-detail").hidden = !reveal;
+  $("candidate-layout").classList.toggle("inspecting",reveal);
   if (!candidate.rules && !frozen) {
     $("candidate-detail").innerHTML = '<p class="hint is-loading" role="status">Loading candidate sequences and rule explanations…</p>';
   }
@@ -1113,6 +1125,7 @@ async function selectCandidate(id, {reveal=true} = {}) {
     const primary = full.guide_prediction.assessments.find(a=>a.table===full.rating.guide_model);
     const sequenceBox = (name,sequence) => `<div class="sequence-box"><div><span>${name} · 5′ → 3′</span><button type="button" data-copy="${escapeHTML(sequence)}">Copy</button></div><code>${escapeHTML(sequence)}</code></div>`;
     $("candidate-detail").innerHTML = `<div class="detail-heading"><div><h3>${id} <span class="muted">${full.rank?`Rank ${full.rank}`:"Excluded by gates"}</span></h3><p class="hint">${escapeHTML(positionText(full))} ${full.tss_span?"relative to reference TSS":"in supplied sequence"} · ${full.target_site_dna.length} nt core · ${full.gc_percent}% GC${full.genomic?` · genomic ${escapeHTML(full.genomic.strand)} strand`:""}</p></div><span class="tag">${ratingText(full)} PREFERENCES</span></div>${candidateControlBadges(full,run)}${duplexPanel(run,full)}<div class="detail-body"><div>${sequenceBox("Promoter target DNA",full.target_site_dna)}${sequenceBox("Sense RNA core",full.sense_strand_rna)}${sequenceBox("Antisense RNA core",full.antisense_strand_rna)}<p class="hint">The cores above are the 19 nt RNA the rules are evaluated against, without overhangs. The duplex panel at the top is what you order. ${escapeHTML(screeningSentence(id))}</p>${twinNote(full)}</div><div><div class="guide-summary"><strong>Predicted RNA guide: ${escapeHTML(full.rating.guide || "unknown")}</strong><p>${escapeHTML(tableNames[full.rating.guide_model] || full.rating.guide_model)} · ${escapeHTML(full.guide_prediction.summary)}</p><p class="hint">This predicts duplex loading, not the identity of a promoter-associated target RNA, and not activation.</p></div><table class="model-table"><thead><tr><th>Parameter model</th><th>Guide</th><th>End difference</th></tr></thead><tbody>${full.guide_prediction.assessments.map(a=>`<tr data-tip="${escapeHTML(a.explanation)}" tabindex="0"><td>${escapeHTML(tableNames[a.table] || a.table)}</td><td>${escapeHTML(a.predicted_guide)}</td><td>${a.difference.toFixed(2)} ${escapeHTML(a.unit)}</td></tr>`).join("")}</tbody></table><details class="verdict"><summary>How the selected model reaches this prediction</summary><p>${escapeHTML(primary?.explanation || "The selected model was not assessed.")}</p></details></div></div>${full.excluded_by.length?`<p class="hint">${escapeHTML(full.rejection_summary)}</p>`:""}<div class="rule-verdicts"><h3>Every rule, explained</h3>${full.rules.map(r=>ruleVerdict(r,run.configuration)).join("")}</div>`;
+    organiseCandidateInspector(full);
     if (typeof workflowCandidate === "function") workflowCandidate(candidate);
   } catch (e) {
     if (state.result!==run || state.selected!==id) return;
@@ -1120,6 +1133,41 @@ async function selectCandidate(id, {reveal=true} = {}) {
     error(e.message);
   }
 }
+function organiseCandidateInspector(candidate) {
+  const host=$("candidate-detail"), body=host.querySelector(".detail-body");
+  const close=document.createElement("button");close.type="button";close.className="text-button inspector-close";
+  close.textContent="Close inspection";
+  close.addEventListener("click",()=>{host.hidden=true;$("candidate-layout").classList.remove("inspecting");
+    document.querySelector(`[data-candidate="${CSS.escape(candidate.id)}"]`)?.focus({preventScroll:true});});
+  host.querySelector(".detail-heading").append(close);
+  const addSection=(key,title,content)=>{
+    const section=document.createElement("details");section.dataset.inspectorSection=key;
+    section.className="inspector-section";
+    const summary=document.createElement("summary");summary.textContent=title;section.append(summary);
+    if(content)section.append(content);host.append(section);return section;
+  };
+  const duplex=host.querySelector(".duplex-panel");
+  if(duplex)addSection("duplex","Ordering duplex and paired strands",duplex);
+  if(body){
+    const sequences=body.firstElementChild, models=body.lastElementChild;
+    body.replaceWith(sequences);
+    addSection("models","Strand prediction · models and thermodynamics",models);
+  }
+  const rules=host.querySelector(".rule-verdicts");
+  if(rules)addSection("rules","Rule results and sources",rules);
+  const warning=document.createElement("p");warning.className="inspector-notice";
+  warning.textContent=`Predicted guide: ${candidate.rating.guide || "unknown"}${candidate.rating.models_agree?"":" (models disagree)"}. ${candidate.rating.unavailable} unavailable preferences · ${candidate.rating.unchecked_gates.length} unchecked gates${candidate.excluded_by.length?` · ${candidate.excluded_by.length} failed gates`:""}. ${screeningSentence(candidate.id)}`;
+  host.querySelector(".detail-heading").after(warning);
+  const context=document.createElement("div");
+  context.innerHTML=`<p class="hint">${escapeHTML(positionText(candidate))} · ${candidate.gc_percent}% GC. Use the promoter map’s Motifs and Regions tools to inspect nearby features.</p><button type="button" class="text-button" data-open-disclosure="candidate-biological-context">View biological context and motif evidence</button>`;
+  addSection("context","Regulatory context",context);
+  for(const section of host.querySelectorAll("[data-inspector-section]")) {
+    section.open=!!state.inspectorExpanded?.has(section.dataset.inspectorSection);
+    section.addEventListener("toggle",()=>{state.inspectorExpanded ||= new Set();
+      section.open?state.inspectorExpanded.add(section.dataset.inspectorSection):state.inspectorExpanded.delete(section.dataset.inspectorSection);});
+  }
+}
+
 function ruleVerdict(verdict,config) {
   const def = config.rules.find(r=>r.id===verdict.id);
   // The group, which the engine has always carried and nothing displayed. Without it a rule
@@ -1248,8 +1296,7 @@ function renderLegend(result) {
     return `<tr><th>${escapeHTML(track.name)}</th><td>${marks || "none"}</td>`
       + `<td>${escapeHTML(track.help)}</td></tr>`;
   }).join("");
-  legend.innerHTML = `<summary><span class="legend-chips">${chips}</span>`
-    + `<span class="legend-toggle">what am I looking at? \u203a</span></summary>`
+  legend.innerHTML = `<summary><span class="legend-toggle">Map legend and interpretation \u203a</span></summary><div class="legend-chips">${chips}</div>`
     + `<table class="legend-table"><tbody>${rows}</tbody></table>`
     + `<p class="hint">Drag to pan \u00b7 scroll to zoom \u00b7 hover or focus any mark for its `
     + `evidence \u00b7 click a candidate to inspect it. Coordinates and annotations identify `
@@ -1480,7 +1527,7 @@ const PASSING_TOP = 232, PASSING_STEP = 5, PASSING_HEIGHT = 7;
 // 11px rather than 13: with rank also carried by the fill, a numeral that is dropped for
 // crowding costs less, but five of the ten were being dropped at full extent, which is more
 // than it needs to be.
-const MARKED_TOP = 230, MARKED_HEIGHT = 19, MARKED_LABEL_GAP = 9;
+const MARKED_TOP = 230, MARKED_HEIGHT = 19, MARKED_LABEL_GAP = 4;
 
 function passingTip(c) {
   return `${c.id} · rank ${c.rank} · ${ratingText(c)} evaluated preferences · `
@@ -1512,17 +1559,14 @@ function drawPassing(parts, r, scale, tip, rect) {
     rect(c.offset, c.offset + c.target_site_dna.length, MARKED_TOP, MARKED_HEIGHT,
       rankColour(c.rank), passingTip(c), `data-candidate="${c.id}"`);
   }
-  // Numerals in rank order, skipping any that would collide with one already placed: a
-  // better rank keeps its label, and the rank of an unlabelled mark is still in its tooltip.
+  // Numerals in rank order. fitMapLabels measures the rendered text and removes collisions;
+  // a better rank keeps its label, and an unlabelled mark retains its rank in its tooltip.
   // Without this, two adjacent top-ten targets -- common, since neighbouring windows share
   // most of their sequence -- overprint into an unreadable smudge.
-  const placed = [];
   for (const c of [...marked].sort((a, b) => a.rank - b.rank)) {
     const middle = c.offset + c.target_site_dna.length / 2;
     if (middle < state.start || middle >= state.end) continue;
     const x = scale(middle);
-    if (placed.some(at => Math.abs(at - x) < MARKED_LABEL_GAP)) continue;
-    placed.push(x);
     parts.push(`<text class="rank-label" x="${x.toFixed(1)}" y="${MARKED_TOP - 3}" `
       + `text-anchor="middle">${c.rank}</text>`);
   }
@@ -1635,11 +1679,30 @@ function existingSaRNATrack(records,start,end,left,width,focused) {
     const y=326+item.lane*48, center=(markerLeft+markerRight)/2;
     const selected=focused?.record===index && (focused.match || 0)===j;
     const help=`${record.name}: ${style.description} ${record.source}`;
-    markup+=`<g class="existing-sarna-mark" role="button" tabindex="0" aria-label="${escapeHTML(help)}" data-tip="${escapeHTML(help)}" data-sequence="${index}" data-match="${j}"><rect x="${markerLeft}" y="${y}" width="${Math.max(3,markerRight-markerLeft)}" height="7" rx="2" fill="${style.color}"/><line x1="${center}" x2="${center}" y1="${y+7}" y2="${y+13}" stroke="${style.color}"/><rect class="map-decoration" aria-hidden="true" x="${x}" y="${y+13}" width="${pillWidth}" height="25" rx="7" fill="${style.pale}" stroke="${style.color}" stroke-width="${selected?2:1}"/><text x="${x+12}" y="${y+30}" font-size="12" font-weight="600" fill="${style.color}">${escapeHTML(text)}</text></g>`;
+    markup+=`<g class="existing-sarna-mark" role="button" tabindex="0" aria-label="${escapeHTML(help)}" data-tip="${escapeHTML(help)}" data-sequence="${index}" data-match="${j}"><rect x="${markerLeft}" y="${y}" width="${Math.max(3,markerRight-markerLeft)}" height="7" rx="2" fill="${style.color}"/><line x1="${center}" x2="${center}" y1="${y+7}" y2="${y+13}" stroke="${style.color}"/><rect class="map-decoration" aria-hidden="true" x="${x}" y="${y+13}" width="${pillWidth}" height="25" rx="7" fill="${style.pale}" stroke="${style.color}" stroke-width="${selected?2:1}"/><text x="${x+12}" y="${y+30}" font-size="12" font-weight="600" fill="${style.color}" data-fit-width="${pillWidth-24}">${escapeHTML(text)}</text></g>`;
   }
   markup+=`<text x="${left+2}" y="${bottom+20}" font-size="11" fill="#7954a1">↑ Activating reference</text><text x="${left+160}" y="${bottom+20}" font-size="11" fill="#b43f63">↓ Downregulating · researcher reported</text><text x="${left+425}" y="${bottom+20}" font-size="11" fill="#167a79">Imported · effect unassigned</text>`;
   return {markup,height:bottom+34};
 }
+function fitMapLabels(svg,left,right) {
+  // Long researcher names must fit their pills while retaining the full accessible label.
+  for(const label of svg.querySelectorAll("text[data-fit-width]")){
+    const full=label.textContent, limit=Number(label.dataset.fitWidth);
+    if(label.getComputedTextLength()<=limit)continue;
+    let lo=0,hi=full.length;
+    while(lo<hi){const mid=Math.ceil((lo+hi)/2);label.textContent=full.slice(0,mid)+"…";
+      if(label.getComputedTextLength()<=limit)lo=mid;else hi=mid-1;}
+    label.textContent=full.slice(0,lo)+"…";
+  }
+  // Rank order sets priority; all marks retain their rank in their tooltip when text is hidden.
+  const placed=[];
+  for(const label of svg.querySelectorAll(".rank-label")){
+    const box=label.getBBox(), from=box.x, to=box.x+box.width;
+    if(from<left || to>right || placed.some(at=>from<at[1]+MARKED_LABEL_GAP && to>at[0]-MARKED_LABEL_GAP))label.remove();
+    else placed.push([from,to]);
+  }
+}
+
 function renderMap() {
   if (!state.result) return;
   const svg = $("promoter-map");
@@ -1649,11 +1712,12 @@ function renderMap() {
   svg.setAttribute("viewBox", `0 0 ${mapWidth} 370`);
   svg.style.width = `${mapWidth}px`;
   const r = state.result, p = r.promoter, left = MAP_LEFT, right = left + MAP_PLOT;
+  const showReferences=!!$("sequence-tool")?.open || !!sequenceFocus;
   const width = MAP_PLOT;
   const scale = offset => left+(offset-state.start)/(state.end-state.start)*width;
   const inView = (start,end) => end>state.start && start<state.end;
   const tip = text => `data-tip="${escapeHTML(text)}" tabindex="0" aria-label="${escapeHTML(text)}"`;
-  const parts = [`<defs><clipPath id="map-clip"><rect x="${left}" y="25" width="${width}" height="260"/></clipPath></defs>`];
+  const parts = [`<defs><clipPath id="map-clip"><rect x="${left}" y="25" width="${width}" height="290"/></clipPath></defs>`];
   // Subtle lanes and a separate label gutter keep annotation colors as the data channel.
   parts.push(`<rect class="map-decoration" aria-hidden="true" x="0" y="29" width="${mapWidth}" height="256" rx="8" fill="#fbfdfc"/>`);
   for (const [top,bottom] of [[29,72],[116,153],[187,222],[254,285]]) {
@@ -1674,7 +1738,7 @@ function renderMap() {
     const edge = typeof color === "string" ? "" : ` stroke="${color.edge}" stroke-width=".75"`;
     parts.push(`<rect x="${x1}" y="${y}" width="${Math.max(2,x2-x1)}" height="${height}" rx="2" fill="${fill}"${edge} ${tip(help)} ${attrs}/>`);
   };
-  for (const track of TRACKS) label(track.name, track.y, track.help);
+  for (const track of TRACKS) if(track.key!=="existing" || showReferences)label(track.name, track.y, track.help);
   for (const y of [72.5,116.5,153.5,187.5,222.5,254.5,285.5]) parts.push(`<line x1="${left}" x2="${right}" y1="${y}" y2="${y}" stroke="#e8efeb"/>`);
   parts.push(`<g id="map-ticks">${tickMarkup(state.start,state.end,p)}</g>`);
   // Two nested groups on purpose: the clip stays in the untransformed coordinate system while
@@ -1704,6 +1768,7 @@ function renderMap() {
   const focused = state.motifFocus;
   const motifColours = motifPalette(r);
   r.tracks.motifs.forEach((t,i)=>{
+    if (state.investigation?.motifs && !state.investigation.motifs.includes(t.label)) return;
     // Exact label match: a prefix test would make SP1 claim SP100 if one were bundled.
     const mine = !focused || t.label === focused;
     const own = motifColours.get(t.label);
@@ -1730,11 +1795,22 @@ function renderMap() {
       'none',`${candidate.id}: same duplex core as ${controls.map(c=>c.name+' · '+sequenceAppearance(c).label).join('; ')}`,
       `stroke="${style.color}" stroke-width="2.5" data-candidate="${candidate.id}"`);
   }
+  if (state.investigation?.annotations.length) label("Saved regions",292,"Researcher annotations; names and citations are listed above.");
+  if (state.mapSearchMatches?.length) label("Search matches",314,"Exact sequence occurrences in the loaded promoter.");
+  for (const [i,a] of (state.investigation?.annotations || []).entries()) {
+    rect(a.start,a.end,286,7,{fill:"#7954a1",edge:"#593481"},
+      `${a.name}: bases ${a.start+1}–${a.end}. ${a.source}`, `data-annotation="${i}"`);
+  }
+  for (const a of (state.mapSearchMatches || [])) {
+    rect(a.start,a.end,309,5,{fill:"#b97a2b",edge:"#875413"},
+      `Sequence search: bases ${a.start+1}–${a.end}, ${a.orientation}`);
+  }
   parts.push('</g></g>');
-  const existingTrack=existingSaRNATrack(state.sequenceRecords || [],state.start,state.end,left,width,sequenceFocus);
+  const existingTrack=showReferences?existingSaRNATrack(state.sequenceRecords || [],state.start,state.end,left,width,sequenceFocus):{markup:"",height:320};
   parts.push(existingTrack.markup);
   const literatureTop=existingTrack.height+8;
-  if(r.literature) {
+  const showLiterature=!!r.literature && !!$("reported-evidence")?.open;
+  if(showLiterature) {
     parts.push(`<text x="${left}" y="${literatureTop+12}" font-size="12" fill="#526b7a">Literature · reported sequence matches · click a marker for results and sources</text>`);
     let matched=0;
     for(const group of r.literature.sequences)for(const match of group.matches || []) {
@@ -1746,10 +1822,11 @@ function renderMap() {
     }
     if(!matched)parts.push(`<text x="${left}" y="${literatureTop+34}" font-size="11" fill="#61767a">No reported sequences matched in this view.</text>`);
   }
-  const mapHeight=r.literature?literatureTop+55:existingTrack.height;
+  const mapHeight=showLiterature?literatureTop+55:existingTrack.height;
   svg.setAttribute("viewBox", `0 0 ${mapWidth} ${mapHeight}`);
   svg.style.height=`${mapHeight}px`;
   svg.innerHTML=parts.join("");
+  fitMapLabels(svg,left,right);
   // Only offer the grab cursor when there is somewhere to pan. At full extent the drag is a
   // no-op, and advertising it is a promise the map does not keep.
   svg.classList.toggle("pannable", state.start > 0 || state.end < p.length);
@@ -1759,11 +1836,9 @@ function renderMap() {
   if (note) {
     const missing = r.unevaluated_rules || [];
     note.hidden = !missing.length;
-    note.textContent = missing.length
-      ? `${missing.length} rule${missing.length === 1 ? "" : "s"} could not be evaluated for any `
-        + `candidate in this run: ${missing.map(ruleName).join(", ")}. `
-        + `These counted neither for nor against anything, and they are not failures.`
-      : "";
+    note.innerHTML=missing.length?`${missing.length} rules unavailable for this run. <button type="button" class="text-button" data-open-disclosure="ranking-details">View unavailable checks</button>`:"";
+    const explanation=$("run-unavailable-rules");
+    if(explanation)explanation.textContent=missing.length?`Unavailable in this run: ${missing.map(ruleName).join(", ")}. These checks are unknown, not passes or failures.`:"All configured rules could be assessed somewhere in this promoter.";
   }
 }
 const MAP_LEFT = 160, MAP_MIN_SPAN = 40;
@@ -2396,9 +2471,8 @@ async function initialize() {
     renderCellEvidence();
     if (!frozen) { setPreset("wang-2015"); syncDataAccess(); }
     if (frozen) {
-      document.body.classList.add("frozen"); document.querySelector(".local-badge").textContent="Frozen offline record";
-      document.querySelector(".intro .eyebrow").textContent=frozen.batch?"FROZEN PROMOTER COMPARISON":"FROZEN DESIGN RECORD";
-      document.querySelector(".intro h1").innerHTML="A design you can inspect.<br><span>A record you can keep.</span>";
+      document.body.classList.add("frozen"); document.querySelector(".top-actions").insertAdjacentHTML("beforeend",'<span class="local-badge">Offline record</span>');
+      document.querySelector(".intro h1").textContent=frozen.batch?"Saved promoter comparison":"Saved design";
       document.querySelector(".intro > div > p:last-child").textContent="Explore saved references, sequences, settings and evidence. New designs require the local workbench.";
       if (frozen.batch) {
         for (const request of frozen.batch.request?.requests || []) if (request.custom_reference) state.customReferences[request.custom_reference.id]=clone(request.custom_reference);
@@ -2435,6 +2509,7 @@ $("promoter-basket").addEventListener("click",e=>{
   else if (button.dataset.basketAction==="share") entry.pinned=null;
   else if (button.dataset.basketAction==="edit") editCustomReference(entry.key);
   else { $("reference").value=entry.key; $("upstream").value=entry.upstream; $("downstream").value=entry.downstream; }
+  $("promoter-comparison-tools").open=true;
   renderBasket(); markDraft();
 });
 function chooseOverviewReference(key) {
@@ -2502,7 +2577,7 @@ $("saved-runs").addEventListener("change",async()=>{
 document.querySelectorAll("[data-filter]").forEach(b=>b.addEventListener("click",()=>{state.filter=b.dataset.filter;state.page=0;document.querySelectorAll("[data-filter]").forEach(v=>v.classList.toggle("active",v===b));renderTable();}));
 $("candidate-search").addEventListener("input",()=>{state.page=0;renderTable();});
 document.querySelectorAll("[data-sort]").forEach(b=>b.addEventListener("click",()=>{state.descending=state.sort===b.dataset.sort?!state.descending:b.dataset.sort==="rating";state.sort=b.dataset.sort;renderTable();}));
-$("candidate-rows").addEventListener("click",e=>{if (!e.target.closest("input,[data-screening-candidate]")) {const row=e.target.closest("[data-candidate]");if(row)selectCandidate(row.dataset.candidate);}});
+$("candidate-rows").addEventListener("click",e=>{if (!e.target.closest("input,button,a,summary,details")) {const row=e.target.closest("[data-candidate]");if(row)selectCandidate(row.dataset.candidate);}});
 $("candidate-rows").addEventListener("change",e=>{const id=e.target.dataset.check;if(id){e.target.checked?state.checked.add(id):state.checked.delete(id);renderTable();}});
 $("candidate-rows").addEventListener("keydown",e=>{if ((e.key==="Enter" || e.key===" ") && e.target.matches("tr[data-candidate]")){e.preventDefault();selectCandidate(e.target.dataset.candidate);}});
 // The detail panel names the candidates ordering as this same duplex; they are buttons so
@@ -2524,7 +2599,7 @@ $("promoter-map").addEventListener("click",e=>{
 enableMapDrag();
 $("promoter-map").addEventListener("keydown",e=>{if ((e.key==="Enter" || e.key===" ") && e.target.dataset.candidate){e.preventDefault();selectCandidate(e.target.dataset.candidate);}});
 $("page-previous").addEventListener("click",()=>{state.page--;renderTable();});$("page-next").addEventListener("click",()=>{state.page++;renderTable();});
-$("select-page").addEventListener("change",e=>{filteredCandidates().slice(state.page*50,(state.page+1)*50).forEach(c=>e.target.checked?state.checked.add(c.id):state.checked.delete(c.id));renderTable();});
+$("select-page").addEventListener("change",e=>{filteredCandidates().slice(state.page*50,(state.page+1)*10).forEach(c=>e.target.checked?state.checked.add(c.id):state.checked.delete(c.id));renderTable();});
 $("select-top").addEventListener("click",()=>{state.checked.clear();state.result.candidates.filter(c=>c.rank!==null).sort((a,b)=>a.rank-b.rank).slice(0,10).forEach(c=>state.checked.add(c.id));renderTable();});
 $("zoom-in").addEventListener("click",()=>viewport(.5));$("zoom-out").addEventListener("click",()=>viewport(2));$("pan-left").addEventListener("click",()=>viewport(1,-.3));$("pan-right").addEventListener("click",()=>viewport(1,.3));$("zoom-reset").addEventListener("click",()=>{state.start=0;state.end=state.result.promoter.length;renderMap();});
 $("candidate-detail").addEventListener("click",async e=>{const b=e.target.closest("[data-copy]");if(b){try{await navigator.clipboard.writeText(b.dataset.copy);b.textContent="Copied";}catch{error("Clipboard unavailable. Select and copy the displayed sequence.");}}});
@@ -2573,6 +2648,7 @@ function renderSequenceRecords() {
   $("sequence-records").innerHTML = records.length ? `<div class="table-scroll"><table><thead><tr><th>Reference / import</th><th>Placement</th><th>Source / observation</th><th></th></tr></thead><tbody>${records.map((r,i)=>`<tr><td><button type="button" data-sequence="${i}">${escapeHTML(r.name)}</button>${r.reference?' · reference':''}<br>${sequenceEffectBadge(r)}</td><td>${r.matches.length?r.matches.map((m,j)=>`<button type="button" data-sequence="${i}" data-match="${j}">Bases ${m.offset+1}–${m.end}</button>`).join(' '):escapeHTML(r.status)}${!r.matches.length&&r.known_location?`<br><small>Known site: chr${escapeHTML(r.known_location.contig)}:${fmt(r.known_location.start+1)}–${fmt(r.known_location.end)} · ${escapeHTML(r.known_location.assembly)} · ${escapeHTML(r.known_location.strand)} strand (1-based)</small>${!frozen?`<br><button type="button" data-sarna-region="${escapeHTML(r.name)}">Choose this promoter</button>`:''}`:''}${r.matches.length>1?' · multiple matches':''}</td><td>${escapeHTML(r.source)}</td><td>${!r.reference&&!frozen?`<button type="button" data-sequence-remove="${i}">Remove</button>`:''}</td></tr><tr class="reference-analysis-row"><td colspan="4">${referenceDuplexPanel(r)}<details class="reference-strand-disclosure" data-record-key="${escapeHTML(JSON.stringify([r.name,r.sequence,r.role]))}"><summary>Analyse both strands · ${escapeHTML(r.name)}</summary>${strandAnalysisPanel(r)}</details></td></tr>`).join('')}</tbody></table></div>` : '<p class="hint">No existing saRNAs added for this run.</p>';
   for (const node of $("sequence-records").querySelectorAll('details[data-record-key]')) node.open=opened.has(node.dataset.recordKey);
   renderSequenceDetail();
+  if (typeof renderInvestigation === "function" && state.investigationRunId===state.result?.app.run_id) renderInvestigation();
 }
 function renderSequenceDetail() {
   const record = (state.sequenceRecords || [])[sequenceFocus?.record];
@@ -2582,6 +2658,11 @@ function renderSequenceDetail() {
   const duplex = (name,sense,antisense)=>`<h4>${escapeHTML(name)}</h4><p>Sense 5′ <code>${escapeHTML(sense)}</code> 3′<br>Antisense 5′ <code>${escapeHTML(antisense)}</code> 3′</p>`;
   $("sequence-detail").innerHTML = `<h3>${escapeHTML(record.name)} ${sequenceEffectBadge(record)}</h3><p class="hint">Original: ${escapeHTML(record.sequence)} · ${escapeHTML(record.role)} · ${escapeHTML(record.direction)}. ${record.partner_inferred?'Complementary partner inferred.':'Both cores supplied and complementarity checked.'} Overhang: ${escapeHTML(record.overhang || 'unknown')}; partner overhang: ${escapeHTML(record.partner_overhang || 'unknown')}.</p>` + (match ? duplex('Located duplex',match.sense,match.antisense) + `<p class="hint">Input orientation: ${escapeHTML(match.input_orientation)}. ${match.candidate?`Current run: ${escapeHTML(match.candidate.id)} · rank ${match.candidate.rank ?? 'excluded'} · preferences ${match.candidate.rating.met}/${match.candidate.rating.evaluated} · excluded by ${escapeHTML(match.candidate.excluded_by?.join(', ') || 'none')}`:'No candidate of this length in the current run; rule rating unavailable.'}</p><div class="table-scroll"><table><thead><tr><th>Model</th><th>Predicted guide</th><th>Predicted passenger</th><th>End difference</th></tr></thead><tbody>${match.thermodynamics.map(a=>`<tr title="${escapeHTML(a.explanation)}"><td>${escapeHTML(a.table_name)}</td><td>${escapeHTML(a.predicted_guide)}</td><td>${a.predicted_guide==='antisense'?'sense':a.predicted_guide==='sense'?'antisense':'undetermined'}</td><td>${a.difference.toFixed(2)} ${escapeHTML(a.unit)}</td></tr>`).join('')}</tbody></table></div><p class="hint">Predictions use paired cores; matched candidates retain the run’s model settings. Other lengths use four-base ends. Different model predictions remain separate. They do not establish activation or measured strand loading.</p>` + (selected ? duplex('Selected new design: '+selected.id, selected.sense_strand_rna,selected.antisense_strand_rna) + `<p>Predicted guide: ${escapeHTML(selected.rating.guide)} · preferences ${selected.rating.met}/${selected.rating.evaluated}. Target overlap: ${Math.max(0,Math.min(match.end,selected.offset+selected.target_site_dna.length)-Math.max(match.offset,selected.offset))} bases. GC: existing ${(100*(match.target.match(/[GC]/g)||[]).length/match.target.length).toFixed(1)}%, selected ${selected.gc_percent}%. Aligned core differences: ${match.target.length===selected.target_site_dna.length?[...match.target].filter((base,i)=>base!==selected.target_site_dna[i]).length:"different lengths"}.</p>` : '<p class="hint">Select a new candidate on the map or in the table to compare its duplex here.</p>') + '<button type="button" id="sequence-nearby">Find overlapping / nearby designs</button>' : `<p>${escapeHTML(record.status)}. ${record.known_location?`Known site: chr${escapeHTML(record.known_location.contig)}:${fmt(record.known_location.start+1)}–${fmt(record.known_location.end)} (${escapeHTML(record.known_location.assembly)}, 1-based). ${escapeHTML(record.known_location.source)}. The current map covers a different region; use “Choose this promoter” to update your draft, then submit the design when ready.`:'The sequence may lie outside this region or differ from the reference. No location is assumed.'}</p>`);
   $("sequence-detail").insertAdjacentHTML("beforeend",referenceDuplexPanel(record,match)+strandAnalysisPanel(record,match));
+  for (const item of record.sequence_only || []) {
+    const a=item.assessment;
+    $("sequence-detail").insertAdjacentHTML("beforeend", `<details open><summary>Sequence-only evaluation · ${escapeHTML(item.orientation)}</summary><p>${escapeHTML(item.scope)} No design rank or off-target screening is assigned.</p><p>${escapeHTML(a.score_summary)}. ${escapeHTML(a.rejection_summary)}</p>${a.rules.map(rule=>ruleVerdict(rule,state.result.configuration)).join("")}</details>`);
+  }
+
   $("sequence-nearby")?.addEventListener('click',()=>{
     const nearby = state.result.candidates.filter(c=>Math.abs(c.offset-match.offset)<=100).sort((a,b)=>Math.abs(a.offset-match.offset)-Math.abs(b.offset-match.offset)).slice(0,10);
     $("sequence-detail").insertAdjacentHTML('beforeend',`<p>Within 100 bases: ${nearby.map(c=>`<button type="button" data-candidate="${escapeHTML(c.id)}">${escapeHTML(c.id)}</button>`).join(' ') || 'No generated candidates'}</p>`);

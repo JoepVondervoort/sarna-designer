@@ -30,6 +30,7 @@ from sarna.design.context import CandidateContext
 from sarna.design.evaluators import evaluate
 from sarna.genome.promoter import Promoter
 from sarna.sequence.cpg import CpGIsland, find_cpg_islands
+from sarna.sequence.nucleic import NucleicSequence
 from sarna.thermo.guide import AsymmetryComparison, compare_asymmetry
 from sarna.thermo.model import NearestNeighbourTable
 from sarna.thermo.tables import DNA_SANTALUCIA_1998, LEGACY_DNA_KJ, RNA_XIA_1998
@@ -176,6 +177,17 @@ def design_sarnas(
         ranked=_rank(tuple(c for c in generated if not c.is_rejected)),
         cpg_islands=islands,
     )
+
+
+def evaluate_sequence_only(target: NucleicSequence, config: DesignConfig) -> Candidate:
+    """Evaluate an external core without inventing flanks, TSS or CpG context.
+
+    The core must have the configured length. Its result has no promoter placement or rank.
+    """
+    if len(target.bases) != config.target_length:
+        raise ValueError("The core length differs from the run's configured target length.")
+    return _build(Promoter(target), 0, config.target_length, config, None,
+                  DEFAULT_COMPARISON_TABLES)
 
 
 def _build(

@@ -41,7 +41,21 @@ const SCREENING_POLLS = new Map();
 
 function screeningHTML(node, html) {
   if (!node || SCREENING_HTML.get(node) === html) return;
+  const keyFor=d=>d.dataset.uiKey || d.id || d.querySelector("summary")?.textContent;
+  const expanded=new Set([...(node.querySelectorAll?.("details[open]") || [])].map(keyFor));
+  const focused=typeof document!=="undefined"?document.activeElement:null;
+  const detailFocusKey=focused?.tagName==="SUMMARY" && node.contains?.(focused)?keyFor(focused.parentElement):null;
+  let focusKey=null;
+  if(focused && node.contains?.(focused)){
+    if(focused.id)focusKey=`#${CSS.escape(focused.id)}`;
+    else for(const attr of ["data-export-inspect","data-screened-inspect","data-screening-candidate"]){
+      if(focused.hasAttribute(attr)){focusKey=`[${attr}="${CSS.escape(focused.getAttribute(attr))}"]`;break;}
+    }
+  }
   node.innerHTML = html;
+  for(const detail of node.querySelectorAll?.("details") || []) if(expanded.has(keyFor(detail)))detail.open=true;
+  if(focusKey)node.querySelector?.(focusKey)?.focus({preventScroll:true});
+  else if(detailFocusKey){for(const detail of node.querySelectorAll?.("details") || [])if(keyFor(detail)===detailFocusKey){detail.querySelector("summary")?.focus({preventScroll:true});break;}}
   SCREENING_HTML.set(node, html);
 }
 
@@ -474,6 +488,7 @@ function renderScreeningStatus() {
         ? (job.retrievalIssue ? "Report retrieval needs retry" : "Waiting for NCBI results")
         : job ? (job.stage || job.status) : "";
       lane.className = "screen-state " + (job ? job.status : "");
+      if(lane.closest)lane.closest(".screen-lane").hidden=!job;
     }
     const bar = $(`screen-bar-${scope}`);
     if (bar) {
@@ -1142,6 +1157,9 @@ document.addEventListener("keydown", event => {
 let REFERENCE_STATUS = null;
 let REFERENCE_POLL = null;
 function screeningBackend() { return $("screening-backend")?.value || "ncbi"; }
+function sizeForReference(bytes) {
+  return bytes>=1e9?`${(bytes/1e9).toFixed(2)} GB`:`${((bytes || 0)/1e6).toFixed(0)} MB`;
+}
 function renderReferenceStatus() {
   const info = REFERENCE_STATUS;
   if (!info || !$("reference-status")) return;
@@ -1154,10 +1172,11 @@ function renderReferenceStatus() {
       + `<div class="reference-assets">${(info.download_plan || []).map(asset=>`<div><span>${escapeHTML(names[asset.key] || asset.key)}</span><strong>${size(asset.bytes)}</strong></div>`).join("")}</div>`
       + `<p class="hint">Allow ${(info.required_free_bytes/1024**3).toFixed(0)} GiB free for preparation. Download time depends on your connection; building indexes happens afterwards and can take an hour or more. Keep the app running. This is a one-time setup per reference release.</p>`;
   }
-  if (!info.ready && !state.referenceSetupShown) {
-    $("local-reference-panel").open = true;
-    state.referenceSetupShown = true;
-  }
+  const compactTitle=$("reference-compact-title"), compactNote=$("reference-compact-note");
+  if(compactTitle)compactTitle.textContent=busy?"Preparing local references":info.ready?"Local references ready":info.status==="error"?"Reference setup needs attention":"Local screening needs setup";
+  if(compactNote)compactNote.textContent=busy?(info.message || "Preparing references; keep the app running.")
+    :info.ready?`${info.installed.release} · ready to reuse`
+    :`Download ${sizeForReference(info.download_bytes)}; allow ${(info.required_free_bytes/1024**3).toFixed(0)} GiB free during preparation.${info.status==="error"?" "+(info.message || "Retry setup."):""}`;
   $("reference-summary").textContent = "Local off-target screening · " + (busy ? "preparing references…" : info.ready ? "references ready" : info.status === "error" ? "setup needs retry" : "reference setup");
   const label = info.installed ? `${info.installed.release} · Bowtie ${info.installed.bowtie_version}` : "No local reference installed";
   $("reference-status").textContent = `${label}. ${info.message || ""}` + (info.file ? ` · ${info.file}` : "")
@@ -1169,16 +1188,20 @@ function renderReferenceStatus() {
   else progress.removeAttribute("value");
   $("reference-install").disabled = busy || !info.supported || (info.ready && !info.update_available);
   $("reference-install").textContent = info.ready ? (info.update_available ? "Download reference update" : "References ready · reused automatically")
-    : ["paused", "error"].includes(info.status) ? "Resume / retry reference setup" : "Download & prepare local references";
+    : ["paused", "error"].includes(info.status) ? "Resume / retry reference setup" : "Set up screening";
   $("reference-pause").hidden = !busy;
-  $("open-reference-setup").hidden = info.ready || screeningBackend() !== "local";
+  $("reference-install").hidden=!!info.ready && !info.update_available;
+  $("open-reference-setup").hidden = screeningBackend() !== "local";
+  $("open-reference-setup").textContent = "Reference details";
   $("local-screening-note").textContent = screeningBackend() === "ncbi"
     ? "Remote cross-check: candidate sequences are sent to NCBI. Queue time and reporting limits apply."
     : info.ready ? `Ready: ${info.installed.release}. Full-length 19-base matches with up to 3 mismatches; completed searches are cached.`
     : info.supported ? "Set up local references above before searching. Downloads happen only when you click the setup button."
     : "Automatic local setup currently supports Windows x64 and Linux x64. You may explicitly choose the remote NCBI cross-check.";
   $("screening-privacy").textContent = screeningBackend() === "ncbi" ? "Submitting a remote search sends candidate sequences to NCBI." : "Local searches keep candidate sequences on this computer.";
+  $("reference-compact").hidden=screeningBackend()!=="local";
   if (state.result) renderScreeningStatus();
+  if (typeof renderCalmSummary === "function") renderCalmSummary();
 }
 async function loadReferenceStatus() {
   if (frozen) return;
@@ -1214,6 +1237,7 @@ $("screening-backend")?.addEventListener("change", () => {
 });
 if (frozen) {
   $("local-reference-panel").hidden = true;
+  $("reference-compact").hidden = true;
   $("screening-backend").closest("label").hidden = true;
   $("open-reference-setup").hidden = true;
   $("local-screening-note").textContent = "Saved observations. Each candidate names its search method; reference versions and dates remain recorded.";
@@ -1265,9 +1289,10 @@ function offTargetCounts(entry) {
 }
 function candidateScreeningSummary(decision) {
   if (!decision) return "";
-  return decision.evidence.map(e=>`<span>${e.scope === "genomic" ? "Genome" : "RNA"} 19/18/17: ${offTargetCounts(e.entry)}</span>`).join("")
-    + (decision.status === "pending" ? '<span>Screening evidence incomplete</span>' : decision.status === "review" ? '<span class="screening-evidence review">Review sequence matches</span>' : "")
-    + `<button type="button" class="text-button" data-screening-candidate="${escapeHTML(decision.candidate.id)}">View screening details</button>`;
+  const label=decision.status==="pending"?"Screening evidence incomplete":decision.status==="review"?"Review sequence matches":"Screening recorded";
+  return `<details class="compact-screening" data-ui-key="screening-${escapeHTML(decision.candidate.id)}"><summary class="${decision.status==="review"?"screening-evidence review":""}">${label}</summary>`
+    + decision.evidence.map(e=>`<span>${e.scope === "genomic" ? "Genome" : "RNA"} 19/18/17: ${offTargetCounts(e.entry)}</span>`).join("")
+    + `<button type="button" class="text-button" data-screening-candidate="${escapeHTML(decision.candidate.id)}">View screening details</button></details>`;
 }
 function topOffTargetSummary() {
   const best = screenedDecisions().find(d=>d.candidate.rank === 1);

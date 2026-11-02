@@ -315,6 +315,40 @@ class AppRouter:
                     **saved, 'references': controls,
                     'notice': '' if recalculate else snapshot.get('sequence_comparison_notice', ''),
                 })
+        if (len(parts) == 4 and parts[:2] == ["api", "runs"]
+                and parts[3] in ("investigation", "sequence-search")):
+            from sarna.app.investigation import InvestigationRequest, SequenceSearch
+            snapshot = self.service.store.snapshot(parts[2])
+            if method == "GET" and parts[3] == "investigation":
+                return self._json(200, self.service.store.investigation(parts[2]))
+            if method == "POST":
+                if len(body) > MAX_BODY:
+                    raise ValueError("Request is too large.")
+                if parts[3] == "sequence-search":
+                    search = SequenceSearch.model_validate_json(body)
+                    return self._json(200, {
+                        "matches": search.find(snapshot["promoter"]["sequence"]),
+                    })
+                investigation = InvestigationRequest.model_validate_json(body)
+                if any(a.end > snapshot["promoter"]["length"]
+                       for a in investigation.annotations):
+                    raise ValueError("Annotation extends beyond the loaded promoter.")
+                known_motifs = {m["motif"] for m in snapshot.get("motif_scans", [])}
+                if investigation.motifs is not None and (
+                    len(set(investigation.motifs)) != len(investigation.motifs)
+                    or not set(investigation.motifs) <= known_motifs
+                ):
+                    raise ValueError("Select distinct motifs scanned in this run.")
+                saved_investigation = self.service.store.save_investigation(
+                    parts[2], investigation.revision,
+                    investigation.model_dump(exclude={"revision"}),
+                )
+                return (self._json(200, saved_investigation)
+                        if saved_investigation is not None else self._json(409, {
+                            "code": "investigation-conflict",
+                            "detail": "Map annotations changed in another window. Reload saved "
+                                      "annotations before retrying; your edits are retained.",
+                        }))
         if (method == "POST" and len(parts) == 4
                 and parts[:2] == ["api", "runs"] and parts[3] == "shortlist"):
             if len(body) > MAX_BODY:
@@ -482,7 +516,8 @@ class AppRouter:
     def _workspace_snapshot(self, run_id: str) -> dict[str, Any]:
         """Attach current researcher notes to exports without changing the scientific snapshot."""
         return {**self.service.store.snapshot(run_id),
-                "workspace": {"shortlist": self.service.store.shortlist(run_id)}}
+                "workspace": {"shortlist": self.service.store.shortlist(run_id),
+                              "investigation": self.service.store.investigation(run_id)}}
 
 
     def _screening_records(self, run_id: str) -> list[dict[str, Any]]:

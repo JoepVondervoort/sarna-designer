@@ -321,7 +321,7 @@ const workspaces=new Map(), frozen=null, calls=[];
 const nodes={'design-ready':{hidden:true},'design-ready-message':{textContent:''}};
 const $=id=>nodes[id];
 const document={body:{classList:{add(){}}}};
-const renderShortlist=()=>{}, workflowStatus=()=>{};
+const renderShortlist=()=>{}, workflowStatus=()=>{}, investigationRun=()=>{};
 const setWorkspaceTab=(tab,options)=>{calls.push([tab,options]);state.workspaceTab=tab;};
 """
         + run_function

@@ -45,7 +45,7 @@ has never been tested.
 
 ## Researcher imports and existing reference duplexes
 
-After completing a design run, open **Existing saRNAs & reference duplexes** in
+After completing a design run, open **Evaluate my saRNA & reference duplexes** in
 Candidates. Add one sequence per line, or `name,sequence`, select its strand role
 and direction, and preview before adding. Repeat to add more records. Uploads
 accept UTF-8 TXT/CSV and Excel `.xlsx` (first worksheet), with at most 200 records
@@ -81,6 +81,9 @@ guide/passenger predictions, and the matching candidate's current-run rule ratin
 (including exclusions). Select a newly generated candidate for comparison and
 base overlap; nearby candidates can be opened from the reference details.
 Different-length imports have model predictions but no current-run rule rating.
+Unmatched cores of the configured target length now also receive a separate sequence-only
+assessment, with promoter-dependent checks unavailable; see the
+[sequence investigation guide](sequence-investigation.md).
 
 Imports are stored separately from scientific snapshots in SQLite and are
 included in run/group JSON and offline HTML exports. Offline HTML supports
