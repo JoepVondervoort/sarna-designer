@@ -4,8 +4,10 @@
 experience. If you are comfortable with Python packaging, [the short version](#the-short-version-for-people-who-know-python)
 is at the bottom.
 
-saRNA Designer runs **on your own computer**. It is not a website, there is no account, and
-nothing is uploaded except the gene lookups described under [What leaves your computer](#what-leaves-your-computer).
+saRNA Designer runs **on your own computer** and opens a local browser interface.
+It needs no hosted account. Reference lookups use external services, and optional NCBI
+screening sends the submitted sequences to NCBI. See
+[What leaves your computer](#what-leaves-your-computer) for the details.
 
 You need about **ten minutes** and an internet connection for the setup.
 
@@ -39,21 +41,17 @@ not inside any other program. Step 1 shows how to open it.
 
 ### How you will get the tool: read this first
 
-There are two routes, and **which one applies to you is not a preference**:
+Choose either installation route:
 
 | | **Route A: a file you were sent** | **Route B: from GitHub** |
 |---|---|---|
-| You need | the `.whl` file, nothing else | a GitHub account **with access to the repository**, and **Git installed** |
-| Works for | anyone | collaborators on the repository only |
-| Use it when | you were emailed or handed a file | you have been added to the repository |
+| You need | the `.whl` file | **Git installed** and an internet connection |
+| Works for | anyone with the file | anyone who can reach the public repository |
+| Use it when | you were sent a particular build or do not want to install Git | you want updates directly from `main` |
 
-**The repository is private.** A GitHub link will fail with *"repository not found"* for
-anyone who has not been given access. That is what a private repository looks like from
-outside, and it is not a sign that anything is broken. If you were not explicitly added to it,
-you want **Route A**.
-
-Route A is also the only one that needs no Git and no GitHub account at all, which is why it
-is written first below.
+**The repository is public.** Neither route requires a GitHub account or invitation.
+Route A needs no Git and is written first below. Route B makes future updates a single
+command: `uv tool upgrade sarna-designer`.
 
 > **If you are the person sending the file**, see
 > [Sending it to a colleague](#sending-it-to-a-colleague) at the end. It tells you how to
@@ -145,7 +143,7 @@ uv tool install --python 3.11 "sarna-designer[app] @ git+https://github.com/Joep
 Either way, this downloads the tool and the correct Python, and ends with:
 
 ```
-Installed 2 executables: sarna-designer, sarna-designer-check
+Installed 3 executables: sarna-designer, sarna-designer-check, sarna-designer-replay
 ```
 
 > The first installation may take several minutes while it downloads Python and packages.
@@ -207,13 +205,13 @@ From the file you were sent (Route A, and you can drag the `.whl` into Terminal 
 uv tool install --python 3.11 "/Users/you/Downloads/sarna_designer-0.3.2-py3-none-any.whl[app]"
 ```
 
-Or from GitHub (Route B), if you have access to the repository and `git` installed:
+Or from the public GitHub repository (Route B), with `git` installed:
 
 ```bash
 uv tool install --python 3.11 "sarna-designer[app] @ git+https://github.com/JoepVondervoort/sarna-designer"
 ```
 
-It should end with `Installed 2 executables`. Then close Terminal and open it again, so the
+It should end with `Installed 3 executables`. Then close Terminal and open it again, so the
 new commands are on your PATH.
 
 ### Steps 4 and 5: Check and start
@@ -300,8 +298,9 @@ completely and open a new one. If it still is not found, run `uv tool update-she
 another new window. If that does not help either, step 3 did not finish. Run it again and
 read the last few lines for an error.
 
-**`repository not found`, or Git asks for a password**. The repository is private and your
-account has not been given access. Use Route A: ask for the `.whl` file.
+**`repository not found`, or Git asks for a password**. This public repository needs no
+GitHub sign-in. Check the repository URL, internet connection, proxy and stored Git credentials.
+You can use Route A with a supplied `.whl` file if your network blocks GitHub.
 
 **`git` is not recognised.** Route B needs [Git for Windows](https://git-scm.com/download/win).
 Route A does not need it at all.
@@ -417,9 +416,10 @@ there is no server to maintain or trust. The short version is that the gene you 
 *is* the research question. Running locally means only Ensembl, plus NCBI if you ask for an
 off-target screen, ever learns it.
 
-**Why there are two commands.** `sarna-designer-check` makes a broken installation say so
+**Why the setup uses a separate check command.** `sarna-designer-check` makes a broken installation say so
 clearly instead of failing later in a way that looks like a scientific problem. It is quick and
-makes no network calls unless you ask.
+makes no network calls unless you ask. The third installed command, `sarna-designer-replay`,
+checks the core calculation in an exported JSON record.
 
 ---
 
@@ -488,9 +488,10 @@ keeps its saved runs inside WSL, not in your Windows user folder.
 
 *For whoever is distributing the tool, not for the person installing it.*
 
-The repository is private, so the simplest thing to send is a single file: a **wheel** (`.whl`).
-It is about 320 kB, it contains the whole tool, and the person receiving it needs no GitHub
-account, no Git and no Python.
+A single **wheel** (`.whl`) is useful for distributing a particular build without requiring Git.
+It contains the application code and browser assets. The recipient does not need a GitHub
+account or a separate Python installation; uv manages Python for them. Local screening
+references are a separate download.
 
 ### 1. Build it
 
@@ -550,20 +551,18 @@ A message you can send:
 > rights, Git or a GitHub account. An existing Python installation can stay as it is.
 > Paste each complete command into PowerShell and press Enter; do not type it in pieces.
 >
-> The file check must print `True`, the installation should report `Installed 2 executables`,
+> The file check must print `True`, the installation should report `Installed 3 executables`,
 > and the final check should end with `RESULT: PASS`. If any step fails, stop and send me the
 > command and its complete output.
 
 ### If you would rather they install from GitHub
 
-Worth doing if they will keep receiving updates, because it turns every future update into one
-command they run themselves instead of a file you build and send. The cost is two one-time
-steps: they need a GitHub account added as a collaborator, and
-[Git for Windows](https://git-scm.com/download/win) installed.
+This is useful for colleagues who want updates directly from `main`, because each update is
+one command rather than another file to send. They need
+[Git for Windows](https://git-scm.com/download/win), but no GitHub account or collaborator access.
 
 [Switching an existing install to GitHub](#switching-an-existing-install-to-github) is the
-walkthrough to send them. Making the repository public would remove both steps, and is a
-decision about publishing the work rather than a technical one.
+walkthrough to send them.
 
 ---
 
@@ -573,9 +572,9 @@ If you already have this working from a `.whl` file and want updates to be one c
 [`docs/install-via-github.md`](docs/install-via-github.md) is the walkthrough. It is written to
 be sent on its own.
 
-In outline: accept the repository invitation, install
-[Git for Windows](https://git-scm.com/download/win) accepting every default, then run the
-Route B install command above once and sign in when the browser opens. It replaces your
+In outline: install [Git for Windows](https://git-scm.com/download/win) with its default
+options, then run the Route B install command above. No repository invitation or sign-in
+is required. It replaces your
 current installation in place, and your saved runs are not touched. After that, every update
 is `uv tool upgrade sarna-designer`.
 
@@ -588,15 +587,15 @@ You do not need WSL for any of it.
 ```bash
 # From a wheel you were sent (works without Git or repository access):
 uv tool install --python 3.11 "./sarna_designer-0.3.2-py3-none-any.whl[app]"
-# Or, with access to the private repository and git on PATH:
+# Or, from the public repository with git on PATH:
 uv tool install --python 3.11 "sarna-designer[app] @ git+https://github.com/JoepVondervoort/sarna-designer"
 
 sarna-designer-check --online
 sarna-designer --port 8001
 ```
 
-- The repository is **private**: the git URL resolves only for collaborators, and needs `git`
-  installed. The wheel needs neither. Build one with `python -m build --wheel`.
+- The repository is **public**. The GitHub installation needs `git`, but no account or
+  invitation. A supplied wheel needs no Git. Build one with `python -m build --wheel`.
 - Requires Python 3.11 exactly; `[app]` adds `httpx` on top of `pydantic`. No compiler needed,
   both ship universal wheels.
 - `[genomics]` additionally pulls `pyBigWig`, `numpy` and `pyliftover` for local AF22 histone

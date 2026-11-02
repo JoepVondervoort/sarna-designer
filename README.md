@@ -4,6 +4,8 @@
 
 saRNA Designer takes a human gene symbol or promoter sequence through candidate generation,
 literature-derived design checks, off-target screening and export of RNA duplexes for ordering.
+You can also evaluate an existing saRNA, find regulatory sequences in the promoter, and save
+annotated regions with their sources.
 It connects sequence design with the evidence needed to explain a shortlist: transcript choice,
 genomic coordinates, rule provenance, strand-loading predictions and screening records.
 
@@ -16,13 +18,15 @@ of design assumptions and reproducible research software into one workflow.
 
 [Installation](INSTALL.md) · [Scientific evidence](docs/scientific/evidence-guide.md) ·
 [Empirical evaluation](docs/scientific/empirical-validation.md) ·
+[User workflow](docs/development/interface-hierarchy.md) ·
 [Architecture decisions](docs/adr/) · [Screenshot gallery](docs/assets/screenshots/README.md)
 
 ![SCN1A promoter landscape with transcript reference, design windows, candidate positions and exclusion reasons](docs/assets/screenshots/promoter-landscape.png)
 
-*SCN1A, using cached Ensembl promoter data and the default Wang 2015 configuration.
-The interface retains excluded targets and explains the available checks. Screenshots show
-software outputs, not experimentally confirmed activation.*
+*Current v0.3.2 interface, captured on 2 November 2026. SCN1A with the default Wang 2015
+configuration, cached Ensembl regulatory annotations and motif predictions. The map and candidate
+list appear first; tools and detailed evidence open on demand. No off-target screening was
+performed for these screenshots. These are software outputs, not confirmed activation.*
 
 ## Why this project exists
 
@@ -40,15 +44,32 @@ those decisions are explicit, inspectable and saved with the result.
 |---|---|
 | **Define the promoter** | Human gene lookup through Ensembl, MANE Select or explicit reference selection, assembly-tagged coordinates and transcript-oriented sequence. Pasted DNA is also supported. |
 | **Generate and inspect** | Candidate enumeration, GC and sequence criteria, CpG-island checks where context permits, TSS-relative positions and an interactive promoter map. |
+| **Evaluate an existing saRNA** | Import TXT, CSV or Excel records, declare strand and direction, locate exact matches, and inspect the saved run's rule results. Unmatched cores of the configured length receive sequence-only checks with missing context shown explicitly. |
+| **Explore the promoter** | Search DNA or RNA in either orientation, save named regions with citations, choose which TF motifs to display, and measure distances or overlaps. |
 | **Explain the design** | Per-rule citations, rationale and verdicts; mandatory gates separated from preferences; editable settings with recorded departures from the baseline. |
 | **Inspect the duplex** | Guide/passenger predictions, terminal thermodynamics, antiparallel strand display and 3′ dTdT overhangs for the project's order chemistry. |
 | **Review off-target evidence** | Local human genome and transcript screening against pinned references, with optional remote NCBI BLAST cross-checks. Missing and incomplete evidence remain visible. |
-| **Export and reproduce** | Order CSV, screening summaries, Excel, self-contained HTML and whole-run JSON; offline replay of the core design calculation. |
+| **Export and reproduce** | Order CSV, a print-ready design summary, Excel, promoter alignment HTML and coordinate CSV. Whole-run JSON and offline HTML retain the full record; the core design calculation supports offline replay. |
 
 ![Candidate inspection showing paired RNA strands, terminal energies, guide prediction and individual rule verdicts](docs/assets/screenshots/duplex-inspection.png)
 
 *Candidate-level inspection connects the proposed duplex to the calculations and design rules
 behind it. Strand-loading predictions do not establish activation.*
+
+## A focused workflow
+
+| Workspace | Start here | Open when needed |
+|---|---|---|
+| **Design** | Choose a gene or promoter sequence, select a reference and configuration, then run the design. | Expression evidence, alternative references, rule parameters and sources. |
+| **Candidates** | Explore the promoter map and candidate list. Check candidates for screening and export, or click a row to inspect it. | Existing saRNA evaluation, sequence search, regions, motif filters, distance tools and individual rule explanations. |
+| **Off-target screening** | Check the active selection, prepare local references if needed, and search transcripts and genome. | Engine and batch options, retained alignments, comparison plots and methods. |
+| **Export** | Order sequences, share a summary, or analyse results in Excel. | Additional formats, sequence previews and the complete scientific record. |
+
+![Export workspace showing the active selection and separate choices for ordering, sharing a summary and analysing results](docs/assets/screenshots/export-options.png)
+
+*The three primary downloads follow the active selection. Additional downloads include the
+promoter alignment, coordinate table, screening summary, figures and complete run archives.
+The printable summary can be saved as PDF from the browser.*
 
 ## Scientific approach and current evidence
 
@@ -110,8 +131,9 @@ original scripts, which remain preserved under [`legacy/`](legacy/).
 
 ## Run locally
 
-**Status: local research workbench. Python 3.11.** The repository currently requires GitHub
-read access. New gene retrieval needs internet; cached inputs support offline work.
+**Status: local research workbench, v0.3.2. Python 3.11.** The repository is public.
+Installing from GitHub needs Git, but no GitHub account or repository invitation.
+New gene retrieval needs internet; cached inputs support offline work.
 
 With [uv](https://docs.astral.sh/uv/) and Git installed:
 
@@ -125,8 +147,8 @@ Open **http://localhost:8001/** and keep the terminal running.
 For a GitHub installation, update with `uv tool upgrade sarna-designer`.
 
 The [installation guide](INSTALL.md) covers Windows, macOS, Linux and troubleshooting.
-The [Windows GitHub walkthrough](docs/install-via-github.md) includes first-time authentication
-and local off-target reference setup. Colleagues without repository access can install a supplied
+The [Windows GitHub walkthrough](docs/install-via-github.md) includes first-time setup
+and local off-target reference preparation. For installation without Git, use a supplied
 `sarna_designer-0.3.2-py3-none-any.whl`; see the [wheel instructions](INSTALL.md#step-3-install-sarna-designer).
 
 Local screening references are a separate, explicit download of about 1.2 GB and need at least
@@ -169,7 +191,8 @@ python3.11 -m venv .venv
 GitHub Actions runs the default test suite, lint and strict type checks. Live-network tests are
 excluded by default; optional AF22 track tests skip when their data are absent. Browser checks
 exercise the app separately, including saved runs, screening displays, exports and mobile layout.
-See [screenshot provenance](docs/assets/screenshots/README.md) and the
+The [visual audit](docs/development/visual-audit.md) covers focused forms, map text and overflow
+across seven screen widths. See [screenshot provenance](docs/assets/screenshots/README.md) and the
 [development environment](docs/development/environment.md).
 
 | Directory | Purpose |

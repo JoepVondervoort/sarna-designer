@@ -1,22 +1,19 @@
-g# Installing and updating saRNA Designer from GitHub on Windows
+# Installing and updating saRNA Designer from GitHub on Windows
 
-Follow this guide if you have access to the private saRNA Designer GitHub repository.
+Use this guide to install saRNA Designer from its public GitHub repository.
 It works for a first installation and for replacing an installation from a `.whl` file.
-Read access to the repository is enough.
+You do not need a GitHub account or repository invitation.
 
 The app runs on your computer. You open it in your normal browser after starting it in
 PowerShell. Allow about fifteen minutes for the first installation and keep your internet
 connection on. You do not need to install Python or WSL yourself.
 
-## 1. Check your GitHub access
+## 1. Open the public repository
 
-Sign in to GitHub with the account that received the invitation. Open:
-
-[JoepVondervoort/sarna-designer](https://github.com/JoepVondervoort/sarna-designer)
-
-You should see the repository files, including `README.md`. If you cannot see them, check
-whether you still need to accept the invitation. Use that same account when signing in
-later during installation.
+Open [JoepVondervoort/sarna-designer](https://github.com/JoepVondervoort/sarna-designer).
+You should see the repository files, including `README.md`, without signing in.
+If the page is unavailable, check the URL, your internet connection and any workplace
+network restrictions before continuing.
 
 ## 2. Open PowerShell
 
@@ -57,8 +54,8 @@ has not succeeded or you need to open a fresh PowerShell window.
 If Git is already installed, check it in step 5 and skip this installation.
 
 Download the installer from [Git for Windows](https://git-scm.com/download/win).
-Run it and accept the default options. Keep Git Credential Manager enabled: it handles
-signing in to the private GitHub repository.
+Run it and accept the default options. No GitHub sign-in is needed to download this
+public repository.
 
 You do not need to clone the repository manually. The next command downloads it for you.
 
@@ -85,16 +82,16 @@ Copy this whole line into PowerShell:
 uv tool install --python 3.11 "sarna-designer[app] @ git+https://github.com/JoepVondervoort/sarna-designer"
 ```
 
-If a browser sign-in window opens, sign in with the GitHub account that can see the
-repository, then return to PowerShell. If you are already signed in through Git Credential
-Manager, it may continue without asking again.
+This public repository should download without a GitHub sign-in. If Git requests credentials,
+check the URL and your stored Git credentials or proxy settings.
 
 The first installation may take several minutes. Wait for the PowerShell prompt to return.
-A successful installation lists these two commands:
+A successful installation lists these three commands:
 
 ```text
 sarna-designer
 sarna-designer-check
+sarna-designer-replay
 ```
 
 If you previously installed from a `.whl`, this command switches the installation to
@@ -184,9 +181,9 @@ program. Old runs retain their original results; start a new run to use the upda
 
 | Message or problem | What to do |
 |---|---|
-| `repository not found` or access denied | Check step 1 and sign in with the invited GitHub account. |
+| `repository not found` or access denied | Check the URL and network access in step 1. No invitation is required. |
 | `git` or `uv` is not recognised | Reopen PowerShell. If it still fails, complete the corresponding installation. |
-| Git asks for a password or authentication fails | Check that Git Credential Manager is enabled and use its GitHub sign-in flow. |
+| Git asks for a password or authentication fails | Check the URL, stored Git credentials and proxy settings. This public repository needs no sign-in. |
 | `sarna-designer` is not recognised | Reopen PowerShell and check that step 6 succeeded. |
 | The browser cannot connect to localhost | Start `sarna-designer` and keep its PowerShell window open. Read any startup error. |
 | Port 8001 is already in use | An app may already be running. Alternatively run `sarna-designer --port 8002` and open `http://localhost:8002/`. |

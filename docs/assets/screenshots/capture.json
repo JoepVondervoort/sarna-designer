@@ -1,0 +1,99 @@
+{
+  "engine_version": "0.3.2",
+  "run_id": "3fbf1b09345542dfac446bdd7da9a5d4",
+  "created": "2026-11-02T08:17:22.357259+00:00",
+  "gene": "SCN1A",
+  "promoter": {
+    "length": 2500,
+    "gc_percent": 35.7,
+    "tss_start": -2000,
+    "tss_offset": 2000,
+    "assembly": "GRCh38",
+    "contig": "2",
+    "strand": "-",
+    "start": 166127520,
+    "end": 166130020
+  },
+  "reference": {
+    "id": "scn1a-enst00000674923",
+    "gene": "SCN1A",
+    "assembly": "GRCh38",
+    "contig": "2",
+    "start": 165985812,
+    "end": 166128020,
+    "strand": "-",
+    "reference_point": 166128019,
+    "reference_kind": "annotated-tss",
+    "measurable": true,
+    "provenance": "Ensembl annotation, transcript ENST00000674923, TSS at 166128019",
+    "note": "Transcription start site of ENST00000674923, from the genome annotation.",
+    "caveat": null,
+    "label": "SCN1A \u00b7 scn1a-enst00000674923"
+  },
+  "request": {
+    "source": "gene",
+    "symbol": "SCN1A",
+    "sequence": "",
+    "transcript_id": "ENST00000674923",
+    "anchor_id": null,
+    "custom_reference": null,
+    "upstream": 2000,
+    "downstream": 500,
+    "tss_start": null,
+    "cell_line": "Not specified",
+    "preset_id": "wang-2015",
+    "overrides": {},
+    "roles": {},
+    "options": {},
+    "offline": true,
+    "regulatory": true,
+    "motifs": true,
+    "motif_shuffles": 5,
+    "chromatin": false
+  },
+  "counts": {
+    "generated": 2482,
+    "passing": 14,
+    "rejected": 2468
+  },
+  "configuration": {
+    "id": "wang-2015",
+    "name": "Wang et al. 2015 (default)",
+    "divergences": []
+  },
+  "is_custom": false,
+  "best": {
+    "id": "saRNA-1549",
+    "tss_span": [
+      -452,
+      -434
+    ],
+    "target": "GTGAAGCCATAGATCTGTA"
+  },
+  "motifs": 144,
+  "regulatory_features": 3,
+  "captured_at": "2026-11-02T09:17:25.401363+01:00",
+  "source_commit": "d9d5079664f773139234f162d9ca86fffb34ac5f",
+  "browser": "Chrome/150.0.7871.24",
+  "viewport": {
+    "width": 1440,
+    "height": 1100,
+    "device_scale_factor": 1
+  },
+  "image_viewports": {
+    "duplex-inspection.png": {
+      "width": 1280,
+      "height": 1250
+    }
+  },
+  "screening_performed": false,
+  "files": [
+    "design-setup.png",
+    "promoter-landscape.png",
+    "duplex-inspection.png",
+    "design-rules.png",
+    "export-options.png",
+    "sequence-search.png",
+    "screening-workspace.png"
+  ]
+}
