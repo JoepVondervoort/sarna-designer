@@ -268,6 +268,7 @@ function renderGeneOverview() {
   renderKnownSaRNAPromoters();
   const gene = state.gene;
   const groups = gene?.tss_groups || [];
+  $("empty-state").hidden=!!state.result || !!state.batch || (state.source==="gene" && !!gene && Number.isFinite(gene.start) && Number.isFinite(gene.end));
   if (!gene || !Number.isFinite(gene.start) || !Number.isFinite(gene.end)) { $("gene-overview").hidden = true; return; }
   $("gene-overview").hidden = state.source !== "gene" && !frozen;
   $("gene-overview-meta").textContent = frozen ? "FROZEN REFERENCE CHOICES" : "DRAFT REFERENCE CHOICES";
@@ -975,6 +976,7 @@ function setSource(source) {
   $("gene-inputs").hidden = source !== "gene"; $("sequence-inputs").hidden = source !== "sequence";
   for (const b of document.querySelectorAll("[data-source]")) b.classList.toggle("active", b.dataset.source===source);
   $("gene-overview").hidden=source!=="gene" || !state.gene?.tss_groups;
+  $("empty-state").hidden=!!state.result || !!state.batch || !$("gene-overview").hidden;
   renderBasket();
 }
 function showResult(result) {
@@ -1150,7 +1152,8 @@ function organiseCandidateInspector(candidate) {
   if(duplex)addSection("duplex","Ordering duplex and paired strands",duplex);
   if(body){
     const sequences=body.firstElementChild, models=body.lastElementChild;
-    body.replaceWith(sequences);
+    body.remove();
+    addSection("sequences","Core sequences and target DNA",sequences);
     addSection("models","Strand prediction · models and thermodynamics",models);
   }
   const rules=host.querySelector(".rule-verdicts");
@@ -1161,6 +1164,7 @@ function organiseCandidateInspector(candidate) {
   const context=document.createElement("div");
   context.innerHTML=`<p class="hint">${escapeHTML(positionText(candidate))} · ${candidate.gc_percent}% GC. Use the promoter map’s Motifs and Regions tools to inspect nearby features.</p><button type="button" class="text-button" data-open-disclosure="candidate-biological-context">View biological context and motif evidence</button>`;
   addSection("context","Regulatory context",context);
+  state.inspectorExpanded ||= new Set(["duplex"]);
   for(const section of host.querySelectorAll("[data-inspector-section]")) {
     section.open=!!state.inspectorExpanded?.has(section.dataset.inspectorSection);
     section.addEventListener("toggle",()=>{state.inspectorExpanded ||= new Set();

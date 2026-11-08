@@ -1256,6 +1256,12 @@ def check_calm_hierarchy(browser: Browser, screenshots: Path | None) -> None:
     assert initial['exportTasks'] == 3 and initial['moreClosed'] is True
     assert initial['historyInHeader'] is True and initial['quickOpenInHeader'] is False
     assert initial['optionsClosed'] is True
+    # Coverage follows the active selection immediately, including a change on another tab.
+    browser.evaluate("document.querySelector('#candidate-rows [data-check]').click()")
+    assert browser.evaluate(
+        "[...document.querySelectorAll('.coverage-item strong')].every("
+        "node=>node.getAttribute('aria-label').includes('of 1 selected passing'))") is True
+    browser.evaluate("document.querySelector('#candidate-rows [data-check]').click()")
     if screenshots:
         browser.evaluate("document.getElementById('workspace-context').scrollIntoView()")
         browser.screenshot(screenshots / 'calm-candidates.png')
@@ -1269,7 +1275,9 @@ def check_calm_hierarchy(browser: Browser, screenshots: Path | None) -> None:
                      "document.querySelector('#candidate-rows tr[data-candidate]').click()")
     browser.wait("!document.getElementById('candidate-detail').hidden")
     assert browser.evaluate(
-        "document.querySelectorAll('#candidate-detail [data-inspector-section][open]').length") == 0
+        "document.querySelector('[data-inspector-section=duplex]').open") is True
+    assert browser.evaluate(
+        "document.querySelector('[data-inspector-section=sequences]').open") is False
     browser.evaluate("document.querySelector('[data-inspector-section=models]').open=true")
     browser.wait("state.inspectorExpanded?.has('models')")
     browser.evaluate("renderScreeningStatus()")

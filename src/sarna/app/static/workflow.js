@@ -549,7 +549,16 @@ function renderCalmSummary() {
   const decisions=typeof screenedDecisions==="function"?screenedDecisions():[];
   const complete=decisions.filter(d=>d.status!=="pending").length;
   const unchecked=new Set(run.candidates.flatMap(c=>c.rating.unchecked_gates));
-  $("candidate-summary").textContent=`${fmt(run.counts.passing)} candidates pass available gates · ${complete} with complete local screening evidence · ${checked} checked${unchecked.size?` · ${unchecked.size} gate(s) unavailable`:""}`;
+  const metrics=[
+    [fmt(run.counts.passing),"Pass available gates","From "+fmt(run.counts.generated)+" evaluated targets"],
+    [fmt(complete),"Complete local evidence","Transcript and genome screening"],
+    [fmt(selected.length),"Selected candidates",checked?"Checked rows · shared with export":selected.length?"All passing candidates · shared with export":"Choose rows in the candidate table"]
+  ];
+  screeningHTML($("candidate-summary"),metrics.map(([value,label,note])=>
+    `<div class="summary-metric"><strong>${value}</strong><span>${label}</span><small>${note}</small></div>`).join(""));
+  $("candidate-availability").hidden=!unchecked.size;
+  $("candidate-availability").textContent=unchecked.size?`${unchecked.size} gate${unchecked.size===1?" is":"s are"} unavailable. Passing candidates still need these checks reviewed.`:"";
+  if (typeof renderScreeningCoverage === "function") renderScreeningCoverage();
   $("screening-selection-title").textContent=!selected.length?"No candidates selected":checked?`${checked} checked candidates`:`${selected.length} design-passing candidates`;
   $("screening-selection-note").textContent=selected.length?`Shared selection with Candidates and Export. Searches cover transcripts and genome.${selected.some(c=>c.rank===null)?" Candidates excluded by design gates are not screened.":""}`:"Check candidates in the candidate list to begin screening.";
   const jobs=Object.values(state.screeningJobs || {}), busy=jobs.some(j=>["running","waiting"].includes(j.status));

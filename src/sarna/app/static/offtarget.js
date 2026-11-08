@@ -456,24 +456,37 @@ function progressBar(job) {
         : ""}</p></div>`;
 }
 
-function renderScreeningStatus() {
-  renderScreenedShortlist();
+function renderScreeningCoverage() {
   const jobs = Object.fromEntries(Object.keys(SCOPE_BUTTON).map(scope=>[scope,currentScreeningJob(scope)]).filter(([,job])=>job));
-  const states = Object.values(jobs).map(j => j.status);
-  const done = Object.keys(screenings()).length;
   const pool = screenablePool();
+  const selectedIds = typeof activeSelection === "function"
+    ? new Set(activeSelection().map(c => c.id)) : new Set(pool);
+  const coveragePool = pool.filter(id => selectedIds.has(id));
   const coverage = Object.keys(SCOPE_BUTTON).map(scope => {
-    const count = alreadyScreened(scope).size;
+    const completed = alreadyScreened(scope);
+    const count = coveragePool.filter(id => completed.has(id)).length;
     const job = jobs[scope];
     const status = job?.status === "running" ? "search running"
       : job?.status === "waiting" ? "waiting at NCBI"
       : job?.status === "error" ? "search failed" : count ? "results available" : "not started";
-    return `<div class="coverage-item"><span>${scope === "transcript" ? "Transcript" : "Genomic"} search · ${frozen ? "saved" : screeningBackend() === "local" ? "Local" : "NCBI"}</span>`
-      + `<strong aria-label="${count} of ${pool.length} candidates have completed results">${count} / ${pool.length}</strong>`
-      + `<span>Completed results · ${escapeHTML(status)}</span></div>`;
+    const fraction = coveragePool.length ? count / coveragePool.length : 0;
+    const phase = job?.status === "error" ? "error" : ["running","waiting"].includes(job?.status)
+      ? "running" : fraction === 1 ? "complete" : count ? "partial" : "idle";
+    return `<div class="coverage-item" data-state="${phase}"><span>${scope === "transcript" ? "Transcript" : "Genomic"} search · ${frozen ? "saved" : screeningBackend() === "local" ? "Local" : "NCBI"}</span>`
+      + `<strong aria-label="${count} of ${coveragePool.length} selected passing candidates have completed results">${count} <small>/ ${coveragePool.length}</small></strong>`
+      + `<div class="coverage-meter" aria-hidden="true"><i style="width:${fraction * 100}%"></i></div>`
+      + `<span>Selected passing candidates · ${escapeHTML(status)}</span></div>`;
   });
   const coverageHost = $("screening-coverage");
   screeningHTML(coverageHost, coverage.join(""));
+}
+
+function renderScreeningStatus() {
+  renderScreenedShortlist();
+  renderScreeningCoverage();
+  const jobs = Object.fromEntries(Object.keys(SCOPE_BUTTON).map(scope=>[scope,currentScreeningJob(scope)]).filter(([,job])=>job));
+  const states = Object.values(jobs).map(j => j.status);
+  const done = Object.keys(screenings()).length;
   $("offtarget-status").textContent = states.includes("running") ? "RUNNING"
     : states.includes("waiting") ? "AT NCBI"
     : states.includes("error") ? (done ? "PARTIAL" : "FAILED")
